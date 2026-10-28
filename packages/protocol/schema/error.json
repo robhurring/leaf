@@ -1,0 +1,43 @@
+{
+  "$ref": "#/definitions/error",
+  "definitions": {
+    "error": {
+      "type": "object",
+      "properties": {
+        "type": {
+          "type": "string",
+          "const": "error"
+        },
+        "code": {
+          "type": "string",
+          "enum": [
+            "not_found",
+            "outside_root",
+            "unsupported",
+            "bad_request",
+            "internal"
+          ]
+        },
+        "message": {
+          "type": "string"
+        },
+        "path": {
+          "type": "string"
+        },
+        "id": {
+          "type": "string"
+        },
+        "inReplyTo": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "type",
+        "code",
+        "message"
+      ],
+      "additionalProperties": false
+    }
+  },
+  "$schema": "http://json-schema.org/draft-07/schema#"
+}

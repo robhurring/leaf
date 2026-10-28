@@ -1,0 +1,24 @@
+{
+  "type": "welcome",
+  "protocol": 1,
+  "root": {
+    "kind": "dir",
+    "name": "docs"
+  },
+  "config": {
+    "plantumlUrl": "http://localhost:8180",
+    "maxEntries": 5000
+  },
+  "capabilities": {
+    "watch": true,
+    "write": false,
+    "collaborate": false,
+    "rawUrls": true
+  },
+  "participant": {
+    "id": "local",
+    "name": "You"
+  },
+  "preferences": {},
+  "inReplyTo": "h"
+}

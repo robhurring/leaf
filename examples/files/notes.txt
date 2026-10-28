@@ -1,0 +1,4 @@
+Plain text notes.
+
+No markdown here, just lines in a read-only editor with line numbers.
+Use the search box (Cmd/Ctrl+F inside the editor) to find text.

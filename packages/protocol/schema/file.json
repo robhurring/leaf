@@ -1,0 +1,94 @@
+{
+  "$ref": "#/definitions/file",
+  "definitions": {
+    "file": {
+      "type": "object",
+      "properties": {
+        "type": {
+          "type": "string",
+          "const": "file"
+        },
+        "path": {
+          "type": "string"
+        },
+        "kind": {
+          "type": "string"
+        },
+        "lang": {
+          "type": "string"
+        },
+        "mime": {
+          "type": "string"
+        },
+        "encoding": {
+          "type": "string",
+          "enum": [
+            "utf8",
+            "base64",
+            "none"
+          ]
+        },
+        "content": {
+          "type": "string"
+        },
+        "url": {
+          "type": "string"
+        },
+        "size": {
+          "type": "number"
+        },
+        "mtime": {
+          "type": "number"
+        },
+        "created": {
+          "type": "number"
+        },
+        "git": {
+          "type": "object",
+          "properties": {
+            "commit": {
+              "type": "string"
+            },
+            "author": {
+              "type": "string"
+            },
+            "date": {
+              "type": "number"
+            },
+            "message": {
+              "type": "string"
+            },
+            "repoUrl": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "commit",
+            "author",
+            "date",
+            "message"
+          ],
+          "additionalProperties": false
+        },
+        "id": {
+          "type": "string"
+        },
+        "inReplyTo": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "type",
+        "path",
+        "kind",
+        "mime",
+        "encoding",
+        "url",
+        "size",
+        "mtime"
+      ],
+      "additionalProperties": false
+    }
+  },
+  "$schema": "http://json-schema.org/draft-07/schema#"
+}

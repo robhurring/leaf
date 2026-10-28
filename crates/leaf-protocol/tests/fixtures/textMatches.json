@@ -1,0 +1,12 @@
+{
+  "type": "textMatches",
+  "q": "install",
+  "hits": [
+    {
+      "path": "docs/setup.md",
+      "line": 3,
+      "text": "Install the guide first."
+    }
+  ],
+  "inReplyTo": "t"
+}

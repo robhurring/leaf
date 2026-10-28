@@ -1,0 +1,22 @@
+#!/usr/bin/env bash
+set -euo pipefail
+cd "$(dirname "$0")/.."
+
+usage() { echo "usage: bin/build    build the protocol, the ui, and the leaf binary (target/release/leaf); refresh an installed leaf link"; }
+[[ "${1:-}" == "--help" || "${1:-}" == "-h" ]] && { usage; exit 0; }
+
+npm run build --if-present -w @leaf/protocol
+# The JSON Schema export is the contract other implementations (the Rust core) are tested against.
+npm run schema -w @leaf/protocol
+npm run build --if-present -w @leaf/ui
+# The Rust binary embeds the built UI, so it comes last.
+cargo build --release -p leaf-app
+# If `leaf` on PATH is a link into this checkout (from bin/install, or the old Node link), point it at the new binary.
+if link="$(command -v leaf 2>/dev/null)" && [[ -L "$link" ]]; then
+  dest="$(readlink "$link")"
+  if [[ "$dest" == "$(pwd)/"* && "$dest" != "$(pwd)/target/release/leaf" ]]; then
+    ln -sfn "$(pwd)/target/release/leaf" "$link"
+    echo "relinked $link -> $(pwd)/target/release/leaf"
+  fi
+fi
+echo "built target/release/leaf"

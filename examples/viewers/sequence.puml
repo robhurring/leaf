@@ -1,0 +1,31 @@
+@startuml
+skinparam shadowing false
+actor Rob
+participant "leaf CLI" as CLI
+participant "Server" as S
+participant "Watcher" as W
+participant "Browser" as B
+database "Disk" as D
+
+Rob -> CLI : leaf open examples
+CLI -> S : start (port 4321)
+S -> W : watch examples/
+S -> B : open browser
+B -> S : hello
+S --> B : welcome
+B -> S : list ""
+S -> D : readdir (gitignore aware)
+D --> S : entries
+S --> B : tree
+B -> S : read README.md
+S -> D : read + git log -1
+D --> S : content, commit
+S --> B : file
+== Rob edits README.md ==
+D -> W : change
+W -> S : file:changed (debounced)
+S --> B : changed README.md
+B -> S : read README.md
+S --> B : file
+note over B : only the changed blocks re-render
+@enduml

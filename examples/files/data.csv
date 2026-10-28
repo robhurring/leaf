@@ -1,0 +1,4 @@
+name,kind,size
+README.md,markdown,1024
+logo.svg,image,2048
+blob.bin,binary,4096

@@ -1,0 +1,11 @@
+node_modules
+dist
+.superpowers/sdd
+.superpowers/e2e-config
+.superpowers/brainstorm
+packages/protocol/schema
+package-lock.json
+.superpowers/specs/mockups
+crates/leaf-protocol/tests/fixtures
+target
+crates/leaf-app/gen

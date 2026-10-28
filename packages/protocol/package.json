@@ -1,0 +1,28 @@
+{
+  "name": "@leaf/protocol",
+  "version": "0.1.0",
+  "type": "module",
+  "description": "leaf document protocol: zod schemas for every WebSocket message",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "files": [
+    "dist",
+    "schema"
+  ],
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "schema": "tsx scripts/schema.ts"
+  },
+  "dependencies": {
+    "zod": "^3.23.8"
+  },
+  "devDependencies": {
+    "zod-to-json-schema": "^3.23.5"
+  }
+}

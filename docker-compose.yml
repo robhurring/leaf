@@ -1,0 +1,6 @@
+# Local services for testing leaf. Start with `docker compose up -d`.
+services:
+  # PlantUML renderer; point PLANTUML_URL at http://localhost:8180 in .env.
+  plantuml:
+    image: plantuml/plantuml-server:jetty
+    ports: ['8180:8080']

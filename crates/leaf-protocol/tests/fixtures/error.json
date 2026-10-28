@@ -1,0 +1,7 @@
+{
+  "type": "error",
+  "code": "not_found",
+  "message": "missing",
+  "path": "x.md",
+  "inReplyTo": "r"
+}

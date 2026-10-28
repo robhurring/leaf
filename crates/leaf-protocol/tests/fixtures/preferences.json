@@ -1,0 +1,9 @@
+{
+  "type": "preferences",
+  "preferences": {
+    "theme": "github",
+    "appearance": "light",
+    "numbering": true,
+    "textPct": 110
+  }
+}

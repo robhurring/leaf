@@ -1,0 +1,109 @@
+// Picks the viewer for the open file and intercepts in-document navigation.
+import { useCallback, useContext, useEffect, type MouseEvent } from 'react';
+import type { Config, ErrorMessage, FileMessage } from '@leaf/protocol';
+import type { Handlers } from '../render/handlers.js';
+import { viewers } from '../viewers/index.js';
+import { BlockFrame } from './BlockFrame.js';
+import { Loading } from './Loading.js';
+import { DocToolsContext } from './Properties.js';
+import { StageCanvas } from '../stage/Stage.js';
+import { contentHash } from '../viewers/hash.js';
+import { useAnnotations } from '../store/annotations.js';
+import type { Viewer, ViewerProps } from '../viewers/types.js';
+
+/** A whole diagram or image file: the Stage's pan, zoom, and drawing, in the panel. */
+function InlineStage({
+  viewer,
+  props,
+  slot,
+}: {
+  viewer: Viewer;
+  props: ViewerProps;
+  slot: HTMLElement;
+}) {
+  const blockHash = contentHash(props.content ?? props.file.path);
+  useEffect(
+    () => useAnnotations.getState().trackBlock(props.docPath, blockHash),
+    [props.docPath, blockHash],
+  );
+  return (
+    <div className="leaf-stage-inline">
+      <StageCanvas
+        key={`${props.docPath}:${blockHash}`}
+        content={{ docPath: props.docPath, blockHash, viewer, props }}
+        toolsSlot={slot}
+        inline
+      />
+    </div>
+  );
+}
+
+type Props = {
+  file?: FileMessage;
+  error?: ErrorMessage;
+  path: string;
+  config: Config;
+  handlers?: Handlers;
+  numbering: boolean;
+  linkBase: string;
+  onNavigate(target: string): void;
+};
+
+export function DocumentView({
+  file,
+  error,
+  path,
+  config,
+  handlers,
+  numbering,
+  linkBase,
+  onNavigate,
+}: Props) {
+  const slot = useContext(DocToolsContext);
+  const onClick = useCallback(
+    (e: MouseEvent) => {
+      const a = (e.target as HTMLElement).closest?.('a[data-nav]') as HTMLAnchorElement | null;
+      if (!a || e.metaKey || e.ctrlKey || e.button !== 0) return;
+      e.preventDefault();
+      onNavigate(a.dataset.nav!);
+    },
+    [onNavigate],
+  );
+
+  if (error && !file) {
+    return (
+      <div className="leaf-doc-state" role="status">
+        <p className="leaf-doc-state-title">
+          {error.code === 'not_found' ? 'File removed or not found' : 'Cannot open this file'}
+        </p>
+        <p className="leaf-doc-state-detail">{path}</p>
+      </div>
+    );
+  }
+  if (!file) return <Loading label={path.slice(path.lastIndexOf('/') + 1) || undefined} />;
+
+  const viewer = viewers.forFile(file);
+  const Rich = viewer.Rich;
+  const viewerProps = {
+    file,
+    content: file.content,
+    docPath: file.path,
+    config,
+    handlers,
+    numbering,
+    linkBase,
+  };
+  return (
+    <div className="leaf-main-inner" onClick={onClick} data-viewer={viewer.id}>
+      {viewer.stage && slot ? (
+        <InlineStage viewer={viewer} props={viewerProps} slot={slot} />
+      ) : viewer.stage ? (
+        <BlockFrame viewer={viewer} props={viewerProps} lang={viewer.id}>
+          <Rich {...viewerProps} />
+        </BlockFrame>
+      ) : (
+        <Rich {...viewerProps} />
+      )}
+    </div>
+  );
+}

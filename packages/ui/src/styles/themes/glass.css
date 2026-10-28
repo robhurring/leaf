@@ -1,0 +1,45 @@
+/* Glass: Apple's reading voice, generous and tight-set, blocks without fills. */
+[data-theme='glass'] {
+  --leaf-doc-font:
+    -apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Helvetica Neue', Helvetica, Arial, sans-serif;
+  --leaf-doc-mono: ui-monospace, 'SF Mono', Menlo, Consolas, monospace;
+  --leaf-doc-size: 16px;
+  --leaf-doc-leading: 1.6;
+  --leaf-doc-measure: 820px;
+  --leaf-doc-pad: 40px 48px;
+  --leaf-doc-bg: #ffffff;
+  --leaf-doc-surface: #ffffff;
+  --leaf-doc-text: #1d1d1f;
+  --leaf-doc-text-2: #86868b;
+  --leaf-doc-link: #0071e3;
+  --leaf-doc-line: rgba(0, 0, 0, 0.08);
+  --leaf-doc-rule: rgba(0, 0, 0, 0.14);
+  --leaf-doc-code-bg: rgba(0, 0, 0, 0.05);
+  --leaf-doc-block-bg: rgba(0, 0, 0, 0.035);
+  --leaf-doc-radius: 10px;
+  --leaf-doc-heading-weight: 700;
+  --leaf-doc-heading-rule: transparent;
+  --leaf-doc-table-stripe: transparent;
+  --leaf-doc-mention: #0071e3;
+  --leaf-doc-topic: #2e8b57;
+  --leaf-doc-card-shadow: none;
+}
+[data-theme='glass'][data-appearance='dark'] {
+  --leaf-doc-bg: #1d1d1f;
+  --leaf-doc-surface: #1d1d1f;
+  --leaf-doc-text: #f5f5f7;
+  --leaf-doc-text-2: #a1a1a6;
+  --leaf-doc-link: #2997ff;
+  --leaf-doc-line: rgba(255, 255, 255, 0.1);
+  --leaf-doc-rule: rgba(255, 255, 255, 0.16);
+  --leaf-doc-code-bg: rgba(255, 255, 255, 0.08);
+  --leaf-doc-block-bg: rgba(255, 255, 255, 0.05);
+  --leaf-doc-heading-rule: transparent;
+  --leaf-doc-table-stripe: transparent;
+  --leaf-doc-mention: #2997ff;
+  --leaf-doc-topic: #4dbb7a;
+}
+[data-theme='glass'] .leaf-doc h1 {
+  font-size: 2.5em;
+  letter-spacing: -0.03em;
+}

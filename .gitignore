@@ -1,0 +1,17 @@
+node_modules/
+dist/
+.env
+# superpowers: specs and plans are tracked; scratch is not
+.superpowers/sdd/
+.superpowers/e2e-config/
+test-results/
+playwright-report/
+*.tgz
+
+# Rust
+target/
+.superpowers/brainstorm/
+# Tauri generates these on build
+crates/leaf-app/gen/
+.DS_Store
+tsconfig.tsbuildinfo

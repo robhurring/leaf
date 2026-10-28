@@ -1,0 +1,17 @@
+#!/usr/bin/env bash
+set -euo pipefail
+cd "$(dirname "$0")/.."
+
+usage() { echo "usage: bin/setup    install dependencies and prepare local development"; }
+[[ "${1:-}" == "--help" || "${1:-}" == "-h" ]] && { usage; exit 0; }
+
+need() { command -v "$1" >/dev/null || { echo "missing: $1 ($2)" >&2; exit 1; }; }
+need node "install Node 22 or newer"
+need npm "comes with Node"
+need cargo "install Rust: curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh"
+
+npm install
+[[ -f .env ]] || { cp .env.example .env; echo "created .env from .env.example"; }
+# Playwright drives the browser smoke test in bin/test.
+npx playwright install chromium webkit firefox >/dev/null 2>&1 || echo "playwright browser install skipped (run: npx playwright install chromium webkit firefox)"
+echo "setup complete"

@@ -1,0 +1,90 @@
+/* Native: the app's one look. GitHub's markdown conventions in the system font, sized like macOS text. */
+[data-theme='native'] {
+  --leaf-doc-font: -apple-system, BlinkMacSystemFont, system-ui, 'Segoe UI', sans-serif;
+  --leaf-doc-mono:
+    ui-monospace, SFMono-Regular, 'SF Mono', Menlo, Consolas, 'Liberation Mono', monospace;
+  --leaf-doc-size: 15px;
+  --leaf-doc-leading: 1.5;
+  --leaf-doc-measure: 860px;
+  --leaf-doc-pad: 20px 48px;
+  --leaf-doc-bg: #ffffff;
+  --leaf-doc-surface: #ffffff;
+  --leaf-doc-text: #1f2328;
+  --leaf-doc-text-2: #59636e;
+  --leaf-doc-link: #0969da;
+  --leaf-doc-line: #d1d9e0;
+  --leaf-doc-rule: #d1d9e0;
+  --leaf-doc-code-bg: #f6f8fa;
+  --leaf-doc-block-bg: #f6f8fa;
+  --leaf-doc-radius: 6px;
+  --leaf-doc-heading-weight: 600;
+  --leaf-doc-heading-rule: #d1d9e0;
+  --leaf-doc-table-stripe: #f6f8fa;
+  --leaf-doc-mention: #0969da;
+  --leaf-doc-topic: #1a7f37;
+  --leaf-doc-card-shadow: none;
+}
+[data-theme='native'][data-appearance='dark'] {
+  --leaf-doc-bg: #0d1117;
+  --leaf-doc-surface: #0d1117;
+  --leaf-doc-text: #f0f6fc;
+  --leaf-doc-text-2: #9198a1;
+  --leaf-doc-link: #4493f8;
+  --leaf-doc-line: #3d444d;
+  --leaf-doc-rule: #3d444d;
+  --leaf-doc-code-bg: #151b23;
+  --leaf-doc-block-bg: #151b23;
+  --leaf-doc-heading-rule: #3d444d;
+  --leaf-doc-table-stripe: #151b23;
+  --leaf-doc-mention: #4493f8;
+  --leaf-doc-topic: #3fb950;
+}
+/* GitHub's own type scale and rules. */
+[data-theme='native'] .leaf-heading {
+  margin: 24px 0 16px;
+  line-height: 1.25;
+  letter-spacing: 0;
+}
+[data-theme='native'] .leaf-doc h1 {
+  font-size: 2em;
+  padding-bottom: 0.3em;
+  border-bottom: 1px solid var(--leaf-doc-heading-rule);
+}
+[data-theme='native'] .leaf-doc h2 {
+  font-size: 1.5em;
+  padding-bottom: 0.3em;
+  border-bottom: 1px solid var(--leaf-doc-heading-rule);
+}
+[data-theme='native'] .leaf-doc h3 {
+  font-size: 1.25em;
+  font-weight: 600;
+}
+[data-theme='native'] .leaf-doc :not(pre) > code {
+  font-size: 85%;
+  padding: 0.2em 0.4em;
+  background: color-mix(in srgb, #818b98 12%, transparent);
+}
+[data-theme='native'] .leaf-doc table:not(.leaf-datatable table) {
+  border-radius: 0;
+  width: max-content;
+  max-width: 100%;
+  font-size: 1em;
+}
+[data-theme='native'] .leaf-doc table:not(.leaf-datatable table) th,
+[data-theme='native'] .leaf-doc table:not(.leaf-datatable table) td {
+  padding: 6px 13px;
+  border: 1px solid var(--leaf-doc-line);
+}
+[data-theme='native'] .leaf-doc table:not(.leaf-datatable table) th {
+  font-size: 1em;
+  background: transparent;
+}
+[data-theme='native'] .leaf-doc blockquote {
+  border-left-width: 0.25em;
+  padding: 0 1em;
+}
+[data-theme='native'] .leaf-doc hr {
+  height: 0.25em;
+  border: 0;
+  background: var(--leaf-doc-rule);
+}

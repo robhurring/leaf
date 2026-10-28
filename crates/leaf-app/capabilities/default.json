@@ -1,0 +1,12 @@
+{
+  "$schema": "../../target/schemas/capabilities.json",
+  "identifier": "default",
+  "description": "What every leaf window may do: talk to the core and receive its events.",
+  "windows": ["*"],
+  "permissions": [
+    "core:default",
+    "core:event:default",
+    "core:window:allow-start-dragging",
+    "dialog:default"
+  ]
+}

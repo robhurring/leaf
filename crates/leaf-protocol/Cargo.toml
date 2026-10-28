@@ -1,0 +1,13 @@
+[package]
+name = "leaf-protocol"
+description = "leaf document protocol: the message types, checked against the JSON Schema export"
+edition.workspace = true
+version.workspace = true
+license.workspace = true
+
+[dependencies]
+serde.workspace = true
+serde_json.workspace = true
+
+[dev-dependencies]
+jsonschema = "0.60"

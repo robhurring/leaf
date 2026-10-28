@@ -1,0 +1,465 @@
+{
+  "$ref": "#/definitions/server",
+  "definitions": {
+    "server": {
+      "anyOf": [
+        {
+          "type": "object",
+          "properties": {
+            "type": {
+              "type": "string",
+              "const": "welcome"
+            },
+            "protocol": {
+              "type": "number",
+              "const": 1
+            },
+            "root": {
+              "type": "object",
+              "properties": {
+                "kind": {
+                  "type": "string",
+                  "enum": [
+                    "file",
+                    "dir"
+                  ]
+                },
+                "name": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "kind",
+                "name"
+              ],
+              "additionalProperties": false
+            },
+            "config": {
+              "type": "object",
+              "properties": {
+                "plantumlUrl": {
+                  "type": "string"
+                },
+                "mentionUrl": {
+                  "type": "string"
+                },
+                "topicUrl": {
+                  "type": "string"
+                },
+                "maxEntries": {
+                  "type": "integer",
+                  "exclusiveMinimum": 0
+                }
+              },
+              "additionalProperties": false
+            },
+            "capabilities": {
+              "type": "object",
+              "properties": {
+                "watch": {
+                  "type": "boolean"
+                },
+                "write": {
+                  "type": "boolean"
+                },
+                "collaborate": {
+                  "type": "boolean"
+                },
+                "rawUrls": {
+                  "type": "boolean"
+                }
+              },
+              "required": [
+                "watch",
+                "write",
+                "collaborate"
+              ],
+              "additionalProperties": false
+            },
+            "participant": {
+              "type": "object",
+              "properties": {
+                "id": {
+                  "type": "string"
+                },
+                "name": {
+                  "type": "string"
+                },
+                "color": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "id",
+                "name"
+              ],
+              "additionalProperties": false
+            },
+            "preferences": {
+              "type": "object",
+              "properties": {
+                "theme": {
+                  "type": "string",
+                  "enum": [
+                    "github",
+                    "glass",
+                    "card",
+                    "paper"
+                  ]
+                },
+                "appearance": {
+                  "type": "string",
+                  "enum": [
+                    "light",
+                    "dark",
+                    "auto"
+                  ]
+                },
+                "treeOpen": {
+                  "type": "boolean"
+                },
+                "outlineOpen": {
+                  "type": "boolean"
+                },
+                "numbering": {
+                  "type": "boolean"
+                },
+                "textPct": {
+                  "type": "integer",
+                  "minimum": 50,
+                  "maximum": 200
+                },
+                "treeWidth": {
+                  "type": "integer",
+                  "minimum": 160,
+                  "maximum": 480
+                },
+                "outlineWidth": {
+                  "type": "integer",
+                  "minimum": 160,
+                  "maximum": 480
+                }
+              },
+              "additionalProperties": false
+            },
+            "id": {
+              "type": "string"
+            },
+            "inReplyTo": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "type",
+            "protocol",
+            "root",
+            "config",
+            "capabilities",
+            "participant"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "type": {
+              "type": "string",
+              "const": "tree"
+            },
+            "path": {
+              "type": "string"
+            },
+            "entries": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "path": {
+                    "type": "string"
+                  },
+                  "name": {
+                    "type": "string"
+                  },
+                  "kind": {
+                    "type": "string",
+                    "enum": [
+                      "file",
+                      "dir"
+                    ]
+                  },
+                  "size": {
+                    "type": "number"
+                  },
+                  "mtime": {
+                    "type": "number"
+                  },
+                  "hasChildren": {
+                    "type": "boolean"
+                  }
+                },
+                "required": [
+                  "path",
+                  "name",
+                  "kind"
+                ],
+                "additionalProperties": false
+              }
+            },
+            "id": {
+              "$ref": "#/definitions/server/anyOf/0/properties/id"
+            },
+            "inReplyTo": {
+              "$ref": "#/definitions/server/anyOf/0/properties/inReplyTo"
+            }
+          },
+          "required": [
+            "type",
+            "path",
+            "entries"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "type": {
+              "type": "string",
+              "const": "file"
+            },
+            "path": {
+              "type": "string"
+            },
+            "kind": {
+              "type": "string"
+            },
+            "lang": {
+              "type": "string"
+            },
+            "mime": {
+              "type": "string"
+            },
+            "encoding": {
+              "type": "string",
+              "enum": [
+                "utf8",
+                "base64",
+                "none"
+              ]
+            },
+            "content": {
+              "type": "string"
+            },
+            "url": {
+              "type": "string"
+            },
+            "size": {
+              "type": "number"
+            },
+            "mtime": {
+              "type": "number"
+            },
+            "created": {
+              "type": "number"
+            },
+            "git": {
+              "type": "object",
+              "properties": {
+                "commit": {
+                  "type": "string"
+                },
+                "author": {
+                  "type": "string"
+                },
+                "date": {
+                  "type": "number"
+                },
+                "message": {
+                  "type": "string"
+                },
+                "repoUrl": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "commit",
+                "author",
+                "date",
+                "message"
+              ],
+              "additionalProperties": false
+            },
+            "id": {
+              "$ref": "#/definitions/server/anyOf/0/properties/id"
+            },
+            "inReplyTo": {
+              "$ref": "#/definitions/server/anyOf/0/properties/inReplyTo"
+            }
+          },
+          "required": [
+            "type",
+            "path",
+            "kind",
+            "mime",
+            "encoding",
+            "url",
+            "size",
+            "mtime"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "type": {
+              "type": "string",
+              "const": "changed"
+            },
+            "path": {
+              "type": "string"
+            },
+            "change": {
+              "type": "string",
+              "enum": [
+                "created",
+                "modified",
+                "deleted",
+                "renamed"
+              ]
+            },
+            "from": {
+              "type": "string"
+            },
+            "id": {
+              "$ref": "#/definitions/server/anyOf/0/properties/id"
+            },
+            "inReplyTo": {
+              "$ref": "#/definitions/server/anyOf/0/properties/inReplyTo"
+            }
+          },
+          "required": [
+            "type",
+            "path",
+            "change"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "type": {
+              "type": "string",
+              "const": "matches"
+            },
+            "q": {
+              "type": "string"
+            },
+            "entries": {
+              "type": "array",
+              "items": {
+                "$ref": "#/definitions/server/anyOf/1/properties/entries/items"
+              }
+            },
+            "id": {
+              "$ref": "#/definitions/server/anyOf/0/properties/id"
+            },
+            "inReplyTo": {
+              "$ref": "#/definitions/server/anyOf/0/properties/inReplyTo"
+            }
+          },
+          "required": [
+            "type",
+            "q",
+            "entries"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "type": {
+              "type": "string",
+              "const": "textMatches"
+            },
+            "q": {
+              "type": "string"
+            },
+            "hits": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "path": {
+                    "type": "string"
+                  },
+                  "line": {
+                    "type": "integer",
+                    "exclusiveMinimum": 0
+                  },
+                  "text": {
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "path",
+                  "line",
+                  "text"
+                ],
+                "additionalProperties": false
+              }
+            },
+            "id": {
+              "$ref": "#/definitions/server/anyOf/0/properties/id"
+            },
+            "inReplyTo": {
+              "$ref": "#/definitions/server/anyOf/0/properties/inReplyTo"
+            }
+          },
+          "required": [
+            "type",
+            "q",
+            "hits"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "type": {
+              "type": "string",
+              "const": "error"
+            },
+            "code": {
+              "type": "string",
+              "enum": [
+                "not_found",
+                "outside_root",
+                "unsupported",
+                "bad_request",
+                "internal"
+              ]
+            },
+            "message": {
+              "type": "string"
+            },
+            "path": {
+              "type": "string"
+            },
+            "id": {
+              "$ref": "#/definitions/server/anyOf/0/properties/id"
+            },
+            "inReplyTo": {
+              "$ref": "#/definitions/server/anyOf/0/properties/inReplyTo"
+            }
+          },
+          "required": [
+            "type",
+            "code",
+            "message"
+          ],
+          "additionalProperties": false
+        }
+      ]
+    }
+  },
+  "$schema": "http://json-schema.org/draft-07/schema#"
+}

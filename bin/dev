@@ -1,0 +1,36 @@
+#!/usr/bin/env bash
+set -euo pipefail
+cd "$(dirname "$0")/.."
+
+usage() {
+  echo "usage: bin/dev [-o|--open] [path]    run the leaf server (port \${PORT:-4321}) and Vite (port 5173) with live reload"
+  echo "  -o, --open    open the reader in a browser once Vite is up"
+  echo "  path          file or folder to serve (default: examples)"
+}
+open_browser=false; target="examples"
+for arg in "$@"; do
+  case "$arg" in
+    -h|--help) usage; exit 0 ;;
+    -o|--open) open_browser=true ;;
+    -*) usage >&2; exit 2 ;;
+    *) target="$arg" ;;
+  esac
+done
+[[ -f .env ]] || cp .env.example .env
+# The server runs from its package directory, so hand it an absolute path.
+target="$(cd "$(dirname "$target")" && pwd)/$(basename "$target")"
+
+export PORT="${PORT:-4321}" LEAF_OPEN=false
+cargo run -q -p leaf-app -- serve "$target" 2>&1 | sed -u 's/^/[server] /' &
+server_pid=$!
+npm run dev --if-present -w @leaf/ui 2>&1 | sed -u 's/^/[ui]     /' &
+ui_pid=$!
+trap 'kill $server_pid $ui_pid 2>/dev/null; wait $server_pid $ui_pid 2>/dev/null || true' EXIT INT TERM
+
+if $open_browser; then
+  for _ in $(seq 1 50); do
+    if curl -s -o /dev/null http://localhost:5173/; then open http://localhost:5173/; break; fi
+    sleep 0.2
+  done
+fi
+wait $server_pid $ui_pid

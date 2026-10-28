@@ -1,0 +1,53 @@
+/* Paper: a serif page for long reads, warm and narrow, ink-blue links. */
+[data-theme='paper'] {
+  --leaf-doc-font: Charter, 'Iowan Old Style', 'Palatino Linotype', 'Book Antiqua', Georgia, serif;
+  --leaf-doc-mono: 'SF Mono', Menlo, Consolas, 'Liberation Mono', monospace;
+  --leaf-doc-size: 17px;
+  --leaf-doc-leading: 1.65;
+  --leaf-doc-measure: 720px;
+  --leaf-doc-pad: 48px 56px;
+  --leaf-doc-bg: #faf7f0;
+  --leaf-doc-surface: #faf7f0;
+  --leaf-doc-text: #2a2622;
+  --leaf-doc-text-2: #7a7266;
+  --leaf-doc-link: #1f4e8c;
+  --leaf-doc-line: #e6e0d2;
+  --leaf-doc-rule: #d9d2c1;
+  --leaf-doc-code-bg: rgba(60, 45, 20, 0.07);
+  --leaf-doc-block-bg: #fffdf8;
+  --leaf-doc-radius: 4px;
+  --leaf-doc-heading-weight: 700;
+  --leaf-doc-heading-rule: transparent;
+  --leaf-doc-table-stripe: transparent;
+  --leaf-doc-mention: #1f4e8c;
+  --leaf-doc-topic: #5b6b2f;
+  --leaf-doc-card-shadow: none;
+}
+[data-theme='paper'][data-appearance='dark'] {
+  --leaf-doc-bg: #1e1b17;
+  --leaf-doc-surface: #1e1b17;
+  --leaf-doc-text: #e9e3d6;
+  --leaf-doc-text-2: #a39b8b;
+  --leaf-doc-link: #8ab4f8;
+  --leaf-doc-line: #332e27;
+  --leaf-doc-rule: #4a443a;
+  --leaf-doc-code-bg: rgba(255, 240, 210, 0.08);
+  --leaf-doc-block-bg: #26221d;
+  --leaf-doc-heading-rule: transparent;
+  --leaf-doc-table-stripe: transparent;
+  --leaf-doc-mention: #8ab4f8;
+  --leaf-doc-topic: #a9c46a;
+}
+[data-theme='paper'] .leaf-doc h1 {
+  font-size: 2.2em;
+  letter-spacing: -0.01em;
+}
+[data-theme='paper'] .leaf-heading {
+  letter-spacing: -0.01em;
+}
+[data-theme='paper'] .leaf-doc p {
+  text-wrap: pretty;
+}
+[data-theme='paper'] .leaf-doc :not(pre) > code {
+  font-size: 0.82em;
+}

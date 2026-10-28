@@ -1,0 +1,53 @@
+/* Card: the document on a white card over a gray page, the social-app voice. */
+[data-theme='card'] {
+  --leaf-doc-font: -apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif;
+  --leaf-doc-mono: ui-monospace, Menlo, Consolas, monospace;
+  --leaf-doc-size: 15px;
+  --leaf-doc-leading: 1.55;
+  --leaf-doc-measure: 760px;
+  --leaf-doc-pad: 32px 40px;
+  --leaf-doc-bg: #f0f2f5;
+  --leaf-doc-surface: #ffffff;
+  --leaf-doc-text: #050505;
+  --leaf-doc-text-2: #65676b;
+  --leaf-doc-link: #1877f2;
+  --leaf-doc-line: #dadde1;
+  --leaf-doc-rule: #ced0d4;
+  --leaf-doc-code-bg: #f0f2f5;
+  --leaf-doc-block-bg: #f7f8fa;
+  --leaf-doc-radius: 8px;
+  --leaf-doc-heading-weight: 700;
+  --leaf-doc-heading-rule: transparent;
+  --leaf-doc-table-stripe: transparent;
+  --leaf-doc-mention: #1877f2;
+  --leaf-doc-topic: #0a7c5c;
+  --leaf-doc-card-shadow: 0 1px 2px rgba(0, 0, 0, 0.2);
+}
+[data-theme='card'][data-appearance='dark'] {
+  --leaf-doc-bg: #18191a;
+  --leaf-doc-surface: #242526;
+  --leaf-doc-text: #e4e6eb;
+  --leaf-doc-text-2: #b0b3b8;
+  --leaf-doc-link: #4599ff;
+  --leaf-doc-line: #3e4042;
+  --leaf-doc-rule: #3e4042;
+  --leaf-doc-code-bg: #3a3b3c;
+  --leaf-doc-block-bg: #303132;
+  --leaf-doc-heading-rule: transparent;
+  --leaf-doc-table-stripe: transparent;
+  --leaf-doc-mention: #4599ff;
+  --leaf-doc-topic: #31a24c;
+  --leaf-doc-card-shadow: 0 1px 2px rgba(0, 0, 0, 0.6);
+}
+/* The card itself. */
+[data-theme='card'] .leaf-main-inner {
+  background: var(--leaf-doc-surface);
+  border-radius: var(--leaf-doc-radius);
+  box-shadow: var(--leaf-doc-card-shadow);
+}
+[data-theme='card'] .leaf-main-inner {
+  margin: 24px auto 48px;
+}
+[data-theme='card'] .leaf-doc h1 {
+  font-size: 2em;
+}

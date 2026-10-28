@@ -1,0 +1,92 @@
+/* GitHub: the markdown-body look of github.com, so a README reads here as it does there. */
+[data-theme='github'] {
+  --leaf-doc-font:
+    -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Noto Sans', Helvetica, Arial, sans-serif,
+    'Apple Color Emoji', 'Segoe UI Emoji';
+  --leaf-doc-mono:
+    ui-monospace, SFMono-Regular, 'SF Mono', Menlo, Consolas, 'Liberation Mono', monospace;
+  --leaf-doc-size: 16px;
+  --leaf-doc-leading: 1.5;
+  --leaf-doc-measure: 1012px;
+  --leaf-doc-pad: 32px;
+  --leaf-doc-bg: #ffffff;
+  --leaf-doc-surface: #ffffff;
+  --leaf-doc-text: #1f2328;
+  --leaf-doc-text-2: #59636e;
+  --leaf-doc-link: #0969da;
+  --leaf-doc-line: #d1d9e0;
+  --leaf-doc-rule: #d1d9e0;
+  --leaf-doc-code-bg: #f6f8fa;
+  --leaf-doc-block-bg: #f6f8fa;
+  --leaf-doc-radius: 6px;
+  --leaf-doc-heading-weight: 600;
+  --leaf-doc-heading-rule: #d1d9e0;
+  --leaf-doc-table-stripe: #f6f8fa;
+  --leaf-doc-mention: #0969da;
+  --leaf-doc-topic: #1a7f37;
+  --leaf-doc-card-shadow: none;
+}
+[data-theme='github'][data-appearance='dark'] {
+  --leaf-doc-bg: #0d1117;
+  --leaf-doc-surface: #0d1117;
+  --leaf-doc-text: #f0f6fc;
+  --leaf-doc-text-2: #9198a1;
+  --leaf-doc-link: #4493f8;
+  --leaf-doc-line: #3d444d;
+  --leaf-doc-rule: #3d444d;
+  --leaf-doc-code-bg: #151b23;
+  --leaf-doc-block-bg: #151b23;
+  --leaf-doc-heading-rule: #3d444d;
+  --leaf-doc-table-stripe: #151b23;
+  --leaf-doc-mention: #4493f8;
+  --leaf-doc-topic: #3fb950;
+}
+/* GitHub's own type scale and rules. */
+[data-theme='github'] .leaf-heading {
+  margin: 24px 0 16px;
+  line-height: 1.25;
+  letter-spacing: 0;
+}
+[data-theme='github'] .leaf-doc h1 {
+  font-size: 2em;
+  padding-bottom: 0.3em;
+  border-bottom: 1px solid var(--leaf-doc-heading-rule);
+}
+[data-theme='github'] .leaf-doc h2 {
+  font-size: 1.5em;
+  padding-bottom: 0.3em;
+  border-bottom: 1px solid var(--leaf-doc-heading-rule);
+}
+[data-theme='github'] .leaf-doc h3 {
+  font-size: 1.25em;
+  font-weight: 600;
+}
+[data-theme='github'] .leaf-doc :not(pre) > code {
+  font-size: 85%;
+  padding: 0.2em 0.4em;
+  background: color-mix(in srgb, #818b98 12%, transparent);
+}
+[data-theme='github'] .leaf-doc table:not(.leaf-datatable table) {
+  border-radius: 0;
+  width: max-content;
+  max-width: 100%;
+  font-size: 1em;
+}
+[data-theme='github'] .leaf-doc table:not(.leaf-datatable table) th,
+[data-theme='github'] .leaf-doc table:not(.leaf-datatable table) td {
+  padding: 6px 13px;
+  border: 1px solid var(--leaf-doc-line);
+}
+[data-theme='github'] .leaf-doc table:not(.leaf-datatable table) th {
+  font-size: 1em;
+  background: transparent;
+}
+[data-theme='github'] .leaf-doc blockquote {
+  border-left-width: 0.25em;
+  padding: 0 1em;
+}
+[data-theme='github'] .leaf-doc hr {
+  height: 0.25em;
+  border: 0;
+  background: var(--leaf-doc-rule);
+}

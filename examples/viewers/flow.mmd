@@ -1,0 +1,19 @@
+flowchart TD
+  Start([leaf open path]) --> IsDir{Directory?}
+  IsDir -- no --> One[Open the single file]
+  IsDir -- yes --> List[List the tree lazily]
+  List --> Pick[Pick a file]
+  One --> Kind{Kind?}
+  Pick --> Kind
+  Kind -- markdown --> MD[Render markdown]
+  Kind -- diagram --> DG[Mermaid / PlantUML / Excalidraw]
+  Kind -- code --> CM[CodeMirror, read only]
+  Kind -- image / media --> IMG[Picture on a checkerboard]
+  Kind -- csv / tsv --> TBL[Sortable, filterable table]
+  Kind -- other --> BIN[Icon + metadata + download]
+  MD --> Live[[Live updates over WebSocket]]
+  DG --> Live
+  CM --> Live
+  Live --> Stage[Zoom in: hand, pencil, sticky ink]
+  style Start fill:#dff5e6,stroke:#1e8e4d
+  style Live fill:#e8f0fe,stroke:#3e82f7

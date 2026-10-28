@@ -1,0 +1,12 @@
+{
+  "type": "matches",
+  "q": "re",
+  "entries": [
+    {
+      "path": "README.md",
+      "name": "README.md",
+      "kind": "file"
+    }
+  ],
+  "inReplyTo": "s"
+}

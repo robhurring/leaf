@@ -1,0 +1,11 @@
+#!/usr/bin/env bash
+set -euo pipefail
+cd "$(dirname "$0")/.."
+
+usage() { echo "usage: bin/lint    type-check every package and check formatting"; }
+[[ "${1:-}" == "--help" || "${1:-}" == "-h" ]] && { usage; exit 0; }
+
+npm run lint
+# Rust: formatting and lints, warnings are errors
+cargo fmt --all -- --check
+cargo clippy --workspace --all-targets -- -D warnings

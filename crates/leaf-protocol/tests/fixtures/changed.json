@@ -1,0 +1,6 @@
+{
+  "type": "changed",
+  "path": "b.md",
+  "change": "renamed",
+  "from": "a.md"
+}

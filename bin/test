@@ -1,0 +1,23 @@
+#!/usr/bin/env bash
+set -euo pipefail
+cd "$(dirname "$0")/.."
+
+usage() { echo "usage: bin/test [--unit]    run unit tests for every package, then build and run the browser smoke test"; }
+unit_only=false
+case "${1:-}" in
+  -h|--help) usage; exit 0 ;;
+  --unit) unit_only=true ;;
+  "") ;;
+  *) usage >&2; exit 1 ;;
+esac
+
+# The leaf binary embeds the built UI, so the UI must exist before cargo builds the tests.
+npm run build --if-present -w @leaf/protocol
+npm run build --if-present -w @leaf/ui
+# Release, to share compiled dependencies with bin/build (one tree, not two).
+cargo test --workspace --release
+npm test
+$unit_only && exit 0
+# The smoke test drives the real server on examples/ with the built UI.
+bin/build
+LEAF_BIN="$(pwd)/target/release/leaf" npm run e2e -w @leaf/ui

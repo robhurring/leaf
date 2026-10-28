@@ -1,0 +1,20 @@
+{
+  "type": "tree",
+  "path": "",
+  "entries": [
+    {
+      "path": "docs",
+      "name": "docs",
+      "kind": "dir",
+      "hasChildren": true
+    },
+    {
+      "path": "README.md",
+      "name": "README.md",
+      "kind": "file",
+      "size": 12,
+      "mtime": 1700000000000.5
+    }
+  ],
+  "inReplyTo": "l"
+}
