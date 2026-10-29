@@ -197,6 +197,10 @@ fn build_menu(app: &AppHandle) -> tauri::Result<Menu<Wry>> {
             Some("CmdOrCtrl+0"),
         )?)
         .build()?;
+    let go = SubmenuBuilder::new(app, "Go")
+        .item(&item(app, "cmd:goBack", "Back", Some("CmdOrCtrl+["))?)
+        .item(&item(app, "cmd:goForward", "Forward", Some("CmdOrCtrl+]"))?)
+        .build()?;
     let window = SubmenuBuilder::new(app, "Window")
         .minimize()
         .maximize()
@@ -204,7 +208,7 @@ fn build_menu(app: &AppHandle) -> tauri::Result<Menu<Wry>> {
         .fullscreen()
         .build()?;
     MenuBuilder::new(app)
-        .items(&[&app_menu, &file, &edit, &view, &window])
+        .items(&[&app_menu, &file, &edit, &view, &go, &window])
         .build()
 }
 

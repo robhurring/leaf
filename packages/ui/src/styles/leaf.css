@@ -352,6 +352,19 @@ html[data-resizing] .leaf-resizer::after {
 .leaf-brand:hover {
   background: var(--leaf-surface-2);
 }
+.leaf-history {
+  display: flex;
+  gap: 2px;
+  margin-left: 2px;
+}
+.leaf-history-back svg {
+  transform: scaleX(-1);
+}
+.leaf-history .leaf-ib:disabled {
+  opacity: 0.35;
+  cursor: default;
+  background: transparent;
+}
 .leaf-mark {
   flex: none;
   filter: drop-shadow(0 0.5px 0.5px rgba(0, 0, 0, 0.12));

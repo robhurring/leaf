@@ -62,7 +62,7 @@ export function CodeRich(props: ViewerProps) {
         file.lang,
         file.path,
         wrap,
-        (range) => history.replaceState(null, '', lineHash(range)),
+        (range) => history.replaceState(history.state, '', lineHash(range)),
         dark,
       );
       viewRef.current = view;

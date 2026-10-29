@@ -84,3 +84,28 @@ describe('shortcuts', () => {
     off();
   });
 });
+
+describe('history shortcuts', () => {
+  it('⌘[ goes back and ⌘] forward; bare [ and ] still toggle the sidebars', () => {
+    const a = { ...actions(), goBack: vi.fn(), goForward: vi.fn() };
+    const off = installShortcuts(a, window);
+    key({ key: '[', metaKey: true });
+    key({ key: ']', metaKey: true });
+    expect(a.goBack).toHaveBeenCalledTimes(1);
+    expect(a.goForward).toHaveBeenCalledTimes(1);
+    expect(a.toggleTree).not.toHaveBeenCalled();
+    key({ key: '[' });
+    expect(a.toggleTree).toHaveBeenCalledTimes(1);
+    off();
+  });
+
+  it('the mouse back and forward buttons navigate', () => {
+    const a = { ...actions(), goBack: vi.fn(), goForward: vi.fn() };
+    const off = installShortcuts(a, window);
+    window.dispatchEvent(new MouseEvent('mouseup', { button: 3 }));
+    window.dispatchEvent(new MouseEvent('mouseup', { button: 4 }));
+    expect(a.goBack).toHaveBeenCalledTimes(1);
+    expect(a.goForward).toHaveBeenCalledTimes(1);
+    off();
+  });
+});

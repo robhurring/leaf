@@ -230,4 +230,21 @@ describe('Reader', () => {
     fireEvent.click(screen.getByText('notes.txt'));
     expect(check).toHaveBeenCalledTimes(1);
   });
+
+  it('back and forward beside the logo step through the files viewed', async () => {
+    render(<Reader source={dir().source} />);
+    await screen.findByRole('heading', { name: 'Title', level: 1 });
+    const back = screen.getByRole('button', { name: /^Back/ }) as HTMLButtonElement;
+    const forward = screen.getByRole('button', { name: /^Forward/ }) as HTMLButtonElement;
+    expect(back.disabled).toBe(true);
+    expect(forward.disabled).toBe(true);
+    fireEvent.click(screen.getByText('notes.txt'));
+    await waitFor(() => expect(back.disabled).toBe(false));
+    fireEvent.click(back);
+    expect(await screen.findByRole('heading', { name: 'Title', level: 1 })).toBeTruthy();
+    await waitFor(() => expect(forward.disabled).toBe(false));
+    expect(back.disabled).toBe(true);
+    fireEvent.click(forward);
+    await waitFor(() => expect(location.pathname).toBe('/notes.txt'));
+  });
 });

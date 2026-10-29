@@ -1,4 +1,11 @@
-import { LeafMark, Numbering, Outline as OutlineIcon, Search, Sidebar } from '../icons/index.js';
+import {
+  Chevron,
+  LeafMark,
+  Numbering,
+  Outline as OutlineIcon,
+  Search,
+  Sidebar,
+} from '../icons/index.js';
 import type { SourceStatus } from '../source/DocumentSource.js';
 import type { Appearance, Theme } from '../store/ui.js';
 import { ConnectionDot } from './ConnectionDot.js';
@@ -30,6 +37,10 @@ export type TopBarProps = {
   /** The open Go to field, shown in place of its button. */
   goto?: React.ReactNode;
   onTitle(): void;
+  canGoBack?: boolean;
+  canGoForward?: boolean;
+  onBack?(): void;
+  onForward?(): void;
 };
 
 export function TopBar(p: TopBarProps) {
@@ -48,6 +59,21 @@ export function TopBar(p: TopBarProps) {
           <LeafMark size={20} className="leaf-mark" />
           <span className="leaf-wordmark">leaf</span>
         </button>
+        {p.onBack && (
+          <div className="leaf-history" role="group" aria-label="History">
+            <IconButton
+              label="Back (⌘[)"
+              disabled={!p.canGoBack}
+              onClick={p.onBack}
+              className="leaf-history-back"
+            >
+              <Chevron size={16} />
+            </IconButton>
+            <IconButton label="Forward (⌘])" disabled={!p.canGoForward} onClick={p.onForward}>
+              <Chevron size={16} />
+            </IconButton>
+          </div>
+        )}
       </div>
       <div className="leaf-bar-center" {...drag}>
         {p.goto ?? (

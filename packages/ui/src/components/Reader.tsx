@@ -140,6 +140,12 @@ export function Reader(props: ReaderProps) {
   }, [docs.root, rootEntries, docs.path, props.path, router, navigate]);
 
   useEffect(() => router.subscribe((loc) => useDocuments.getState().open(loc.path)), [router]);
+  const [reach, setReach] = useState({ back: false, forward: false });
+  useEffect(() => {
+    const update = () => setReach({ back: router.canGoBack(), forward: router.canGoForward() });
+    update();
+    return router.onHistory(update);
+  }, [router]);
 
   useEffect(() => {
     if (props.path !== undefined && props.path !== docs.path) navigate(props.path, true);
@@ -224,6 +230,8 @@ export function Reader(props: ReaderProps) {
       openPath: (arg?: { path: string; slug?: string }) => {
         if (arg) navigate(arg.slug ? `${arg.path}#${arg.slug}` : arg.path);
       },
+      goBack: () => router.back(),
+      goForward: () => router.forward(),
     }),
   );
 
@@ -240,6 +248,8 @@ export function Reader(props: ReaderProps) {
         closeOverlays: () => runCommand('closeOverlays'),
         scrollBy: (unit, direction) => runCommand('scrollBy', { unit, direction }),
         jumpHeading: (direction) => runCommand('jumpHeading', direction),
+        goBack: () => runCommand('goBack'),
+        goForward: () => runCommand('goForward'),
       },
       window,
       () => useStage.getState().open !== null,
@@ -334,6 +344,10 @@ export function Reader(props: ReaderProps) {
         >
           <ProgressBar />
           <TopBar
+            canGoBack={reach.back}
+            canGoForward={reach.forward}
+            onBack={() => runCommand('goBack')}
+            onForward={() => runCommand('goForward')}
             title={title}
             path={path}
             treeAvailable={treeAvailable}

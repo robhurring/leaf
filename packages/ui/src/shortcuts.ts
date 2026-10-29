@@ -15,6 +15,9 @@ export type ShortcutActions = {
   scrollBy(unit: 'line' | 'half' | 'page', direction: 1 | -1): void;
   /** ctrl-n/ctrl-p: the next or previous heading in the document. */
   jumpHeading(direction: 1 | -1): void;
+  /** ⌘[ / ⌘] and the mouse's side buttons: the previous or next file viewed. */
+  goBack?(): void;
+  goForward?(): void;
 };
 
 const isTyping = (target: EventTarget | null) => {
@@ -42,6 +45,10 @@ export function installShortcuts(
     if (e.metaKey && !e.ctrlKey && k === 'f') {
       e.preventDefault();
       return actions.openFind();
+    }
+    if (e.metaKey && !e.altKey && (e.key === '[' || e.key === ']')) {
+      e.preventDefault();
+      return e.key === '[' ? actions.goBack?.() : actions.goForward?.();
     }
     if (mod && k === 'o') {
       e.preventDefault();
@@ -80,6 +87,17 @@ export function installShortcuts(
         return actions.toggleAppearance();
     }
   };
+  // Buttons 3 and 4 are a mouse's back and forward; the app window ignores them otherwise.
+  const onMouse = (e: MouseEvent) => {
+    if (isBlocked() || (e.button !== 3 && e.button !== 4)) return;
+    e.preventDefault();
+    if (e.button === 3) actions.goBack?.();
+    else actions.goForward?.();
+  };
   target.addEventListener('keydown', onKey);
-  return () => target.removeEventListener('keydown', onKey);
+  target.addEventListener('mouseup', onMouse);
+  return () => {
+    target.removeEventListener('keydown', onKey);
+    target.removeEventListener('mouseup', onMouse);
+  };
 }
