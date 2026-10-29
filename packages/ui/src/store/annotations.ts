@@ -14,8 +14,8 @@ export type Stroke = {
   stale?: boolean;
 };
 
-export const INK_FADE_START_MS = 4000;
-export const INK_GONE_MS = 8000;
+export const INK_FADE_START_MS = 1500;
+export const INK_GONE_MS = 3000;
 
 type State = {
   strokes: Stroke[];

@@ -1958,7 +1958,7 @@ a.leaf-pill:hover {
   stroke-linejoin: round;
 }
 .leaf-ink-fade {
-  animation: leaf-ink-fade 8s linear forwards;
+  animation: leaf-ink-fade 3s linear forwards;
 }
 .leaf-ink-stale {
   opacity: 0.35;
@@ -2036,7 +2036,7 @@ a.leaf-pill:hover {
 @media (prefers-reduced-motion: reduce) {
   .leaf-ink-fade {
     animation-duration: 0.01s;
-    animation-delay: 8s;
+    animation-delay: 3s;
   }
 }
 

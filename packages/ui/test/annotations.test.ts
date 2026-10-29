@@ -65,3 +65,15 @@ describe('annotations store', () => {
     expect(Object.keys(localStorage).some((k) => /annot|ink|stroke/i.test(k))).toBe(false);
   });
 });
+
+describe('invisible ink timing', () => {
+  it('is gone in 3s, and the fade animation ends when the timer drops it', async () => {
+    const { readFileSync } = await import('node:fs');
+    const { join } = await import('node:path');
+    const css = readFileSync(join(__dirname, '..', 'src', 'styles', 'leaf.css'), 'utf8');
+    expect(INK_GONE_MS).toBe(3000);
+    const s = `${INK_GONE_MS / 1000}s`;
+    expect(css).toMatch(new RegExp(`\\.leaf-ink-fade \\{\\s*animation: leaf-ink-fade ${s} `));
+    expect(css).toMatch(new RegExp(`animation-delay: ${s};`));
+  });
+});
