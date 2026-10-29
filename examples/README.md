@@ -19,6 +19,7 @@ A first-class markdown reader in the browser. This folder is the living demo: ev
 - [Outline and numbering](./outline-and-numbering.md): heading levels that jump, for the numbering toggle.
 - [Diagrams](./diagrams.md): mermaid, PlantUML, and Excalidraw blocks, a broken one, and the zoom-in Stage with drawing tools.
 - [Animations](./animations.md): live three.js and canvas blocks for illustrating ideas, a broken one, and presenting them in the Stage.
+- [Updraft](./animations/updraft.md): a whole one-button game in a canvas block.
 
 ## Other files
 

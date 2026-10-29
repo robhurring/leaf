@@ -52,6 +52,7 @@ test('examples render without console errors', async ({ page }) => {
     'html.md',
     'outline-and-numbering.md',
     'animations.md',
+    'animations/updraft.md',
   ]) {
     await page.goto('/' + f);
     await expect(page.locator('article.leaf-doc')).toBeVisible();

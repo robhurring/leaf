@@ -252,6 +252,10 @@ onFrame((t, dt) => {
 });
 ```
 
+## A whole game
+
+A block can take clicks and keys too: [Updraft](./animations/updraft.md) is a one-button game in a single canvas block.
+
 ## When a block goes wrong
 
 An error shows under the pane with the line it came from; the rest of the document carries on.
