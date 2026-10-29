@@ -12,11 +12,98 @@ use tauri::{AppHandle, Emitter, EventTarget, Manager, WebviewUrl, WebviewWindowB
 
 use leaf_app::launch::{link_in_argv, parse_deep_link, route_for};
 use leaf_app::window::Windows;
+use leaf_app::window_state::{Geometry, Rect, WindowStates};
 
 struct AppState {
     windows: Arc<Windows>,
     runtime: tokio::runtime::Handle,
     next: AtomicU32,
+    /// Where each file or folder's window was, kept in `<config-dir>/windows.json`.
+    places: std::sync::Mutex<WindowStates>,
+    places_file: PathBuf,
+    /// A save is scheduled; moves and resizes come in bursts.
+    save_pending: std::sync::atomic::AtomicBool,
+}
+
+/// How long after the last move or resize the window places are written.
+const SAVE_AFTER: std::time::Duration = std::time::Duration::from_millis(500);
+
+/// The screens' usable areas, in logical pixels.
+fn screens(app: &AppHandle) -> Vec<Rect> {
+    app.available_monitors()
+        .unwrap_or_default()
+        .iter()
+        .map(|m| {
+            let area = m.work_area();
+            let scale = m.scale_factor();
+            Rect {
+                x: area.position.x as f64 / scale,
+                y: area.position.y as f64 / scale,
+                width: area.size.width as f64 / scale,
+                height: area.size.height as f64 / scale,
+            }
+        })
+        .collect()
+}
+
+/// A window's geometry now, in logical pixels.
+fn geometry_of(window: &tauri::Window) -> Option<Geometry> {
+    let scale = window.scale_factor().ok()?;
+    let pos = window.outer_position().ok()?.to_logical::<f64>(scale);
+    let size = window.inner_size().ok()?.to_logical::<f64>(scale);
+    Some(Geometry {
+        x: pos.x,
+        y: pos.y,
+        width: size.width,
+        height: size.height,
+        maximized: false,
+    })
+}
+
+/// Remembers where `window` is, under what it opened, and schedules a save.
+fn record_place(window: &tauri::Window) {
+    let app = window.app_handle();
+    let state = app.state::<AppState>();
+    let Some(opened) = state.windows.opened(window.label()) else {
+        return;
+    };
+    // Full screen is a mode, not a place; a maximized window keeps its normal size
+    // to come back to, marked maximized.
+    if window.is_fullscreen().unwrap_or(false) {
+        return;
+    }
+    let maximized = window.is_maximized().unwrap_or(false);
+    {
+        let mut places = state.places.lock().unwrap_or_else(|e| e.into_inner());
+        let g = if maximized {
+            match places.place(&opened, &[], &[]) {
+                Some(prev) => Geometry {
+                    maximized: true,
+                    ..prev
+                },
+                None => return,
+            }
+        } else {
+            match geometry_of(window) {
+                Some(g) => g,
+                None => return,
+            }
+        };
+        places.record(&opened, g);
+    }
+    if state.save_pending.swap(true, Ordering::SeqCst) {
+        return;
+    }
+    let app = app.clone();
+    state.runtime.spawn(async move {
+        tokio::time::sleep(SAVE_AFTER).await;
+        let state = app.state::<AppState>();
+        state.save_pending.store(false, Ordering::SeqCst);
+        let places = state.places.lock().unwrap_or_else(|e| e.into_inner());
+        if let Err(e) = places.save(&state.places_file) {
+            tracing::warn!(error = %e, "could not save window places");
+        }
+    });
 }
 
 fn emit(app: &AppHandle, label: &str, msg: ServerMessage) {
@@ -97,19 +184,37 @@ fn open_window_at(app: &AppHandle, target: &Path, route: Option<String>) {
         "window.__LEAF_WINDOW__ = {label:?}; history.replaceState(null, '', {route:?});",
         route = route.unwrap_or_else(|| route_for(&path))
     );
+    // Where this file or folder's window last was, else the last window's size, stepped
+    // aside from the windows already open; the default size otherwise.
+    let open: Vec<Geometry> = app
+        .webview_windows()
+        .values()
+        .filter_map(|w| geometry_of(&w.as_ref().window()))
+        .collect();
+    let place = state
+        .places
+        .lock()
+        .unwrap_or_else(|e| e.into_inner())
+        .place(target, &open, &screens(app));
     let builder =
         WebviewWindowBuilder::new(app, &label, WebviewUrl::App(PathBuf::from("index.html")))
             .title(&title)
-            .inner_size(1240.0, 860.0)
             .min_inner_size(640.0, 420.0)
             .visible(false)
             .initialization_script(&init);
+    let builder = match place {
+        Some(g) => builder.inner_size(g.width, g.height).position(g.x, g.y),
+        None => builder.inner_size(1240.0, 860.0),
+    };
     #[cfg(target_os = "macos")]
     let builder = builder
         .title_bar_style(tauri::TitleBarStyle::Overlay)
         .hidden_title(true);
     match builder.build() {
         Ok(window) => {
+            if place.is_some_and(|g| g.maximized) {
+                let _ = window.maximize();
+            }
             state.runtime.spawn(async move {
                 tokio::time::sleep(READY_FALLBACK).await;
                 leaf_ready(window);
@@ -373,6 +478,9 @@ pub fn run(config: Config, link: Option<String>) -> i32 {
         .menu(build_menu)
         .on_menu_event(|app, event| on_menu(app, event.id().as_ref()))
         .on_window_event(|window, event| {
+            if let tauri::WindowEvent::Moved(_) | tauri::WindowEvent::Resized(_) = event {
+                record_place(window);
+            }
             if let tauri::WindowEvent::Destroyed = event {
                 window
                     .app_handle()
@@ -388,10 +496,14 @@ pub fn run(config: Config, link: Option<String>) -> i32 {
                 config.clone(),
                 Arc::new(move |label: &str, msg: ServerMessage| emit(&emit_handle, label, msg)),
             ));
+            let places_file = config.config_dir.join("windows.json");
             app.manage(AppState {
                 windows,
                 runtime: runtime.clone(),
                 next: AtomicU32::new(1),
+                places: std::sync::Mutex::new(WindowStates::load(&places_file)),
+                places_file,
+                save_pending: std::sync::atomic::AtomicBool::new(false),
             });
             match &link {
                 Some(url) => open_link(&handle, url),

@@ -196,6 +196,11 @@ impl Windows {
         best.map(|(l, o)| (l.clone(), o.clone()))
     }
 
+    /// What window `label` opened: a folder, or a file.
+    pub fn opened(&self, label: &str) -> Option<PathBuf> {
+        self.lock().windows.get(label).map(|(p, _)| p.clone())
+    }
+
     pub fn window_count(&self) -> usize {
         self.lock().windows.len()
     }
