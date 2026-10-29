@@ -28,7 +28,6 @@ export const DOC_TOKENS = [
   '--leaf-doc-mono',
   '--leaf-doc-size',
   '--leaf-doc-leading',
-  '--leaf-doc-measure',
   '--leaf-doc-pad',
   '--leaf-doc-bg',
   '--leaf-doc-surface',

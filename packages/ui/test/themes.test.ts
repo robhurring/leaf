@@ -86,13 +86,9 @@ describe('themes', () => {
     expect(base).toMatch(/\.leaf-frame\[data-viewer='csv'\] \.leaf-datatable \{[^}]*padding/);
   });
 
-  it('hiding sidebars gives the document their room; hiding both removes the cap', () => {
-    expect(base).toMatch(
-      /\.leaf-no-tree \.leaf-main-inner[^{]*\{[^}]*max-width: calc\(var\(--leaf-doc-measure\) \+ var\(--leaf-sidebar-w\)\)/,
-    );
-    expect(base).toMatch(
-      /\.leaf-no-tree\.leaf-no-outline \.leaf-main-inner[^{]*\{[^}]*max-width: none/,
-    );
+  it('the document fills its column and grows with the window: no measure caps it', () => {
+    expect(base).not.toMatch(/\.leaf-main-inner[^{]*\{[^}]*max-width: (?!none)/);
+    expect(base).not.toMatch(/--leaf-doc-measure/);
   });
 
   it('in the app window the chrome behaves like a Mac app, not a page', () => {

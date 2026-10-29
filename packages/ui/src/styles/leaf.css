@@ -58,7 +58,6 @@
   --leaf-doc-mono: var(--leaf-font-mono);
   --leaf-doc-size: 16px;
   --leaf-doc-leading: 1.5;
-  --leaf-doc-measure: 1012px;
   --leaf-doc-pad: 32px;
   --leaf-doc-bg: var(--leaf-bg);
   --leaf-doc-surface: var(--leaf-bg);
@@ -256,8 +255,8 @@ html[data-resizing] .leaf-resizer::after {
 .leaf-resizer:focus-visible {
   outline: 0;
 }
+/* The document fills its column and grows with the window; themes set only the padding. */
 .leaf-main-inner {
-  max-width: var(--leaf-doc-measure);
   margin: 0 auto;
   padding: var(--leaf-doc-pad);
   padding-bottom: 96px;
@@ -266,6 +265,11 @@ html[data-resizing] .leaf-resizer::after {
 @media (max-width: 1100px) {
   .leaf-body {
     grid-template-columns: minmax(0, 1fr);
+  }
+  /* One column now: left in column 2, the document would get an implicit column sized
+     to its content, pushed right of an empty 1fr. */
+  .leaf-doc-col {
+    grid-column: 1;
   }
   .leaf-tree,
   .leaf-outline {
@@ -285,14 +289,6 @@ html[data-resizing] .leaf-resizer::after {
   .leaf-main-inner {
     padding: 24px 20px 64px;
   }
-}
-/* A hidden sidebar's room goes to the document; with both hidden, no cap at all. */
-.leaf-no-tree .leaf-main-inner,
-.leaf-no-outline .leaf-main-inner {
-  max-width: calc(var(--leaf-doc-measure) + var(--leaf-sidebar-w));
-}
-.leaf-no-tree.leaf-no-outline .leaf-main-inner {
-  max-width: none;
 }
 /* Whole files other than markdown fill the column like an editor. */
 .leaf-main-inner[data-viewer='code'],
