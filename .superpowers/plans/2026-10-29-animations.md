@@ -14,7 +14,7 @@
 
 - Fence languages exactly `three` and `canvas`. ` ```js `, ` ```javascript `, ` ```html ` render exactly as today.
 - iframe `sandbox` attribute is exactly `allow-scripts`. Never `allow-same-origin`.
-- Frame CSP (meta, first element in `<head>`): `default-src 'none'; script-src 'unsafe-inline' 'unsafe-eval' blob:; style-src 'unsafe-inline'; img-src data: blob:; media-src data: blob:; font-src data:` (Ruling vs spec: `blob:` added to `script-src` so the frame can import the three.js module text it turns into blob URLs itself; no network origin is allowed.)
+- Frame CSP (meta, first element in `<head>`): `default-src 'none'; script-src 'unsafe-inline' 'unsafe-eval'; style-src 'unsafe-inline'; img-src data: blob:; media-src data: blob:; font-src data:` (exactly the spec's).
 - Height: default 320px; fence meta `height=N` clamped to 120–1200.
 - Block globals — `three`: `THREE`, `OrbitControls`, `scene`, `camera`, `renderer`, `onFrame(fn)`, `manual()`, `theme`; `canvas`: `canvas`, `ctx`, `width`, `height`, `onFrame(fn)`, `theme`. `fn(t, dt)` gets ms since start and since last frame. Block code is the body of an async function.
 - Libraries bundled, loaded lazily (like mermaid) only when a `three` block renders; library text cached once per session.
@@ -60,7 +60,7 @@
   ```ts
   export type LiveKind = 'three' | 'canvas';
   export type Theme = 'light' | 'dark';
-  export type Libs = { core: string; module: string; orbit: string }; // three only
+  export type Libs = { three: string }; // one classic script that sets window.THREE and window.OrbitControls
   export type Boot = { kind: LiveKind; code: string; theme: Theme; paused: boolean; libs?: Libs };
   export const FRAME_CSP: string;            // exactly the Global Constraints value
   export function paneHeight(meta: string | undefined): number; // 320 default, clamp 120–1200
@@ -75,6 +75,7 @@
 - [ ] **Step 1: Write failing tests** (`liveFrame.test.ts`):
   - `paneHeight(undefined)` → 320; `'height=480'` → 480; `'height=50'` → 120; `'height=5000'` → 1200; `'height=abc foo'` → 320.
   - `buildSrcdoc(...)` puts `<meta http-equiv="Content-Security-Policy" content="${FRAME_CSP}">` before any `<script`; contains `data-theme="dark"` on `<html>` for a dark boot.
+  - A boot with `libs: { three: 'window.X = "</script>";' }` yields a srcdoc whose library `<script>` comes before the harness `<script>` and contains no raw `</script>` before its own end tag.
   - Escaping: for `code = 'const s = "</script><!--";'`, the srcdoc contains no second `</script>` inside the boot block, and `JSON.parse` of the boot element's text (parse the srcdoc with `DOMParser`) gives back the exact code.
   - `isFromFrame({leaf:'live',type:'ready'})` true; `{type:'ready'}`, `null`, `{leaf:'live',type:'error'}` (no message) false.
 - [ ] **Step 2:** `npx vitest run packages/ui/test/liveFrame.test.ts` — Expected: FAIL (module missing).
@@ -95,7 +96,7 @@
   - on `pause`: also `document.getAnimations().forEach(a => a.pause())` and pauses playing `<video>/<audio>` (remembering which), and the reverse on `play`;
   - `onFrame(fn)` callbacks get `(t, dt)` with `t` frozen while paused;
   - `canvas` kind: creates a full-size `<canvas>` scaled by `devicePixelRatio`, `ctx` pre-scaled, `width`/`height` in CSS px, updated on resize;
-  - `three` kind: turns `libs` into blob-URL modules (rewrite `./three.core.min.js` in `module` and `'three'` in `orbit` to the blob URLs), `await import()`s them, creates `scene`, `PerspectiveCamera(50, aspect, 0.1, 1000)` at `z=5`, `WebGLRenderer({antialias:true})` sized to the window with DPR, resizes on `resize`, and renders after `onFrame` callbacks each frame unless `manual()` was called;
+  - `three` kind: the library arrives as a classic `<script>` that `buildSrcdoc` places before the harness (Task 2 writes `libs.three` into its own `<script>` element, escaping `</script` as `<\/script`), so `THREE`/`OrbitControls` are already globals; the harness creates `scene`, `PerspectiveCamera(50, aspect, 0.1, 1000)` at `z=5`, `WebGLRenderer({antialias:true})` sized to the window with DPR, resizes on `resize`, and renders after `onFrame` callbacks each frame unless `manual()` was called;
   - runs block code as `new AsyncFunction(...globalNames, code)(...values)`; maps an error's line in the block (from the stack or `lineno`, minus the wrapper's offset) into `line`;
   - posts `ready` after the block's function resolves; posts `error` on throw, on `error`/`unhandledrejection` (with `preventDefault()`), and on an `onFrame` throw — after which the frame loop stops (one error, no flood);
   - `restart` → `location.reload()` (srcdoc reload re-runs everything).
@@ -122,12 +123,13 @@
 
 **Files:**
 - Create: `packages/ui/src/viewers/live/index.tsx` (viewer `live`), `packages/ui/src/viewers/live/LivePane.tsx`, `packages/ui/src/viewers/live/libs.ts`
+- Create: `packages/ui/three-bundle.ts` — a Vite plugin `threeBundle()` resolving `virtual:leaf-three`; its `load` runs `esbuild.build({ stdin: { contents: "import * as THREE from 'three'; import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js'; window.THREE = THREE; window.OrbitControls = OrbitControls;", resolveDir: <packages/ui>, loader: 'js' }, bundle: true, format: 'iife', minify: true, write: false })` and returns `export default <JSON-stringified text>`. Add it to `vite.config.ts` plugins and declare the module in a `.d.ts`. (esbuild is already in node_modules via Vite; add it to `packages/ui` devDependencies explicitly.)
 - Modify: `packages/ui/src/viewers/index.ts` (register), `packages/ui/package.json` (`three` ^0.186.1, `@types/three` dev), `packages/ui/src/icons/` (Play, Pause, Restart, Code if missing), `packages/ui/src/styles/leaf.css` (`.leaf-live*`)
 - Test: `packages/ui/test/live.test.tsx` — note `live.test.tsx` exists already (live reload); name this `livePane.test.tsx`
 
 **Interfaces:**
 - Consumes: Tasks 1–3.
-- Produces: `export const live: Viewer` with `id: 'live'`, `matches: { lang: ['three', 'canvas'] }`, `stage: {}`, `Inline` and `Rich` both `LivePane` (Rich fills its container's height instead of `paneHeight`). `libs.ts`: `export function loadThreeLibs(): Promise<Libs>` using `import('three/build/three.core.min.js?raw')`, `import('three/build/three.module.min.js?raw')`, `import('three/examples/jsm/controls/OrbitControls.js?raw')`, cached in a module-level promise, wrapped in `track(load(...))` like mermaid.
+- Produces: `export const live: Viewer` with `id: 'live'`, `matches: { lang: ['three', 'canvas'] }`, `stage: {}`, `Inline` and `Rich` both `LivePane` (Rich fills its container's height instead of `paneHeight`). `libs.ts`: `export function loadThreeLibs(): Promise<Libs>` using `import('virtual:leaf-three')` (default export: the bundled script text), cached in a module-level promise, wrapped in `track(load(...))` like mermaid.
 - LivePane behavior:
   - iframe `sandbox="allow-scripts"`, `title="<lang> animation"`, `srcdoc` from `buildSrcdoc`, memoized on `contentHash(code)` + kind (theme changes post `theme`, never rebuild).
   - Running state = `inView && !document.hidden && !userPaused && !stageOpenForThisBlock`; on change posts `play`/`pause`. `inView` from IntersectionObserver (treated as true when `IntersectionObserver` is undefined). Reduced motion → `userPaused` starts true, boot `paused: true`.
@@ -171,6 +173,6 @@
   - add `'animations.md'` to the examples list (no console errors, page or frames).
   - new test `live panes run, pause, and show errors`: goto `/animations.md`; first `.leaf-live` reaches `data-state="running"` (three's WebGL must init in all three browsers — if a headless browser has no WebGL, it must show the error view instead, and the test accepts `running` or a visible error only for that browser); the canvas sine pane reaches `running`; clicking its `Pause` gives `paused`; the broken pane shows text `line 3` and `undefinedThing`.
 - [ ] **Step 2:** `npm run e2e -w packages/ui` (or `bin/test`) — FAIL (no example yet).
-- [ ] **Step 3:** Write the example, README sections. If blob-URL module import fails in any engine (WebKit is the risk), Ruling: build a classic-script bundle of three + OrbitControls instead (an esbuild step via Vite's bundled esbuild in a tiny Vite plugin producing a `?three-iife` raw module) and record it in the ledger.
+- [ ] **Step 3:** Write the example, README sections.
 - [ ] **Step 4:** `bin/test` — all PASS; `bin/lint`; then `LEAF_APP=<scratchpad>/none.app bin/build` and open `examples/animations.md` in the built `leaf` binary to confirm panes run in the Tauri webview (screenshot).
 - [ ] **Step 5:** Commit "Animation examples and docs".
