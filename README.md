@@ -19,7 +19,7 @@ bin/setup                  # dependencies
 bin/install                # builds, then links `leaf` into ~/.local/bin
 ```
 
-On macOS `bin/install` also puts `leaf reader.app` in `~/Applications` so `leaf://` links open in leaf; `bin/install --uninstall` removes both.
+On macOS `bin/install` also puts `leaf reader.app` in `~/Applications` so `leaf://` links open in leaf; `bin/install --uninstall` removes both. Its icon follows light and dark mode; `LEAF_ICON=vein-arrow` or `LEAF_ICON=page` before `bin/install` (or `bin/build`) picks one of the other two designs.
 
 ## Use
 

@@ -1,0 +1,87 @@
+{
+  "fill": {
+    "automatic-gradient": "extended-srgb:0.18824,0.66667,0.37255,1.00000"
+  },
+  "fill-specializations": [
+    {
+      "value": {
+        "automatic-gradient": "extended-srgb:0.18824,0.66667,0.37255,1.00000"
+      }
+    },
+    {
+      "appearance": "dark",
+      "value": {
+        "automatic-gradient": "extended-srgb:0.06275,0.12941,0.10196,1.00000"
+      }
+    }
+  ],
+  "groups": [
+    {
+      "name": "Artwork",
+      "hidden": false,
+      "layers": [
+        {
+          "name": "Veins",
+          "image-name": "Veins.svg",
+          "glass": false,
+          "hidden": false,
+          "image-name-specializations": [
+            {
+              "value": "Veins.svg"
+            },
+            {
+              "appearance": "dark",
+              "value": "Veins Dark.svg"
+            }
+          ],
+          "fill-specializations": [
+            {
+              "appearance": "tinted",
+              "value": {
+                "solid": "srgb:0.00000,0.00000,0.00000,1.00000"
+              }
+            }
+          ]
+        },
+        {
+          "name": "Leaf and arrow",
+          "image-name": "Leaf and arrow.svg",
+          "glass": false,
+          "hidden": false,
+          "image-name-specializations": [
+            {
+              "value": "Leaf and arrow.svg"
+            },
+            {
+              "appearance": "dark",
+              "value": "Leaf and arrow Dark.svg"
+            }
+          ],
+          "fill-specializations": [
+            {
+              "appearance": "tinted",
+              "value": {
+                "solid": "srgb:1.00000,1.00000,1.00000,1.00000"
+              }
+            }
+          ]
+        }
+      ],
+      "lighting": "individual",
+      "shadow": {
+        "kind": "neutral",
+        "opacity": 0.35
+      },
+      "specular": false,
+      "translucency": {
+        "enabled": false,
+        "value": 0.5
+      }
+    }
+  ],
+  "supported-platforms": {
+    "squares": [
+      "macOS"
+    ]
+  }
+}

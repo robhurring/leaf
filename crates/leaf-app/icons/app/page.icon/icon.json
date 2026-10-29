@@ -1,0 +1,78 @@
+{
+  "fill": {
+    "automatic-gradient": "extended-srgb:0.96078,0.95294,0.93333,1.00000"
+  },
+  "fill-specializations": [
+    {
+      "value": {
+        "automatic-gradient": "extended-srgb:0.96078,0.95294,0.93333,1.00000"
+      }
+    },
+    {
+      "appearance": "dark",
+      "value": {
+        "automatic-gradient": "extended-srgb:0.10980,0.10980,0.10196,1.00000"
+      }
+    }
+  ],
+  "groups": [
+    {
+      "name": "Artwork",
+      "hidden": false,
+      "layers": [
+        {
+          "name": "Mark",
+          "image-name": "Mark.svg",
+          "glass": false,
+          "hidden": false,
+          "image-name-specializations": [
+            {
+              "value": "Mark.svg"
+            },
+            {
+              "appearance": "dark",
+              "value": "Mark Dark.svg"
+            }
+          ],
+          "fill-specializations": [
+            {
+              "appearance": "tinted",
+              "value": {
+                "solid": "srgb:1.00000,1.00000,1.00000,1.00000"
+              }
+            }
+          ]
+        },
+        {
+          "name": "Leaf",
+          "image-name": "Leaf.svg",
+          "glass": false,
+          "hidden": false,
+          "fill-specializations": [
+            {
+              "appearance": "tinted",
+              "value": {
+                "solid": "srgb:1.00000,1.00000,1.00000,1.00000"
+              }
+            }
+          ]
+        }
+      ],
+      "lighting": "individual",
+      "shadow": {
+        "kind": "neutral",
+        "opacity": 0.35
+      },
+      "specular": false,
+      "translucency": {
+        "enabled": false,
+        "value": 0.5
+      }
+    }
+  ],
+  "supported-platforms": {
+    "squares": [
+      "macOS"
+    ]
+  }
+}

@@ -1,0 +1,12 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024" width="1024" height="1024">
+<defs>
+    <linearGradient id="leafg" gradientUnits="userSpaceOnUse" x1="224" y1="800" x2="800" y2="224">
+      <stop offset="0" stop-color="#1e8e4d"/><stop offset="1" stop-color="#4cd27a"/></linearGradient>
+    <mask id="cut" maskUnits="userSpaceOnUse" x="0" y="0" width="1024" height="1024">
+      <rect width="1024" height="1024" fill="#fff"/>
+      <g transform="translate(512 522) scale(2) translate(-77.5 -34)" fill="#000"><path d="M0 68V0h20l20 25 20-25h20v68H60V29L40 54 20 29v39z"/><path d="M125 68l-30-33h20V0h20v35h20z"/></g>
+      <g transform="translate(512 512) rotate(0) scale(33.5) translate(-12.2 -11.8)" fill="none" stroke="#000" stroke-width="0.6" stroke-linecap="round">
+        <path d="M4.6 19.4L8.9 15.1"/><path d="M15.4 8.6L19.8 4.2"/></g>
+    </mask></defs>
+  <g mask="url(#cut)"><path transform="translate(512 512) rotate(0) scale(33.5) translate(-12.2 -11.8)" d="M3.6 20.4C2.9 12 7.6 4.2 20.8 3.2c.6 12.6-6.2 18.1-14.9 17.6-.9 0-1.7-.2-2.3-.4Z" fill="url(#leafg)"/></g>
+</svg>

@@ -9,3 +9,5 @@ package-lock.json
 crates/leaf-protocol/tests/fixtures
 target
 crates/leaf-app/gen
+# Icon Composer writes these; keep them as it does.
+*.icon/
