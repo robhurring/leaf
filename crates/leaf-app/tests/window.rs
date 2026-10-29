@@ -173,3 +173,45 @@ async fn a_single_file_window_shows_that_file_not_its_folder() {
     windows.open("d", &r).unwrap();
     assert_eq!(windows.engine_count(), 2);
 }
+
+#[tokio::test]
+async fn a_link_finds_the_window_already_showing_it() {
+    let root = tempfile::tempdir().unwrap();
+    let r = root.path().canonicalize().unwrap();
+    std::fs::create_dir_all(r.join("docs/deep")).unwrap();
+    std::fs::write(r.join("README.md"), "# hi\n").unwrap();
+    std::fs::write(r.join("docs/guide.md"), "# g\n").unwrap();
+    std::fs::write(r.join("docs/deep/x.md"), "# x\n").unwrap();
+    let cfg = tempfile::tempdir().unwrap();
+    let windows = Windows::new(config_for(cfg.path()), Arc::new(|_: &str, _| {}));
+    assert_eq!(
+        windows.find_for(&r.join("README.md")),
+        None,
+        "no windows yet"
+    );
+
+    windows.open("folder", &r).unwrap();
+    windows.open("docs", &r.join("docs")).unwrap();
+    windows.open("file", &r.join("README.md")).unwrap();
+
+    // The window opened on exactly that file or folder.
+    assert_eq!(
+        windows.find_for(&r.join("README.md")),
+        Some(("file".to_string(), r.join("README.md")))
+    );
+    assert_eq!(
+        windows.find_for(&r),
+        Some(("folder".to_string(), r.clone()))
+    );
+    // Otherwise the nearest folder window that holds it.
+    assert_eq!(
+        windows.find_for(&r.join("docs/deep/x.md")),
+        Some(("docs".to_string(), r.join("docs")))
+    );
+    assert_eq!(windows.find_for(&r.join("../elsewhere.md")), None);
+    windows.close("docs");
+    assert_eq!(
+        windows.find_for(&r.join("docs/guide.md")),
+        Some(("folder".to_string(), r.clone()))
+    );
+}

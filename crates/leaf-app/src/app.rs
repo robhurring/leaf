@@ -10,7 +10,7 @@ use leaf_protocol::{ClientMessage, ServerMessage};
 use tauri::menu::{Menu, MenuBuilder, MenuItemBuilder, SubmenuBuilder};
 use tauri::{AppHandle, Emitter, EventTarget, Manager, WebviewUrl, WebviewWindowBuilder, Wry};
 
-use leaf_app::launch::route_for;
+use leaf_app::launch::{link_in_argv, parse_deep_link, route_for};
 use leaf_app::window::Windows;
 
 struct AppState {
@@ -65,6 +65,12 @@ const READY_FALLBACK: std::time::Duration = std::time::Duration::from_millis(150
 
 /// Opens a window on `target`: a folder, or a file shown inside its folder.
 pub fn open_window(app: &AppHandle, target: &Path) {
+    open_window_at(app, target, None);
+}
+
+/// Opens a window on `target` showing `route` (a UI route such as `/docs/a.md#setup`)
+/// instead of the document the target names.
+fn open_window_at(app: &AppHandle, target: &Path, route: Option<String>) {
     let state = app.state::<AppState>();
     let label = format!("w{}", state.next.fetch_add(1, Ordering::Relaxed));
     let _rt = state.runtime.enter();
@@ -89,7 +95,7 @@ pub fn open_window(app: &AppHandle, target: &Path) {
     // The window learns its label and its first document before the UI runs.
     let init = format!(
         "window.__LEAF_WINDOW__ = {label:?}; history.replaceState(null, '', {route:?});",
-        route = route_for(&path)
+        route = route.unwrap_or_else(|| route_for(&path))
     );
     let builder =
         WebviewWindowBuilder::new(app, &label, WebviewUrl::App(PathBuf::from("index.html")))
@@ -234,16 +240,121 @@ fn on_menu(app: &AppHandle, id: &str) {
     }
 }
 
+/// Shows a `leaf://` link: in the window already showing that file or folder (brought
+/// forward, and moved to the document), else in a new window. Browser links go to the
+/// command, which knows how to start a server.
+fn open_link(app: &AppHandle, url: &str) {
+    let link = match parse_deep_link(url) {
+        Ok(l) => l,
+        Err(e) => return tracing::warn!(url, error = %e, "ignoring a leaf:// link"),
+    };
+    tracing::info!(url, "opening a link");
+    if link.browser {
+        return relaunch_with(url);
+    }
+    // Window keys are canonical paths; a link may name /tmp for /private/tmp.
+    let link = link.canonical();
+    let (source, _) = link.opening();
+    let state = app.state::<AppState>();
+    let Some((label, opened)) = state.windows.find_for(&source) else {
+        return open_window_at(app, &source, Some(link.route()));
+    };
+    let Some(window) = app.get_webview_window(&label) else {
+        return open_window_at(app, &source, Some(link.route()));
+    };
+    let _ = window.unminimize();
+    let _ = window.show();
+    let _ = window.set_focus();
+    // The document, relative to what that window opened.
+    let doc = if opened.is_dir() {
+        link.target
+            .strip_prefix(&opened)
+            .map(|p| p.to_string_lossy().into_owned())
+            .unwrap_or_default()
+    } else {
+        opened
+            .file_name()
+            .map(|n| n.to_string_lossy().into_owned())
+            .unwrap_or_default()
+    };
+    if doc.is_empty() && link.heading.is_none() {
+        return;
+    }
+    let _ = app.emit_to(
+        EventTarget::webview_window(&label),
+        "leaf://command",
+        serde_json::json!({ "name": "openPath", "arg": { "path": doc, "slug": link.heading } }),
+    );
+}
+
+/// Hands a link to a fresh `leaf <link>`, which opens the browser or the app as asked.
+fn relaunch_with(url: &str) {
+    use std::os::unix::process::CommandExt;
+    match std::env::current_exe() {
+        Ok(exe) => {
+            if let Err(e) = std::process::Command::new(exe)
+                .arg(url)
+                .stdin(std::process::Stdio::null())
+                .process_group(0)
+                .spawn()
+            {
+                tracing::error!(url, error = %e, "could not open the link");
+            }
+        }
+        Err(e) => tracing::error!(error = %e, "cannot find my own executable"),
+    }
+}
+
+/// macOS starts the installed app to deliver a link when no leaf is running. That
+/// process only receives: it passes each link to `leaf <link>` (which starts the app,
+/// or hands off to one that started meanwhile) and quits.
+pub fn receive_links() -> i32 {
+    let app = match tauri::Builder::default().build(context()) {
+        Ok(a) => a,
+        Err(e) => {
+            eprintln!("leaf: the app failed: {e}");
+            return 1;
+        }
+    };
+    #[cfg(target_os = "macos")]
+    let mut app = app;
+    #[cfg(target_os = "macos")]
+    app.set_activation_policy(tauri::ActivationPolicy::Accessory);
+    // Opened without a link (from Finder, say): nothing to do.
+    let handle = app.handle().clone();
+    std::thread::spawn(move || {
+        std::thread::sleep(std::time::Duration::from_secs(5));
+        handle.exit(0);
+    });
+    app.run(|app, event| {
+        if let tauri::RunEvent::Opened { urls } = event {
+            for url in urls.iter().filter(|u| u.scheme() == "leaf") {
+                relaunch_with(url.as_str());
+            }
+            app.exit(0);
+        }
+    });
+    0
+}
+
+// The app's config and assets, embedded once (the macro may appear only once per binary).
+fn context() -> tauri::Context<Wry> {
+    tauri::generate_context!()
+}
+
 /// Runs the app until its last window closes. Call on the main thread inside a
 /// multi-thread tokio runtime: `run` blocks this thread for the event loop while
 /// commands (`leaf_send`) run on the runtime's workers; a current-thread runtime
 /// would deadlock them.
-pub fn run(config: Config) -> i32 {
+pub fn run(config: Config, link: Option<String>) -> i32 {
     let runtime = tokio::runtime::Handle::current();
     tauri::async_runtime::set(runtime.clone());
     let first = config.target.clone();
     let result = tauri::Builder::default()
         .plugin(tauri_plugin_single_instance::init(|app, argv, cwd| {
+            if let Some(i) = link_in_argv(&argv) {
+                return open_link(app, &argv[i]);
+            }
             match leaf_app::launch::target_from_argv(&argv, Path::new(&cwd)) {
                 Some(t) => open_window(app, &t),
                 None => tracing::warn!(?argv, "second launch without a path"),
@@ -278,10 +389,23 @@ pub fn run(config: Config) -> i32 {
                 runtime: runtime.clone(),
                 next: AtomicU32::new(1),
             });
-            open_window(&handle, &first);
+            match &link {
+                Some(url) => open_link(&handle, url),
+                None => open_window(&handle, &first),
+            }
             Ok(())
         })
-        .run(tauri::generate_context!());
+        .build(context())
+        .map(|app| {
+            // Links clicked elsewhere while this app runs (macOS delivers them here).
+            app.run(|app, event| {
+                if let tauri::RunEvent::Opened { urls } = event {
+                    for url in urls.iter().filter(|u| u.scheme() == "leaf") {
+                        open_link(app, url.as_str());
+                    }
+                }
+            })
+        });
     match result {
         Ok(()) => 0,
         Err(e) => {

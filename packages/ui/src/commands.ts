@@ -16,6 +16,7 @@ export const COMMANDS = [
   'textLarger',
   'textSmaller',
   'textReset',
+  'openPath',
 ] as const;
 export type CommandName = (typeof COMMANDS)[number];
 /** A command takes the argument its sender passes; method syntax keeps parameter types bivariant. */

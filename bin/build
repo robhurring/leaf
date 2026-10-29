@@ -19,4 +19,8 @@ if link="$(command -v leaf 2>/dev/null)" && [[ -L "$link" ]]; then
     echo "relinked $link -> $(pwd)/target/release/leaf"
   fi
 fi
+# An installed app (bin/install, macOS) runs a copy of the binary: refresh it.
+if [[ -d "${LEAF_APP:-$HOME/Applications/leaf reader.app}" ]]; then
+  bin/bundle
+fi
 echo "built target/release/leaf"

@@ -274,6 +274,172 @@ pub fn target_from_argv(argv: &[String], cwd: &Path) -> Option<PathBuf> {
     p.canonicalize().ok()
 }
 
+/// A `leaf://open/<path>` link: what to open, and how.
+///
+/// `leaf://open/Users/me/notes/plan.md?root=/Users/me/notes&browser#next-steps`
+/// - the path after `open` is absolute (`~/` means home); `?path=` works too
+/// - `root`: a folder to show around the file, with the file open in it
+/// - `browser`: open in the browser instead of a window
+/// - `#heading`: the heading to scroll to
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct DeepLink {
+    pub target: PathBuf,
+    pub root: Option<PathBuf>,
+    pub heading: Option<String>,
+    pub browser: bool,
+    /// The path ended in `/`: a folder, even before it exists to ask.
+    folder: bool,
+}
+
+fn percent_decode(s: &str) -> String {
+    let b = s.as_bytes();
+    let mut out = Vec::with_capacity(b.len());
+    let mut i = 0;
+    while i < b.len() {
+        let hex = |c: u8| (c as char).to_digit(16);
+        if b[i] == b'%'
+            && let (Some(h), Some(l)) = (hex(b[i + 1]), b.get(i + 2).and_then(|&c| hex(c)))
+        {
+            out.push((h * 16 + l) as u8);
+            i += 3;
+            continue;
+        }
+        out.push(if b[i] == b'+' { b' ' } else { b[i] });
+        i += 1;
+    }
+    String::from_utf8_lossy(&out).into_owned()
+}
+
+fn absolute(raw: &str) -> Result<PathBuf, String> {
+    if let Some(rest) = raw.strip_prefix("~/") {
+        let home = std::env::var("HOME").map_err(|_| "no HOME for ~/".to_string())?;
+        return Ok(PathBuf::from(home).join(rest));
+    }
+    if raw.starts_with('/') {
+        Ok(PathBuf::from(raw))
+    } else {
+        Err(format!("the path must be absolute: {raw}"))
+    }
+}
+
+pub fn parse_deep_link(url: &str) -> Result<DeepLink, String> {
+    let rest = url
+        .strip_prefix("leaf:")
+        .ok_or_else(|| format!("not a leaf:// link: {url}"))?
+        .trim_start_matches('/');
+    let (rest, heading) = match rest.split_once('#') {
+        Some((r, h)) if !h.is_empty() => (r, Some(percent_decode(h))),
+        Some((r, _)) => (r, None),
+        None => (rest, None),
+    };
+    let (path_part, query) = rest.split_once('?').unwrap_or((rest, ""));
+    let path_part = path_part
+        .strip_prefix("open")
+        .filter(|p| p.is_empty() || p.starts_with('/'))
+        .ok_or_else(|| format!("leaf links start leaf://open/: {url}"))?;
+    let mut root = None;
+    let mut browser = false;
+    let mut from_query = None;
+    for pair in query.split('&').filter(|p| !p.is_empty()) {
+        let (k, v) = pair.split_once('=').unwrap_or((pair, ""));
+        match k {
+            "path" => from_query = Some(percent_decode(v)),
+            "root" => root = Some(absolute(&percent_decode(v))?),
+            "browser" => browser = !matches!(v, "0" | "false"),
+            _ => tracing::warn!(flag = k, "ignoring an unknown leaf:// flag"),
+        }
+    }
+    // `open/Users/x` names /Users/x; `open/~/x` names ~/x.
+    let raw = match from_query {
+        Some(p) => p,
+        None if path_part.len() > 1 => {
+            let p = percent_decode(path_part);
+            if p.starts_with("/~/") {
+                p[1..].to_string()
+            } else {
+                p
+            }
+        }
+        None => return Err(format!("the link names no path: {url}")),
+    };
+    Ok(DeepLink {
+        folder: raw.ends_with('/'),
+        target: absolute(&raw)?,
+        root,
+        heading,
+        browser,
+    })
+}
+
+impl DeepLink {
+    /// What the window opens, and the document to show in it: the root with the file
+    /// inside it; a file on its own (routed by its name); or a folder.
+    pub fn opening(&self) -> (PathBuf, String) {
+        if let Some(root) = &self.root
+            && let Ok(rel) = self.target.strip_prefix(root)
+        {
+            return (root.clone(), rel.to_string_lossy().into_owned());
+        }
+        if self.folder || self.target.is_dir() {
+            return (self.target.clone(), String::new());
+        }
+        let name = self
+            .target
+            .file_name()
+            .map(|n| n.to_string_lossy().into_owned())
+            .unwrap_or_default();
+        (self.target.clone(), name)
+    }
+
+    /// The same link with its paths resolved as the file system has them (symlinks,
+    /// /tmp for /private/tmp); a path that doesn't exist stays as written.
+    pub fn canonical(self) -> DeepLink {
+        let canon = |p: &Path| p.canonicalize().unwrap_or_else(|_| p.to_path_buf());
+        DeepLink {
+            target: canon(&self.target),
+            root: self.root.as_deref().map(canon),
+            ..self
+        }
+    }
+
+    /// The UI route for the document, heading included.
+    pub fn route(&self) -> String {
+        let (_, doc) = self.opening();
+        match &self.heading {
+            Some(h) => format!("{}#{h}", route_for(&doc)),
+            None => route_for(&doc),
+        }
+    }
+}
+
+/// Where in argv a `leaf://` link is, if anywhere.
+pub fn link_in_argv(argv: &[String]) -> Option<usize> {
+    argv.iter().position(|a| a.starts_with("leaf:"))
+}
+
+/// Where `bin/install` puts the app on macOS (`LEAF_APP` overrides).
+pub fn installed_app() -> Option<PathBuf> {
+    if let Ok(p) = std::env::var("LEAF_APP") {
+        return Some(PathBuf::from(p));
+    }
+    let home = std::env::var("HOME").ok()?;
+    Some(PathBuf::from(home).join("Applications/leaf reader.app"))
+}
+
+/// The installed app's binary.
+pub fn installed_app_exe() -> Option<PathBuf> {
+    installed_app().map(|a| a.join("Contents/MacOS/leaf"))
+}
+
+/// Whether this process is an app bundle's binary (macOS started it from the bundle).
+pub fn running_from_app_bundle() -> bool {
+    std::env::current_exe().is_ok_and(|p| is_bundle_exe(&p))
+}
+
+fn is_bundle_exe(p: &Path) -> bool {
+    p.to_string_lossy().contains(".app/Contents/MacOS/")
+}
+
 /// Links the app window may hand to the system to open: web pages and mail only.
 pub fn is_external_url(url: &str) -> bool {
     let lower = url.trim_start().to_ascii_lowercase();
@@ -295,5 +461,118 @@ mod external_url_tests {
         assert!(!is_external_url("file:///etc/passwd"));
         assert!(!is_external_url("javascript:alert(1)"));
         assert!(!is_external_url("/Applications/Calculator.app"));
+    }
+}
+
+#[cfg(test)]
+mod deep_link_tests {
+    use super::*;
+
+    #[test]
+    fn a_path_after_open_is_absolute() {
+        let l = parse_deep_link("leaf://open/Users/rob/notes/plan.md").unwrap();
+        assert_eq!(l.target, PathBuf::from("/Users/rob/notes/plan.md"));
+        assert_eq!(l.root, None);
+        assert_eq!(l.heading, None);
+        assert!(!l.browser);
+    }
+
+    #[test]
+    fn heading_root_and_browser() {
+        let l = parse_deep_link(
+            "leaf://open/Users/rob/code/leaf/docs/My%20Guide.md?root=/Users/rob/code/leaf&browser#set-up",
+        )
+        .unwrap();
+        assert_eq!(
+            l.target,
+            PathBuf::from("/Users/rob/code/leaf/docs/My Guide.md")
+        );
+        assert_eq!(l.root, Some(PathBuf::from("/Users/rob/code/leaf")));
+        assert_eq!(l.heading.as_deref(), Some("set-up"));
+        assert!(l.browser);
+    }
+
+    #[test]
+    fn path_can_be_a_query_parameter() {
+        let l = parse_deep_link("leaf://open?path=%2FUsers%2Frob%2Fa%20b.md").unwrap();
+        assert_eq!(l.target, PathBuf::from("/Users/rob/a b.md"));
+        // A triple slash (an empty host) reads the same.
+        let l = parse_deep_link("leaf:///open/Users/rob/a.md").unwrap();
+        assert_eq!(l.target, PathBuf::from("/Users/rob/a.md"));
+    }
+
+    #[test]
+    fn a_home_relative_path() {
+        let l = parse_deep_link("leaf://open/~/notes/a.md").unwrap();
+        assert_eq!(
+            l.target,
+            PathBuf::from(std::env::var("HOME").unwrap()).join("notes/a.md")
+        );
+    }
+
+    #[test]
+    fn what_is_not_a_link_says_why() {
+        assert!(parse_deep_link("https://open/x").is_err());
+        assert!(
+            parse_deep_link("leaf://share/x")
+                .unwrap_err()
+                .contains("open")
+        );
+        assert!(parse_deep_link("leaf://open").unwrap_err().contains("path"));
+        assert!(
+            parse_deep_link("leaf://open?path=relative.md")
+                .unwrap_err()
+                .contains("absolute")
+        );
+        assert!(
+            parse_deep_link("leaf://open/a/../../etc").is_ok(),
+            "resolved on open, like a typed path"
+        );
+    }
+
+    #[test]
+    fn the_window_shows_the_root_with_the_file_inside() {
+        let l = parse_deep_link("leaf://open/r/docs/a.md?root=/r#h").unwrap();
+        assert_eq!(l.opening(), (PathBuf::from("/r"), "docs/a.md".to_string()));
+        // No root: a file opens on its own (routed by its name), a folder on itself.
+        let l = parse_deep_link("leaf://open/r/docs/a.md").unwrap();
+        assert_eq!(
+            l.opening(),
+            (PathBuf::from("/r/docs/a.md"), "a.md".to_string())
+        );
+        let l = parse_deep_link("leaf://open/r/docs/").unwrap();
+        assert_eq!(l.opening(), (PathBuf::from("/r/docs"), String::new()));
+        // A root that doesn't hold the file is ignored.
+        let l = parse_deep_link("leaf://open/r/docs/a.md?root=/other").unwrap();
+        assert_eq!(
+            l.opening(),
+            (PathBuf::from("/r/docs/a.md"), "a.md".to_string())
+        );
+    }
+
+    #[test]
+    fn a_bundle_binary_is_recognized() {
+        assert!(is_bundle_exe(Path::new(
+            "/Users/r/Applications/leaf reader.app/Contents/MacOS/leaf"
+        )));
+        assert!(!is_bundle_exe(Path::new(
+            "/Users/r/code/leaf/target/release/leaf"
+        )));
+    }
+
+    #[test]
+    fn the_route_carries_document_and_heading() {
+        let l = parse_deep_link("leaf://open/r/docs/my%20a.md?root=/r#set-up").unwrap();
+        assert_eq!(l.route(), "/docs/my%20a.md#set-up");
+    }
+
+    #[test]
+    fn links_are_found_in_argv() {
+        let argv: Vec<String> = ["open", "-l", "debug", "leaf://open/x.md"]
+            .iter()
+            .map(|s| s.to_string())
+            .collect();
+        assert_eq!(link_in_argv(&argv), Some(3));
+        assert_eq!(link_in_argv(&["open".into(), ".".into()]), None);
     }
 }

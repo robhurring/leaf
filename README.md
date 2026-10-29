@@ -19,6 +19,8 @@ bin/setup                  # dependencies
 bin/install                # builds, then links `leaf` into ~/.local/bin
 ```
 
+On macOS `bin/install` also puts `leaf reader.app` in `~/Applications` so `leaf://` links open in leaf; `bin/install --uninstall` removes both.
+
 ## Use
 
 ```sh
@@ -28,6 +30,19 @@ leaf open .                # a whole repo, .gitignore respected
 ```
 
 `leaf open` puts a window on your dock and returns, like `open`. Running it again opens another window in the same app. The View menu switches light and dark, the sidebars, numbering, and text size; File > Open Folder… opens anything else. Drag a sidebar's edge to resize it.
+
+### Links
+
+Other apps can link straight to a document:
+
+```sh
+open 'leaf://open/Users/me/notes/plan.md'                   # an absolute path; ~/notes/plan.md works too
+open 'leaf://open/Users/me/notes/plan.md#next-steps'        # and scroll to a heading
+open 'leaf://open/Users/me/notes/plan.md?root=/Users/me/notes'   # inside its folder, with the tree
+open 'leaf://open/Users/me/notes/plan.md?browser'           # in the browser instead
+```
+
+A window already showing that file, or the folder it lives in, comes forward and opens it; otherwise a new window opens. `leaf 'leaf://…'` does the same from a terminal.
 
 For a browser instead, or a socket for agents and tools:
 

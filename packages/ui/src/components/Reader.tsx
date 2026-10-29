@@ -218,6 +218,10 @@ export function Reader(props: ReaderProps) {
       textLarger: () => ui.bumpText(10),
       textSmaller: () => ui.bumpText(-10),
       textReset: () => ui.bumpText(0),
+      // A leaf:// link the app routed to this window.
+      openPath: (arg?: { path: string; slug?: string }) => {
+        if (arg) navigate(arg.slug ? `${arg.path}#${arg.slug}` : arg.path);
+      },
     }),
   );
 

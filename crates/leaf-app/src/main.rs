@@ -103,7 +103,12 @@ async fn run_server(config: Config, sources: Sources) -> i32 {
     0
 }
 
-async fn run_command(config: Config, sources: Sources, argv: Vec<String>) -> i32 {
+async fn run_command(
+    config: Config,
+    sources: Sources,
+    argv: Vec<String>,
+    route: Option<String>,
+) -> i32 {
     // The command's stdout is the URL; its logs go to stderr.
     leaf_app::log::init_to(
         config.log_level,
@@ -148,6 +153,11 @@ async fn run_command(config: Config, sources: Sources, argv: Vec<String>) -> i32
             }
         }
     };
+    // A link names a document (and heading) inside what the server shows.
+    let url = match route {
+        Some(r) => format!("{}{r}", url.trim_end_matches('/')),
+        None => url,
+    };
     println!("{url}");
     if config.open {
         open_browser(&url);
@@ -157,9 +167,12 @@ async fn run_command(config: Config, sources: Sources, argv: Vec<String>) -> i32
 
 /// `leaf open` without --browser: start the app detached (or hand the path to the
 /// running one, which the single-instance plugin does inside the child) and return.
-fn launch_app(config: &Config, argv: &[String]) -> i32 {
+fn launch_app(config: &Config, argv: &[String], link: Option<&str>) -> i32 {
     use std::os::unix::process::CommandExt;
-    let exe = match std::env::current_exe() {
+    // Started from the installed app's binary, macOS knows the running app is that app,
+    // and hands it leaf:// links directly.
+    let installed = leaf_app::launch::installed_app_exe().filter(|p| p.exists());
+    let exe = match installed.map(Ok).unwrap_or_else(std::env::current_exe) {
         Ok(p) => p,
         Err(e) => {
             eprintln!("leaf: cannot find my own executable: {e}");
@@ -175,6 +188,7 @@ fn launch_app(config: &Config, argv: &[String]) -> i32 {
         .open(&log);
     let mut cmd = std::process::Command::new(exe);
     cmd.args(leaf_app::launch::app_args(argv, &config.target));
+    cmd.args(link);
     cmd.stdin(std::process::Stdio::null()).process_group(0);
     if let Ok(f) = out
         && let Ok(f2) = f.try_clone()
@@ -192,13 +206,45 @@ fn launch_app(config: &Config, argv: &[String]) -> i32 {
 
 #[tokio::main]
 async fn main() {
-    let mut argv: Vec<String> = std::env::args().skip(1).collect();
+    let mut argv: Vec<String> = std::env::args()
+        .skip(1)
+        // Old macOS passes a process serial number to apps it starts.
+        .filter(|a| !a.starts_with("-psn_"))
+        .collect();
+    // macOS started the installed app to deliver a link: receive it and pass it on.
+    if argv.is_empty() && leaf_app::launch::running_from_app_bundle() {
+        std::process::exit(app::receive_links());
+    }
     // Internal: this process is the app itself (spawned by `leaf open`).
     let as_app = argv.first().is_some_and(|a| a == "__app");
     if as_app {
         argv.remove(0);
     }
-    // `leaf open --browser`: the browser path (a detached server and a tab).
+    // `leaf leaf://open/…`: the link stands in for the path; the app gets the link itself.
+    let link = match leaf_app::launch::link_in_argv(&argv) {
+        Some(i) => {
+            let url = argv.remove(i);
+            match leaf_app::launch::parse_deep_link(&url) {
+                Ok(parsed) => {
+                    if !as_app {
+                        let (source, _) = parsed.opening();
+                        argv.insert(i, source.to_string_lossy().into_owned());
+                    }
+                    Some((url, parsed))
+                }
+                Err(e) => {
+                    eprintln!("leaf: {e}");
+                    std::process::exit(2);
+                }
+            }
+        }
+        None => None,
+    };
+    // `leaf open --browser` (or a link that asks for it): a detached server and a tab.
+    let link_browser = link.as_ref().is_some_and(|(_, l)| l.browser);
+    if link_browser {
+        argv.push("--browser".into());
+    }
     let browser = argv.iter().any(|a| a == "--browser");
     argv.retain(|a| a != "--browser");
     let env: HashMap<String, String> = std::env::vars().collect();
@@ -236,10 +282,10 @@ async fn main() {
         Route::Serve => run_server(config, sources).await,
         Route::AppForeground => {
             leaf_app::log::init(config.log_level, config.log_format);
-            app::run(config)
+            app::run(config, link.map(|(url, _)| url))
         }
-        Route::Browser => run_command(config, sources, argv).await,
-        Route::LaunchApp => launch_app(&config, &argv),
+        Route::Browser => run_command(config, sources, argv, link.map(|(_, l)| l.route())).await,
+        Route::LaunchApp => launch_app(&config, &argv, link.as_ref().map(|(url, _)| url.as_str())),
     };
     std::process::exit(code);
 }
