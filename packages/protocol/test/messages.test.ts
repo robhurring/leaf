@@ -1,10 +1,13 @@
 import { describe, it, expect } from 'vitest';
+import { readFileSync } from 'node:fs';
+import { join } from 'node:path';
 import {
   parseClientMessage,
   parseServerMessage,
   PROTOCOL_VERSION,
   isKnownClientType,
   FILE_KINDS,
+  DEFAULT_LINK_SCHEMES,
 } from '../src/index.js';
 
 describe('protocol', () => {
@@ -166,6 +169,28 @@ describe('protocol', () => {
     expect(reply.type === 'blameHunks' && reply.hunks[1]!.uncommitted).toBe(true);
     expect(() =>
       parseServerMessage({ type: 'blameHunks', path: 'a.md', hunks: [{ start: 0, lines: 1 }] }),
+    ).toThrow();
+  });
+
+  it('the default link kinds match the Rust core, which decides what opens', () => {
+    const rust = readFileSync(
+      join(__dirname, '..', '..', '..', 'crates', 'leaf-protocol', 'src', 'common.rs'),
+      'utf8',
+    );
+    const block = /DEFAULT_LINK_SCHEMES: &\[&str\] = &\[([^\]]*)\]/.exec(rust)![1]!;
+    const schemes = [...block.matchAll(/"([^"]+)"/g)].map((m) => m[1]);
+    expect(schemes).toEqual([...DEFAULT_LINK_SCHEMES]);
+  });
+
+  it('link kinds in preferences are bare lowercase schemes', () => {
+    expect(
+      parseClientMessage({
+        type: 'preferences',
+        preferences: { linkSchemes: ['vscode', 'x-app'] },
+      }),
+    ).toBeTruthy();
+    expect(() =>
+      parseClientMessage({ type: 'preferences', preferences: { linkSchemes: ['vscode://'] } }),
     ).toThrow();
   });
 });

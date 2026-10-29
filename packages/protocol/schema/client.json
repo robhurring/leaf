@@ -201,6 +201,13 @@
                   "type": "integer",
                   "minimum": 160,
                   "maximum": 480
+                },
+                "linkSchemes": {
+                  "type": "array",
+                  "items": {
+                    "type": "string",
+                    "pattern": "^[a-z][a-z0-9+.-]*$"
+                  }
                 }
               },
               "additionalProperties": false

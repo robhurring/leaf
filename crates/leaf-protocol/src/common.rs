@@ -137,7 +137,24 @@ pub struct Preferences {
     pub tree_width: Option<u32>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub outline_width: Option<u32>,
+    /// The kinds of link (URL schemes) the app window hands to other apps;
+    /// DEFAULT_LINK_SCHEMES when unset.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub link_schemes: Option<Vec<String>>,
 }
+
+/// The link kinds the app window opens until the person changes the list: the web,
+/// mail, and the editors people jump to code in.
+pub const DEFAULT_LINK_SCHEMES: &[&str] = &[
+    "https",
+    "http",
+    "mailto",
+    "vscode",
+    "vscode-insiders",
+    "cursor",
+    "windsurf",
+    "zed",
+];
 
 impl Preferences {
     /// `self` with every field set in `patch` replaced.
@@ -151,6 +168,10 @@ impl Preferences {
             text_pct: patch.text_pct.or(self.text_pct),
             tree_width: patch.tree_width.or(self.tree_width),
             outline_width: patch.outline_width.or(self.outline_width),
+            link_schemes: patch
+                .link_schemes
+                .clone()
+                .or_else(|| self.link_schemes.clone()),
         }
     }
 }

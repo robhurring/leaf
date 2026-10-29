@@ -6,7 +6,8 @@ use std::sync::Arc;
 use std::sync::atomic::{AtomicU32, Ordering};
 
 use leaf_core::config::Config;
-use leaf_protocol::{ClientMessage, ServerMessage};
+use leaf_core::prefs::PreferencesStore;
+use leaf_protocol::{ClientMessage, DEFAULT_LINK_SCHEMES, ServerMessage};
 use tauri::menu::{Menu, MenuBuilder, MenuItemBuilder, SubmenuBuilder};
 use tauri::{AppHandle, Emitter, EventTarget, Manager, WebviewUrl, WebviewWindowBuilder, Wry};
 
@@ -23,6 +24,8 @@ struct AppState {
     places_file: PathBuf,
     /// A save is scheduled; moves and resizes come in bursts.
     save_pending: std::sync::atomic::AtomicBool,
+    /// The stored preferences: which kinds of link open.
+    prefs: PreferencesStore,
 }
 
 /// How long after the last move or resize the window places are written.
@@ -129,11 +132,16 @@ async fn leaf_send(
     Ok(())
 }
 
-/// A web or mail link clicked in a window opens in the system's browser or mail client.
+/// A link clicked in a window opens in the app the system has for it (a browser, mail,
+/// an editor), when its kind is one the person allows in Settings.
 #[tauri::command]
-fn leaf_open_url(url: String) -> Result<(), String> {
-    if !leaf_app::launch::is_external_url(&url) {
-        return Err(format!("not a web or mail link: {url}"));
+async fn leaf_open_url(url: String, state: tauri::State<'_, AppState>) -> Result<(), String> {
+    let allowed: Vec<String> = match state.prefs.load().await.link_schemes {
+        Some(list) => list,
+        None => DEFAULT_LINK_SCHEMES.iter().map(|s| s.to_string()).collect(),
+    };
+    if !leaf_app::launch::link_allowed(&url, &allowed) {
+        return Err(format!("not an allowed kind of link: {url}"));
     }
     open::that_detached(&url).map_err(|e| e.to_string())
 }
@@ -504,6 +512,7 @@ pub fn run(config: Config, link: Option<String>) -> i32 {
                 places: std::sync::Mutex::new(WindowStates::load(&places_file)),
                 places_file,
                 save_pending: std::sync::atomic::AtomicBool::new(false),
+                prefs: PreferencesStore::new(config.config_dir.join("preferences.json")),
             });
             match &link {
                 Some(url) => open_link(&handle, url),

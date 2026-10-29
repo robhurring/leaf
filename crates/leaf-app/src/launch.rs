@@ -440,27 +440,69 @@ fn is_bundle_exe(p: &Path) -> bool {
     p.to_string_lossy().contains(".app/Contents/MacOS/")
 }
 
-/// Links the app window may hand to the system to open: web pages and mail only.
-pub fn is_external_url(url: &str) -> bool {
-    let lower = url.trim_start().to_ascii_lowercase();
-    ["https://", "http://", "mailto:"]
-        .iter()
-        .any(|scheme| lower.starts_with(scheme) && lower.len() > scheme.len())
+/// Kinds of link that never leave the window, whatever the settings say: they run code
+/// or reach into the machine rather than open another app.
+const NEVER_OPEN: &[&str] = &["javascript", "file", "data", "blob", "vbscript", "about"];
+
+/// Whether the app window hands `url` to the system: its scheme is in `allowed` (the
+/// person's settings) and isn't one that never opens, and something follows the scheme.
+pub fn link_allowed(url: &str, allowed: &[String]) -> bool {
+    let url = url.trim_start();
+    let Some((scheme, rest)) = url.split_once(':') else {
+        return false;
+    };
+    let scheme = scheme.to_ascii_lowercase();
+    let valid = !scheme.is_empty()
+        && scheme.starts_with(|c: char| c.is_ascii_alphabetic())
+        && scheme
+            .chars()
+            .all(|c| c.is_ascii_alphanumeric() || matches!(c, '+' | '-' | '.'));
+    let body = rest.trim_start_matches('/');
+    valid
+        && !body.is_empty()
+        && !NEVER_OPEN.contains(&scheme.as_str())
+        && allowed.iter().any(|a| a.eq_ignore_ascii_case(&scheme))
 }
 
 #[cfg(test)]
 mod external_url_tests {
-    use super::is_external_url;
+    use super::link_allowed;
 
     #[test]
-    fn web_and_mail_links_open_nothing_else_does() {
-        assert!(is_external_url("https://github.com/rob/leaf/commit/abc"));
-        assert!(is_external_url("HTTP://example.com"));
-        assert!(is_external_url("mailto:a@b.c"));
-        assert!(!is_external_url("https://"));
-        assert!(!is_external_url("file:///etc/passwd"));
-        assert!(!is_external_url("javascript:alert(1)"));
-        assert!(!is_external_url("/Applications/Calculator.app"));
+    fn links_open_when_their_kind_is_allowed() {
+        let allowed: Vec<String> = ["https", "mailto", "vscode", "cursor"]
+            .map(String::from)
+            .to_vec();
+        assert!(link_allowed("https://github.com/rob/leaf", &allowed));
+        assert!(link_allowed("vscode://file/Users/rob/a.rs:12", &allowed));
+        assert!(link_allowed("CURSOR://file/x", &allowed));
+        assert!(!link_allowed("zed://file/x", &allowed), "not in the list");
+        assert!(
+            !link_allowed("http://example.com", &allowed),
+            "http is a separate kind"
+        );
+        assert!(
+            !link_allowed("vscode:", &allowed),
+            "nothing after the scheme"
+        );
+        assert!(!link_allowed("relative/path.md", &allowed));
+    }
+
+    #[test]
+    fn some_kinds_never_open_whatever_the_list_says() {
+        let all: Vec<String> = ["javascript", "file", "data", "blob", "vbscript", "about"]
+            .map(String::from)
+            .to_vec();
+        for url in [
+            "javascript:alert(1)",
+            "file:///etc/passwd",
+            "data:text/html,x",
+            "blob:x",
+            "vbscript:x",
+            "about:blank",
+        ] {
+            assert!(!link_allowed(url, &all), "{url}");
+        }
     }
 }
 

@@ -40,8 +40,23 @@ export const Preferences = z.object({
   textPct: z.number().int().min(50).max(200).optional(),
   treeWidth: z.number().int().min(160).max(480).optional(),
   outlineWidth: z.number().int().min(160).max(480).optional(),
+  /** The kinds of link (URL schemes) the app window hands to other apps. */
+  linkSchemes: z.array(z.string().regex(/^[a-z][a-z0-9+.-]*$/)).optional(),
 });
 export type Preferences = z.infer<typeof Preferences>;
+
+/** The link kinds the app window opens until the person changes the list: the web,
+ *  mail, and the editors people jump to code in. Same as the Rust core's. */
+export const DEFAULT_LINK_SCHEMES: readonly string[] = [
+  'https',
+  'http',
+  'mailto',
+  'vscode',
+  'vscode-insiders',
+  'cursor',
+  'windsurf',
+  'zed',
+];
 
 export const Participant = z.object({
   id: z.string(),
