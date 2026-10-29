@@ -464,6 +464,73 @@ pub fn link_allowed(url: &str, allowed: &[String]) -> bool {
         && allowed.iter().any(|a| a.eq_ignore_ascii_case(&scheme))
 }
 
+/// Whether a window, or any frame in it, may load `url`. Only the app's own pages
+/// and frames it builds itself (a live pane's srcdoc, a file's blob) load; nothing
+/// navigates out to the network, so a block in a document can't send a request by
+/// pointing its frame somewhere. A dev build also loads its local dev server.
+pub fn navigation_allowed(url: &str, dev: bool) -> bool {
+    let Some((scheme, rest)) = url.split_once(':') else {
+        return false;
+    };
+    let host = || {
+        rest.strip_prefix("//")
+            .map(|r| r.split(['/', '?', '#']).next().unwrap_or(""))
+            .map(|h| h.rsplit_once(':').map_or(h, |(h, _)| h))
+    };
+    match scheme.to_ascii_lowercase().as_str() {
+        "tauri" => host() == Some("localhost"),
+        "about" | "blob" | "data" => true,
+        "http" | "https" => match host() {
+            Some("tauri.localhost") => true,
+            Some("localhost" | "127.0.0.1") => dev,
+            _ => false,
+        },
+        _ => false,
+    }
+}
+
+#[cfg(test)]
+mod navigation_tests {
+    use super::navigation_allowed;
+
+    #[test]
+    fn the_app_and_its_own_frames_load() {
+        for url in [
+            "tauri://localhost/index.html",
+            "http://tauri.localhost/index.html",
+            "https://tauri.localhost/",
+            "about:srcdoc",
+            "about:blank",
+            "blob:tauri://localhost/2b1c",
+            "data:text/html,hi",
+        ] {
+            assert!(navigation_allowed(url, false), "{url}");
+        }
+    }
+
+    #[test]
+    fn nothing_navigates_out_to_the_network() {
+        for url in [
+            "https://example.com/?beacon",
+            "http://example.com/",
+            "https://tauri.localhost.evil.com/",
+            "http://127.0.0.1:8080/",
+            "file:///etc/passwd",
+            "javascript:alert(1)",
+            "nonsense",
+        ] {
+            assert!(!navigation_allowed(url, false), "{url}");
+        }
+    }
+
+    #[test]
+    fn a_dev_build_also_loads_its_local_dev_server() {
+        assert!(navigation_allowed("http://localhost:5173/", true));
+        assert!(navigation_allowed("http://127.0.0.1:5173/", true));
+        assert!(!navigation_allowed("https://example.com/", true));
+    }
+}
+
 #[cfg(test)]
 mod external_url_tests {
     use super::link_allowed;

@@ -209,7 +209,15 @@ fn open_window_at(app: &AppHandle, target: &Path, route: Option<String>) {
             .title(&title)
             .min_inner_size(640.0, 420.0)
             .visible(false)
-            .initialization_script(&init);
+            .initialization_script(&init)
+            // Nothing in the window, a live pane's frame included, navigates to the network.
+            .on_navigation(|url| {
+                let ok = leaf_app::launch::navigation_allowed(url.as_str(), cfg!(debug_assertions));
+                if !ok {
+                    tracing::info!(%url, "navigation refused");
+                }
+                ok
+            });
     let builder = match place {
         Some(g) => builder.inner_size(g.width, g.height).position(g.x, g.y),
         None => builder.inner_size(1240.0, 860.0),

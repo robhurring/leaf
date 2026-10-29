@@ -123,6 +123,12 @@ describe('live pane harness', () => {
     expect(posted).not.toContainEqual({ leaf: 'live', type: 'ready' });
   });
 
+  it('an error from outside the block, such as the library, names no line', async () => {
+    await run("throw Object.assign(new Error('deep in three'), { stack: '', line: 900 });");
+    expect(errors()).toEqual([expect.objectContaining({ message: expect.stringMatching(/deep/) })]);
+    expect(errors()[0]!.line).toBeUndefined();
+  });
+
   it('pause stops frames and time; play resumes where it left off', async () => {
     await run('window.ts = []; onFrame((t) => window.ts.push(t));');
     const ts = () => (window as unknown as { ts: number[] }).ts;

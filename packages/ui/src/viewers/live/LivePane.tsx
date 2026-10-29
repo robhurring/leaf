@@ -29,6 +29,8 @@ const kindOf = (path: string): LiveKind => (path.endsWith('#three') ? 'three' : 
 
 type Failure = { message: string; line?: number };
 
+const LEFT = 'This block tried to leave its pane, so it was stopped.';
+
 export function LivePane(props: ViewerProps & { fill?: boolean }) {
   const { file, docPath, fill } = props;
   const code = props.content ?? '';
@@ -47,6 +49,7 @@ export function LivePane(props: ViewerProps & { fill?: boolean }) {
   const [heard, setHeard] = useState<{
     key: string;
     loaded?: boolean;
+    left?: boolean;
     ready?: boolean;
     failure?: Failure;
   }>({ key: '' });
@@ -156,7 +159,8 @@ export function LivePane(props: ViewerProps & { fill?: boolean }) {
             <code>{code}</code>
           </pre>
         ) : (
-          srcdoc !== null && (
+          srcdoc !== null &&
+          !now.left && (
             <iframe
               key={generation}
               ref={frame}
@@ -164,7 +168,10 @@ export function LivePane(props: ViewerProps & { fill?: boolean }) {
               sandbox="allow-scripts"
               srcDoc={srcdoc}
               style={height ? { height } : undefined}
-              onLoad={() => hear({ loaded: true })}
+              onLoad={() =>
+                // A second load means the block navigated its frame somewhere else.
+                hear(loaded ? { failure: { message: LEFT }, left: true } : { loaded: true })
+              }
             />
           )
         )}
@@ -196,7 +203,11 @@ export function LivePane(props: ViewerProps & { fill?: boolean }) {
             aria-label="View code"
             title="View code"
             aria-pressed={showCode}
-            onClick={() => setShowCode((s) => !s)}
+            onClick={() => {
+              // Back from the code is a fresh frame: count it as one.
+              if (showCode) setGeneration((g) => g + 1);
+              setShowCode((s) => !s);
+            }}
           >
             <Code size={15} />
           </button>

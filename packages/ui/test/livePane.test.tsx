@@ -162,6 +162,27 @@ describe('live animation blocks', () => {
     expect(frame()).toBeTruthy();
   });
 
+  it('back from the code, the new frame is told to play', () => {
+    render(block(SINE));
+    intersect(pane());
+    watchFrame();
+    fireEvent.click(screen.getByRole('button', { name: 'View code' }));
+    fireEvent.click(screen.getByRole('button', { name: 'View code' }));
+    watchFrame();
+    expect(types()).toContain('play');
+  });
+
+  it('a frame that navigates away is taken down, with a note why', () => {
+    render(block(SINE));
+    watchFrame();
+    act(() => {
+      frame().dispatchEvent(new Event('load'));
+    });
+    expect(document.querySelector('.leaf-live iframe')).toBeNull();
+    expect(screen.getByRole('alert').textContent).toMatch(/tried to leave its pane/);
+    expect(pane().dataset.state).toBe('error');
+  });
+
   it('pauses while the same block is open in the Stage', () => {
     render(block(SINE));
     intersect(pane());

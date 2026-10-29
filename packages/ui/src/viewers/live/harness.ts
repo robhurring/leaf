@@ -46,7 +46,10 @@ export function harness(win: Window): void {
     if (failed) return;
     failed = true;
     const at = raw ?? lineOf(e);
-    const line = at !== undefined && at - offset >= 1 ? at - offset : undefined;
+    // A line outside the block came from elsewhere (the library, the browser): name none.
+    const lines = boot.code.split('\n').length;
+    const inBlock = at !== undefined && at - offset >= 1 && at - offset <= lines;
+    const line = inBlock ? at - offset : undefined;
     post({ type: 'error', message: String(e instanceof Error ? e : (e ?? 'Error')), line });
   };
   win.addEventListener('error', (e) => {
