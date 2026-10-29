@@ -72,6 +72,10 @@ Then the parts a static page can't do:
 
 ![the dark appearance, showing the five alert styles](docs/screenshots/dark.jpg)
 
+## Settings
+
+⌘, (or Settings… in the appearance menu) opens Settings. **Links to other apps** lists the kinds of link the leaf window hands to your Mac: the web, mail, and editors (`vscode`, `vscode-insiders`, `cursor`, `windsurf`, `zed`) to start. Add a kind such as `obsidian`, remove one, or restore the defaults; it's saved with your other preferences. `javascript:`, `file:`, and `data:` links never open.
+
 ## Keyboard
 
 | Keys            | Action                                        |
@@ -83,6 +87,7 @@ Then the parts a static page can't do:
 | `^f` `^b`       | scroll by a page                              |
 | `^n` `^p`       | next and previous heading, or list item       |
 | `[` `]`         | toggle the file tree, the outline             |
+| `⌘,`            | Settings                                      |
 | `n` `t`         | number the headings, switch light and dark    |
 | `1` `2` `space` | in a zoom-in: hand, pencil, hold for the hand |
 | `esc`           | close whatever is open                        |

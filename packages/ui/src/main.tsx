@@ -5,6 +5,7 @@ import { createRoot } from 'react-dom/client';
 import './styles/leaf.css';
 import { Reader } from './components/Reader.js';
 import { WsSource } from './source/WsSource.js';
+import { useNotice } from './store/notice.js';
 import { TauriSource, inTauri, openExternalLinks, tauriWindowLabel } from './source/TauriSource.js';
 
 export function wsUrl(loc: Location = location): string {
@@ -13,7 +14,8 @@ export function wsUrl(loc: Location = location): string {
   return `${loc.protocol === 'https:' ? 'wss' : 'ws'}://${loc.host}/ws`;
 }
 
-if (inTauri()) openExternalLinks();
+// A link of a kind not allowed in Settings says so at the foot of the window.
+if (inTauri()) openExternalLinks(document, (scheme) => useNotice.getState().linkRefused(scheme));
 // The app sets the window's label before the UI runs.
 const source = inTauri() ? new TauriSource(tauriWindowLabel()) : new WsSource(wsUrl());
 createRoot(document.getElementById('root')!).render(

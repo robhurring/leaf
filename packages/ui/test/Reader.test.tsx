@@ -1,5 +1,6 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
-import { render, screen, fireEvent, waitFor, within } from '@testing-library/react';
+import { act, render, screen, fireEvent, waitFor, within } from '@testing-library/react';
+import { useNotice } from '../src/store/notice.js';
 import { Reader } from '../src/components/Reader.js';
 import { useDocuments } from '../src/store/documents.js';
 import { scripted, README, GUIDE } from './helpers/scripted.js';
@@ -422,5 +423,29 @@ describe('Reader', () => {
         'start',
       );
     });
+  });
+
+  it('⌘, opens Settings, and so does the appearance menu', async () => {
+    render(<Reader source={dir().source} />);
+    await screen.findByRole('heading', { level: 1 });
+    expect(screen.queryByRole('dialog', { name: 'Settings' })).toBeNull();
+    fireEvent.keyDown(window, { key: ',', metaKey: true });
+    expect(screen.getByRole('dialog', { name: 'Settings' })).toBeTruthy();
+    fireEvent.click(screen.getByRole('button', { name: 'Close' }));
+    expect(screen.queryByRole('dialog', { name: 'Settings' })).toBeNull();
+    fireEvent.click(screen.getByRole('button', { name: 'Appearance' }));
+    fireEvent.click(screen.getByRole('menuitem', { name: 'Settings…' }));
+    expect(screen.getByRole('dialog', { name: 'Settings' })).toBeTruthy();
+  });
+
+  it('a link the app refused says so, with a way to Settings', async () => {
+    render(<Reader source={dir().source} />);
+    await screen.findByRole('heading', { level: 1 });
+    act(() => useNotice.getState().linkRefused('zed'));
+    const note = screen.getByRole('status', { name: 'Notice' });
+    expect(note.textContent).toMatch(/zed: links/);
+    fireEvent.click(within(note).getByRole('button', { name: 'Settings' }));
+    expect(screen.getByRole('dialog', { name: 'Settings' })).toBeTruthy();
+    expect(screen.queryByRole('status', { name: 'Notice' })).toBeNull();
   });
 });

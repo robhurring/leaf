@@ -15,6 +15,8 @@ export type ShortcutActions = {
   scrollBy(unit: 'line' | 'half' | 'page', direction: 1 | -1): void;
   /** ctrl-n/ctrl-p: the next or previous heading in the document. */
   jumpHeading(direction: 1 | -1): void;
+  /** ⌘,: Settings. */
+  openSettings?(): void;
   /** ⌘[ / ⌘] and the mouse's side buttons: the previous or next file viewed. */
   goBack?(): void;
   goForward?(): void;
@@ -49,6 +51,10 @@ export function installShortcuts(
     if (e.metaKey && !e.altKey && (e.key === '[' || e.key === ']')) {
       e.preventDefault();
       return e.key === '[' ? actions.goBack?.() : actions.goForward?.();
+    }
+    if (e.metaKey && e.key === ',') {
+      e.preventDefault();
+      return actions.openSettings?.();
     }
     if (mod && k === 'o') {
       e.preventDefault();

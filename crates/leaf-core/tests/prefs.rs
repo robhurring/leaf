@@ -126,3 +126,23 @@ async fn sidebar_widths_round_trip_and_out_of_range_is_dropped() {
     assert_eq!(after.outline_width, None);
     assert_eq!(store.load().await.tree_width, Some(300));
 }
+
+#[tokio::test]
+async fn link_kinds_are_kept_clean() {
+    let d = tempfile::tempdir().unwrap();
+    let store = PreferencesStore::new(d.path().join("preferences.json"));
+    let saved = store
+        .save(Preferences {
+            link_schemes: Some(
+                ["VSCode", "cursor", "cursor", "not a scheme", "zed://", ""]
+                    .map(String::from)
+                    .to_vec(),
+            ),
+            ..Default::default()
+        })
+        .await;
+    assert_eq!(
+        saved.link_schemes,
+        Some(vec!["vscode".to_string(), "cursor".to_string()])
+    );
+}

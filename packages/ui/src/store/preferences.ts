@@ -13,6 +13,7 @@ export const PREFERENCE_KEYS = [
   'textPct',
   'treeWidth',
   'outlineWidth',
+  'linkSchemes',
 ] as const satisfies readonly (keyof Preferences)[];
 
 let applying = false;

@@ -252,6 +252,13 @@ fn build_menu(app: &AppHandle) -> tauri::Result<Menu<Wry>> {
     let app_menu = SubmenuBuilder::new(app, "leaf reader")
         .about(None)
         .separator()
+        .item(&item(
+            app,
+            "cmd:openSettings",
+            "Settings…",
+            Some("CmdOrCtrl+,"),
+        )?)
+        .separator()
         .hide()
         .hide_others()
         .show_all()

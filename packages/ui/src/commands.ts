@@ -16,6 +16,7 @@ export const COMMANDS = [
   'textLarger',
   'textSmaller',
   'textReset',
+  'openSettings',
   'openPath',
   'goBack',
   'goForward',

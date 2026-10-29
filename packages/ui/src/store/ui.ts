@@ -1,6 +1,7 @@
 // Sticky UI preferences, persisted to localStorage under `leaf.ui`.
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
+import { DEFAULT_LINK_SCHEMES } from '@leaf/protocol';
 
 export type Theme = 'github' | 'glass' | 'card' | 'paper';
 export type Appearance = 'light' | 'dark' | 'auto';
@@ -37,6 +38,9 @@ export type UiState = {
   setBlame(v: boolean): void;
   /** Clamped to BLAME_MIN..BLAME_MAX. */
   setBlameWidth(px: number): void;
+  /** The kinds of link (URL schemes) the app window hands to other apps. */
+  linkSchemes: string[];
+  setLinkSchemes(v: string[]): void;
   setTreeOpen(v: boolean): void;
   setOutlineOpen(v: boolean): void;
   setNumbering(v: boolean): void;
@@ -61,6 +65,7 @@ export const UI_DEFAULTS = {
   showGit: true,
   blame: false,
   blameWidth: 220,
+  linkSchemes: [...DEFAULT_LINK_SCHEMES],
 };
 
 export const useUi = create<UiState>()(
@@ -68,6 +73,7 @@ export const useUi = create<UiState>()(
     (set) => ({
       ...UI_DEFAULTS,
       setTreeOpen: (treeOpen) => set({ treeOpen }),
+      setLinkSchemes: (linkSchemes) => set({ linkSchemes }),
       setShowGit: (showGit) => set({ showGit }),
       setBlame: (blame) => set({ blame }),
       setBlameWidth: (px) =>

@@ -102,8 +102,38 @@ describe('openExternalLinks', () => {
     expect(mocks.invoke).toHaveBeenLastCalledWith('leaf_open_url', { url: 'mailto:a@b.c' });
     mocks.invoke.mockClear();
     expect(click('local')).toBe(false);
-    click('script');
     expect(mocks.invoke).not.toHaveBeenCalled();
+    stop();
+  });
+
+  it('links to other apps (vscode:, cursor:) go to the core, which checks them against Settings', async () => {
+    const refused: string[] = [];
+    const stop = openExternalLinks(document, (scheme) => refused.push(scheme));
+    document.body.innerHTML = `
+      <a id="code" href="vscode://file/Users/rob/a.rs:12">a.rs</a>
+      <a id="zed" href="zed://file/x">x</a>
+      <a id="script" href="javascript:alert(1)">x</a>
+      <a id="anchor" href="#setup">setup</a>`;
+    const click = (id: string) => {
+      const e = new MouseEvent('click', { bubbles: true, cancelable: true });
+      document.getElementById(id)!.dispatchEvent(e);
+      return e.defaultPrevented;
+    };
+    mocks.invoke.mockClear();
+    expect(click('code')).toBe(true);
+    expect(mocks.invoke).toHaveBeenLastCalledWith('leaf_open_url', {
+      url: 'vscode://file/Users/rob/a.rs:12',
+    });
+    // The core refuses a kind not in Settings: the page says which.
+    mocks.invoke.mockRejectedValueOnce(new Error('not an allowed kind of link'));
+    expect(click('zed')).toBe(true);
+    await flush();
+    expect(refused).toEqual(['zed']);
+    // Code-running links stop here; in-page anchors are the page's own.
+    mocks.invoke.mockClear();
+    expect(click('script')).toBe(true);
+    expect(mocks.invoke).not.toHaveBeenCalled();
+    expect(click('anchor')).toBe(false);
     stop();
   });
 });

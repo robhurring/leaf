@@ -9,6 +9,8 @@ type Props = {
   theme: Theme;
   appearance: Appearance;
   onTheme(t: Theme): void;
+  /** Opens Settings; the menu offers it when given. */
+  onSettings?(): void;
   onAppearance(a: Appearance): void;
 };
 
@@ -24,7 +26,14 @@ const THEME_LABEL: Record<Theme, string> = {
   paper: 'Paper',
 };
 
-export function ThemeMenu({ native = false, theme, appearance, onTheme, onAppearance }: Props) {
+export function ThemeMenu({
+  native = false,
+  theme,
+  appearance,
+  onTheme,
+  onAppearance,
+  onSettings,
+}: Props) {
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
   useEffect(() => {
@@ -78,6 +87,22 @@ export function ThemeMenu({ native = false, theme, appearance, onTheme, onAppear
                 </button>
               ))}
             </div>
+          )}
+          {onSettings && (
+            <>
+              <div className="leaf-menu-sep" />
+              <button
+                type="button"
+                role="menuitem"
+                className="leaf-menu-item"
+                onClick={() => {
+                  setOpen(false);
+                  onSettings();
+                }}
+              >
+                Settings…
+              </button>
+            </>
           )}
         </div>
       )}

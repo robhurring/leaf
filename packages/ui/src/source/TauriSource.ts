@@ -89,18 +89,28 @@ export function windowReady(): void {
   void invoke('leaf_ready').catch(() => {});
 }
 
+/** Kinds of link that run code rather than open something; never followed. */
+const NEVER = /^(javascript|vbscript|data|blob|file|about):/i;
+
 /**
- * The app window cannot follow a link off the app: web and mail links open in the
- * system's browser or mail client instead. Returns a function that stops it.
+ * The app window cannot follow a link off the app: a link with a scheme (the web, mail,
+ * an editor) goes to the core, which opens it in the system's app for it when that kind
+ * is allowed in Settings, and otherwise refuses; `onRefused` hears which kind.
+ * Returns a function that stops it.
  */
-export function openExternalLinks(root: Document = document): () => void {
+export function openExternalLinks(
+  root: Document = document,
+  onRefused?: (scheme: string) => void,
+): () => void {
   const onClick = (e: MouseEvent) => {
     const a = (e.target as Element | null)?.closest?.('a[href]') as HTMLAnchorElement | null;
     if (!a) return;
     const href = a.getAttribute('href') ?? '';
-    if (!/^(https?:|mailto:)/i.test(href)) return;
+    const scheme = /^([a-z][a-z0-9+.-]*):/i.exec(href)?.[1]?.toLowerCase();
+    if (!scheme) return;
     e.preventDefault();
-    void invoke('leaf_open_url', { url: href }).catch(() => {});
+    if (NEVER.test(href)) return;
+    void invoke('leaf_open_url', { url: href }).catch(() => onRefused?.(scheme));
   };
   root.addEventListener('click', onClick);
   return () => root.removeEventListener('click', onClick);

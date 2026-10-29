@@ -33,6 +33,7 @@ export type TopBarProps = {
   native?: boolean;
   onTheme(t: Theme): void;
   onAppearance(a: Appearance): void;
+  onSettings?(): void;
   onSearch(): void;
   /** The open Go to field, shown in place of its button. */
   goto?: React.ReactNode;
@@ -103,6 +104,7 @@ export function TopBar(p: TopBarProps) {
           appearance={p.appearance}
           onTheme={p.onTheme}
           onAppearance={p.onAppearance}
+          onSettings={p.onSettings}
         />
         {/* In the app the core is in-process: always connected, so no dot. */}
         {!p.native && <ConnectionDot status={p.status} />}

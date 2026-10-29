@@ -54,6 +54,20 @@ fn in_range(mut p: Preferences) -> Preferences {
             *w = None;
         }
     }
+    // Link kinds as bare lowercase schemes, each once; anything else (a hand edit) dropped.
+    if let Some(list) = p.link_schemes.take() {
+        let mut clean: Vec<String> = Vec::new();
+        for s in list.iter().map(|s| s.trim().to_ascii_lowercase()) {
+            let valid = s.starts_with(|c: char| c.is_ascii_lowercase())
+                && s.chars().all(|c| {
+                    c.is_ascii_lowercase() || c.is_ascii_digit() || matches!(c, '+' | '-' | '.')
+                });
+            if valid && !clean.contains(&s) {
+                clean.push(s);
+            }
+        }
+        p.link_schemes = Some(clean);
+    }
     p
 }
 

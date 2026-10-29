@@ -25,6 +25,8 @@ import { useStage } from '../store/stage.js';
 import { ProgressBar } from './ProgressBar.js';
 import { BlameMargin } from './BlameMargin.js';
 import { BlameResizer, BlameShownContext } from './BlameColumn.js';
+import { Settings } from './Settings.js';
+import { NoticeBar } from './NoticeBar.js';
 import { AppearanceContext, useResolvedAppearance } from '../viewers/appearance.js';
 import { AssetContext, rawUrl, type AssetResolver } from '../render/components/assetContext.js';
 import { useAssets } from '../store/assets.js';
@@ -77,6 +79,7 @@ export function Reader(props: ReaderProps) {
   const docs = useDocuments();
   const [goto, setGoto] = useState<GoToMode | null>(null);
   const [toolsEl, setToolsEl] = useState<HTMLElement | null>(null);
+  const [settingsOpen, setSettingsOpen] = useState(false);
   const [find, setFind] = useState<{ q: string; index: number; key: number } | null>(null);
   const mainRef = useRef<HTMLElement>(null);
   // A hash to scroll to after the next render, consumed once so live re-renders never re-scroll.
@@ -228,6 +231,7 @@ export function Reader(props: ReaderProps) {
       textLarger: () => ui.bumpText(10),
       textSmaller: () => ui.bumpText(-10),
       textReset: () => ui.bumpText(0),
+      openSettings: () => setSettingsOpen(true),
       // A leaf:// link the app routed to this window.
       openPath: (arg?: { path: string; slug?: string }) => {
         if (arg) navigate(arg.slug ? `${arg.path}#${arg.slug}` : arg.path);
@@ -250,6 +254,7 @@ export function Reader(props: ReaderProps) {
         closeOverlays: () => runCommand('closeOverlays'),
         scrollBy: (unit, direction) => runCommand('scrollBy', { unit, direction }),
         jumpHeading: (direction) => runCommand('jumpHeading', direction),
+        openSettings: () => runCommand('openSettings'),
         goBack: () => runCommand('goBack'),
         goForward: () => runCommand('goForward'),
       },
@@ -379,6 +384,7 @@ export function Reader(props: ReaderProps) {
             native={native}
             onTheme={ui.setTheme}
             onAppearance={ui.setAppearance}
+            onSettings={() => runCommand('openSettings')}
             onSearch={() => setGoto('all')}
             goto={
               goto && (
@@ -519,6 +525,8 @@ export function Reader(props: ReaderProps) {
             {outlineOn && <Resizer side="outline" />}
           </div>
           <Stage />
+          <NoticeBar />
+          {settingsOpen && <Settings onClose={() => setSettingsOpen(false)} />}
         </div>
       </AssetContext.Provider>
     </AppearanceContext.Provider>
