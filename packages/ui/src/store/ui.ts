@@ -24,6 +24,9 @@ export type UiState = {
   expandedDirs: string[];
   treeWidth: number;
   outlineWidth: number;
+  /** The last commit line in the file header. */
+  showGit: boolean;
+  setShowGit(v: boolean): void;
   setTreeOpen(v: boolean): void;
   setOutlineOpen(v: boolean): void;
   setNumbering(v: boolean): void;
@@ -45,6 +48,7 @@ export const UI_DEFAULTS = {
   expandedDirs: [] as string[],
   treeWidth: SIDEBAR_DEFAULT,
   outlineWidth: SIDEBAR_DEFAULT,
+  showGit: true,
 };
 
 export const useUi = create<UiState>()(
@@ -52,6 +56,7 @@ export const useUi = create<UiState>()(
     (set) => ({
       ...UI_DEFAULTS,
       setTreeOpen: (treeOpen) => set({ treeOpen }),
+      setShowGit: (showGit) => set({ showGit }),
       setOutlineOpen: (outlineOpen) => set({ outlineOpen }),
       setNumbering: (numbering) => set({ numbering }),
       setTheme: (theme) => set({ theme }),

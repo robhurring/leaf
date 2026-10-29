@@ -6,6 +6,7 @@ import { shortenPath } from './shortenPath.js';
 import type { FileMessage, GitInfo } from '@leaf/protocol';
 import { Chevron, FilePlus, PencilLine, Sliders } from '../icons/index.js';
 import { formatBytes, formatDate, formatWhen } from '../viewers/binary/format.js';
+import { useUi } from '../store/ui.js';
 
 type Props = {
   file: FileMessage;
@@ -112,7 +113,7 @@ function When({ ms }: { ms: number }) {
 
 type Row = [string, ReactNode];
 
-/** The properties toggle; the badge counts the frontmatter. */
+/** The properties toggle: an icon and a dropdown arrow; the tooltip counts the frontmatter. */
 function PropertiesToggle({
   open,
   count,
@@ -122,18 +123,18 @@ function PropertiesToggle({
   count: number;
   onToggle(): void;
 }) {
+  const label = count ? `Properties (${count})` : 'Properties';
   return (
     <button
       type="button"
       className="leaf-props-toggle"
-      aria-label={count ? `Properties, ${count}` : 'Properties'}
+      aria-label={label}
       aria-expanded={open}
       aria-controls="leaf-props-table"
-      title="Properties"
+      title={label}
       onClick={onToggle}
     >
       <Sliders size={14} />
-      {count > 0 && <span className="leaf-badge-count">{count}</span>}
       <Chevron size={11} className={`leaf-chev ${open ? 'leaf-chev-down' : ''}`} />
     </button>
   );
@@ -159,13 +160,28 @@ function Group({ label, rows }: { label: string; rows: Row[] }) {
 }
 
 /** Frontmatter first, then the file's own facts, in a panel that opens beneath the file line. */
-function PropertiesPanel({ front, facts }: { front: Row[]; facts: Row[] }) {
+function PropertiesPanel({ front, facts, git }: { front: Row[]; facts: Row[]; git: boolean }) {
+  const showGit = useUi((s) => s.showGit);
+  const setShowGit = useUi((s) => s.setShowGit);
   return (
     <div className="leaf-props-panel">
       <table id="leaf-props-table" className="leaf-props-table">
         <Group label="Frontmatter" rows={front} />
         <Group label="File" rows={facts} />
       </table>
+      {git && (
+        <label className="leaf-props-option">
+          <button
+            type="button"
+            role="switch"
+            className="leaf-switch"
+            aria-checked={showGit}
+            aria-label="Show last commit"
+            onClick={() => setShowGit(!showGit)}
+          />
+          <span>Show last commit</span>
+        </label>
+      )}
     </div>
   );
 }
@@ -173,6 +189,7 @@ function PropertiesPanel({ front, facts }: { front: Row[]; facts: Row[] }) {
 export function Properties({ file, frontmatter, toolsRef }: Props) {
   const fm = Object.entries(frontmatter ?? {});
   const [open, setOpen] = useState(false);
+  const showGit = useUi((s) => s.showGit);
   useEffect(() => {
     if (!open) return;
     const esc = (e: KeyboardEvent) => e.key === 'Escape' && setOpen(false);
@@ -204,7 +221,7 @@ export function Properties({ file, frontmatter, toolsRef }: Props) {
         </div>
         <PropertiesToggle open={open} count={fm.length} onToggle={() => setOpen((o) => !o)} />
       </div>
-      {file.git && (
+      {file.git && showGit && (
         // The last commit as `git log` prints it: sha, subject, when, author.
         <div className="leaf-dochead-line leaf-dochead-git">
           <CommitValue git={file.git} />{' '}
@@ -214,7 +231,7 @@ export function Properties({ file, frontmatter, toolsRef }: Props) {
           <span className="leaf-gitlog-author">&lt;{file.git.author}&gt;</span>
         </div>
       )}
-      {open && <PropertiesPanel front={front} facts={rows} />}
+      {open && <PropertiesPanel front={front} facts={rows} git={!!file.git} />}
       <div className="leaf-dochead-tools" role="toolbar" aria-label="File tools" ref={toolsRef} />
     </div>
   );

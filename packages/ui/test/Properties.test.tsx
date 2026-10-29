@@ -1,7 +1,10 @@
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, beforeEach } from 'vitest';
 import { fireEvent, render, screen, within } from '@testing-library/react';
 import type { FileMessage } from '@leaf/protocol';
 import { Properties } from '../src/components/Properties.js';
+import { useUi } from '../src/store/ui.js';
+
+beforeEach(() => useUi.setState({ showGit: true }));
 
 const file: FileMessage = {
   type: 'file',
@@ -115,10 +118,13 @@ describe('Properties', () => {
     expect(path.textContent).toMatch(/filename\.md$/);
   });
 
-  it('properties expand down inside the header, with a badge counting the frontmatter', () => {
+  it('properties expand down inside the header from a plain icon and arrow', () => {
     render(<Properties file={file} frontmatter={{ title: 'Guide', tags: ['a'] }} />);
     const button = screen.getByRole('button', { name: /properties/i });
-    expect(button.querySelector('.leaf-badge-count')!.textContent).toBe('2');
+    // An icon and a dropdown arrow, no box or badge; the count is in the tooltip.
+    expect(button.textContent).toBe('');
+    expect(button.querySelectorAll('svg')).toHaveLength(2);
+    expect(button.getAttribute('title')).toBe('Properties (2)');
     fireEvent.click(button);
     const head = screen.getByRole('region', { name: 'File' });
     const panel = within(head).getByRole('table').closest('.leaf-props-panel')!;
@@ -142,8 +148,32 @@ describe('Properties', () => {
     expect(pills).toEqual(expect.arrayContaining(['alpha', 'beta']));
   });
 
-  it('no frontmatter, no badge', () => {
+  it('no frontmatter, no count', () => {
     render(<Properties file={file} />);
-    expect(document.querySelector('.leaf-badge-count')).toBeNull();
+    expect(screen.getByRole('button', { name: /properties/i }).getAttribute('title')).toBe(
+      'Properties',
+    );
+  });
+
+  it('the last commit line can be switched off from Properties, and stays off', () => {
+    render(<Properties file={file} />);
+    expect(document.querySelector('.leaf-dochead-git')).toBeTruthy();
+    fireEvent.click(screen.getByRole('button', { name: /properties/i }));
+    const show = screen.getByRole('switch', { name: 'Show last commit' });
+    expect(show.getAttribute('aria-checked')).toBe('true');
+    fireEvent.click(show);
+    expect(document.querySelector('.leaf-dochead-git')).toBeNull();
+    expect(show.getAttribute('aria-checked')).toBe('false');
+    expect(JSON.parse(localStorage.getItem('leaf.ui')!).state.showGit).toBe(false);
+    // The commit is still in the table.
+    expect(screen.getByRole('table').textContent).toContain('abcdef1');
+    fireEvent.click(show);
+    expect(document.querySelector('.leaf-dochead-git')).toBeTruthy();
+  });
+
+  it('no git, no switch', () => {
+    render(<Properties file={{ ...file, git: undefined }} />);
+    fireEvent.click(screen.getByRole('button', { name: /properties/i }));
+    expect(screen.queryByRole('switch', { name: 'Show last commit' })).toBeNull();
   });
 });

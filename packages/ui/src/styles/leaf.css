@@ -1585,39 +1585,67 @@ html[data-resizing] .leaf-resizer::after {
   flex: none;
   display: inline-flex;
   align-items: center;
-  gap: 5px;
+  gap: 3px;
   height: 24px;
-  padding: 0 8px;
-  border: 1px solid var(--leaf-line);
-  border-radius: 7px;
+  padding: 0 4px 0 6px;
+  border: 0;
+  border-radius: 6px;
   background: transparent;
-  color: var(--leaf-text);
+  color: var(--leaf-text-2);
   font: inherit;
   cursor: pointer;
 }
 .leaf-props-toggle:hover,
 .leaf-props-toggle[aria-expanded='true'] {
-  background: var(--leaf-surface-2);
+  color: var(--leaf-text);
+}
+/* A setting at the foot of the properties: a small switch and its label. */
+.leaf-props-option {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 10px;
+  padding-top: 10px;
+  border-top: 1px solid var(--leaf-line);
+  font: 12px var(--leaf-font-ui);
+  color: var(--leaf-text-2);
+  cursor: pointer;
+}
+.leaf-switch {
+  position: relative;
+  flex: none;
+  width: 26px;
+  height: 15px;
+  padding: 0;
+  border: 0;
+  border-radius: 8px;
+  background: var(--leaf-line-2);
+  cursor: pointer;
+  transition: background 0.15s;
+}
+.leaf-switch::after {
+  content: '';
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: 11px;
+  height: 11px;
+  border-radius: 50%;
+  background: #fff;
+  box-shadow: 0 0.5px 1.5px rgba(0, 0, 0, 0.3);
+  transition: transform 0.15s;
+}
+.leaf-switch[aria-checked='true'] {
+  background: var(--leaf-accent);
+}
+.leaf-switch[aria-checked='true']::after {
+  transform: translateX(11px);
 }
 .leaf-props-toggle .leaf-chev {
   transform: rotate(90deg);
 }
 .leaf-props-toggle .leaf-chev-down {
   transform: rotate(-90deg);
-}
-.leaf-badge-count {
-  min-width: 16px;
-  height: 16px;
-  padding: 0 5px;
-  box-sizing: border-box;
-  border-radius: 8px;
-  background: var(--leaf-accent-soft);
-  color: var(--leaf-accent);
-  font-size: 10.5px;
-  font-weight: 600;
-  line-height: 16px;
-  text-align: center;
-  font-variant-numeric: tabular-nums;
 }
 /* The property table, expanding down inside the header: labels left, values right. */
 .leaf-props-panel {
