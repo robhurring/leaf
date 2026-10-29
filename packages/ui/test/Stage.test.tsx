@@ -35,6 +35,18 @@ const props: ViewerProps = {
 beforeEach(() => act(() => useStage.getState().close()));
 
 describe('Stage', () => {
+  it('a viewer that does not zoom fills the Stage at its own size, with no zoom tools', () => {
+    render(<Stage />);
+    const live: Viewer = { ...viewer, id: 'live', stage: {} };
+    act(() =>
+      useStage.getState().openStage({ docPath: 'a.md', blockHash: 'h1', viewer: live, props }),
+    );
+    const content = screen.getByTestId('content');
+    expect(content.closest('.leaf-stage-layer')).toBeNull();
+    expect(content.closest('.leaf-stage-fill')).toBeTruthy();
+    expect(screen.queryByRole('toolbar', { name: 'Stage tools' })).toBeNull();
+  });
+
   it('renders nothing until opened, then shows the viewer, toolbox, and closes on Escape', () => {
     render(<Stage />);
     expect(screen.queryByRole('dialog')).toBeNull();

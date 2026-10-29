@@ -200,6 +200,14 @@ export function StageCanvas({ content, onClose, toolsSlot, inline = false }: Can
   const { viewer, props } = open;
   const Rich = viewer.Rich;
   const canDraw = viewer.stage?.draw === true;
+  // A viewer that doesn't zoom (a live pane) isn't a picture to scale: it gets the
+  // whole Stage at its own size and draws itself to fit.
+  if (!viewer.stage?.zoom)
+    return (
+      <div className="leaf-stage-viewport leaf-stage-fill">
+        <Rich {...props} appearance={inline ? props.appearance : 'light'} />
+      </div>
+    );
   const centerZoom = (factor: number) => {
     const view = viewRef.current;
     if (!view) return;

@@ -76,7 +76,7 @@ const blue = '#3e82f7';
 const red = '#e5484d';
 const ink = () => (theme === 'dark' ? '#e6edf3' : '#1f2328');
 const faint = () => (theme === 'dark' ? 'rgba(230,237,243,0.2)' : 'rgba(31,35,40,0.16)');
-const SPEED = 0.06; // pixels the wave moves right per millisecond
+const SPEED = () => width / 15000; // the wave crosses the pane in about 15 seconds
 const samples = [];
 
 const dot = (x, y, color) => {
@@ -87,7 +87,7 @@ const dot = (x, y, color) => {
 };
 
 onFrame((t) => {
-  const r = Math.min(70, height * 0.3);
+  const r = Math.min(height * 0.3, width * 0.12);
   const cx = r + 40;
   const cy = height / 2;
   const angle = t / 900;
@@ -96,7 +96,7 @@ onFrame((t) => {
   const startX = cx + r + 40;
 
   samples.unshift({ t, y: py });
-  while (samples.length && startX + (t - samples.at(-1).t) * SPEED > width) samples.pop();
+  while (samples.length && startX + (t - samples.at(-1).t) * SPEED() > width) samples.pop();
 
   ctx.clearRect(0, 0, width, height);
   ctx.strokeStyle = faint();
@@ -128,7 +128,7 @@ onFrame((t) => {
   ctx.lineWidth = 2.5;
   ctx.beginPath();
   samples.forEach((s, i) => {
-    const x = startX + (t - s.t) * SPEED;
+    const x = startX + (t - s.t) * SPEED();
     if (i === 0) ctx.moveTo(x, s.y);
     else ctx.lineTo(x, s.y);
   });

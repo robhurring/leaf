@@ -1962,6 +1962,11 @@ a.leaf-pill:hover {
   -webkit-user-select: none;
   background: #fff;
 }
+.leaf-stage-fill {
+  touch-action: auto;
+  user-select: auto;
+  -webkit-user-select: auto;
+}
 .leaf-stage-tool-hand {
   cursor: grab;
 }
