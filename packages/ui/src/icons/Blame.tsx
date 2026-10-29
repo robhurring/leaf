@@ -1,6 +1,6 @@
 import type { IconProps } from './types.js';
 
-/** Lines of text with a bar in the margin beside them: blame. */
+/** A commit on a branch, git style: blame, who changed what. */
 export function Blame({ size = 18, ...rest }: IconProps) {
   return (
     <svg
@@ -15,9 +15,10 @@ export function Blame({ size = 18, ...rest }: IconProps) {
       aria-hidden="true"
       {...rest}
     >
-      <path d="M4 5v6" strokeWidth={2.6} />
-      <path d="M4 15v4" strokeWidth={2.6} opacity={0.45} />
-      <path d="M9 6h11M9 10h8M9 15h11M9 19h7" />
+      <circle cx="7" cy="12" r="2.6" />
+      <path d="M7 3v6.4M7 14.6V21" />
+      <circle cx="17" cy="7" r="2.6" />
+      <path d="M17 9.6c0 4.4-4 4.4-7.4 2.4" />
     </svg>
   );
 }
