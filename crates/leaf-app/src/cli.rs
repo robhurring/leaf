@@ -6,6 +6,10 @@ usage:
   leaf open --browser [path]  open it in your browser instead; the server goes away when the tab closes
   leaf serve [path]           same, but stay in the foreground and stream the logs (ctrl-c stops)
   leaf share [path]           share with others (not yet available)
+  leaf 'leaf://open/<path>'   open a link: an absolute path (or ~/…), then any of ?root=<folder> (show the
+                              file inside that folder), &browser, #heading. bin/install registers the
+                              installed app, so `open 'leaf://…'` and links in other apps land here; a
+                              window already showing the file or its folder comes forward instead.
   leaf --help | --version
 
 flags (each overrides the matching variable in the environment or .env):

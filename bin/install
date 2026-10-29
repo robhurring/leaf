@@ -3,7 +3,8 @@ set -euo pipefail
 cd "$(dirname "$0")/.."
 
 usage() {
-  echo "usage: bin/install [--uninstall]    build leaf and symlink this checkout's \`leaf\` into your user bin dir"
+  echo "usage: bin/install [--uninstall]    build leaf, symlink this checkout's \`leaf\` into your user bin dir,"
+  echo "  and (macOS) install ~/Applications/leaf reader.app for leaf:// links (see bin/bundle)"
   echo "  LEAF_BIN_DIR overrides the target; otherwise the first of ~/.local/bin, ~/bin that is on PATH."
 }
 pick_bin_dir() {
@@ -19,6 +20,7 @@ case "${1:-}" in
   --uninstall)
     d="$(pick_bin_dir)"
     rm -f "$d/leaf" && echo "removed $d/leaf"
+    bin/bundle --remove
     exit 0 ;;
   "") ;;
   *) usage >&2; exit 1 ;;
@@ -29,3 +31,5 @@ d="$(pick_bin_dir)"
 mkdir -p "$d"
 ln -sfn "$(pwd)/target/release/leaf" "$d/leaf"
 echo "installed: $d/leaf -> $(pwd)/target/release/leaf (a live link; rebuild with bin/build)"
+# macOS: the app that leaf:// links open in.
+bin/bundle

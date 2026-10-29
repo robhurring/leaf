@@ -3,6 +3,7 @@ import { render, screen, fireEvent, waitFor, within } from '@testing-library/rea
 import { Reader } from '../src/components/Reader.js';
 import { useDocuments } from '../src/store/documents.js';
 import { scripted, README, GUIDE } from './helpers/scripted.js';
+import { runCommand } from '../src/commands.js';
 
 beforeEach(() => {
   history.replaceState(null, '', '/');
@@ -210,5 +211,13 @@ describe('Reader', () => {
     ).not.toBe(false);
     fireEvent.click(screen.getByText('README.md'));
     expect(await screen.findByRole('navigation', { name: 'Outline' })).toBeTruthy();
+  });
+
+  it('a deep link into an open window shows its document there', async () => {
+    render(<Reader source={dir().source} />);
+    await screen.findByRole('heading', { name: 'Title', level: 1 });
+    expect(runCommand('openPath', { path: 'docs/guide.md' })).toBe(true);
+    expect(await screen.findByRole('heading', { name: 'Guide', level: 1 })).toBeTruthy();
+    expect(location.pathname).toBe('/docs/guide.md');
   });
 });

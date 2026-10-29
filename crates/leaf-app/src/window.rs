@@ -165,6 +165,37 @@ impl Windows {
         }
     }
 
+    /// The window to show `target` in, and what that window opened: the one opened on
+    /// exactly that file or folder, else the nearest folder window holding it.
+    pub fn find_for(&self, target: &Path) -> Option<(String, PathBuf)> {
+        // Resolve `..` by hand: the path may not exist, so it can't be canonicalized.
+        let mut clean = PathBuf::new();
+        for c in target.components() {
+            match c {
+                std::path::Component::ParentDir => {
+                    clean.pop();
+                }
+                std::path::Component::CurDir => {}
+                c => clean.push(c),
+            }
+        }
+        let target = clean.as_path();
+        let inner = self.lock();
+        let mut best: Option<(&String, &PathBuf)> = None;
+        for (label, (opened, _)) in &inner.windows {
+            if opened == target {
+                return Some((label.clone(), opened.clone()));
+            }
+            let holds = opened.is_dir() && target.starts_with(opened);
+            let nearer =
+                best.is_none_or(|(_, b)| opened.components().count() > b.components().count());
+            if holds && nearer {
+                best = Some((label, opened));
+            }
+        }
+        best.map(|(l, o)| (l.clone(), o.clone()))
+    }
+
     pub fn window_count(&self) -> usize {
         self.lock().windows.len()
     }
