@@ -10,6 +10,8 @@ export interface DocumentSource {
   onMessage(handler: (msg: ServerMessage) => void): () => void;
   onStatus(handler: (status: SourceStatus) => void): () => void;
   close(): void;
+  /** Confirms the other end is still there (a source that can lose it says so on status). */
+  check?(): void;
 }
 
 /** Small listener list shared by the source implementations. */

@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach } from 'vitest';
+import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { render, screen, fireEvent, waitFor, within } from '@testing-library/react';
 import { Reader } from '../src/components/Reader.js';
 import { useDocuments } from '../src/store/documents.js';
@@ -219,5 +219,15 @@ describe('Reader', () => {
     expect(runCommand('openPath', { path: 'docs/guide.md' })).toBe(true);
     expect(await screen.findByRole('heading', { name: 'Guide', level: 1 })).toBeTruthy();
     expect(location.pathname).toBe('/docs/guide.md');
+  });
+
+  it('opening a file checks that the server is still there', async () => {
+    const { source } = dir();
+    const check = vi.fn();
+    render(<Reader source={Object.assign(source, { check })} />);
+    await screen.findByRole('heading', { name: 'Title', level: 1 });
+    check.mockClear();
+    fireEvent.click(screen.getByText('notes.txt'));
+    expect(check).toHaveBeenCalledTimes(1);
   });
 });

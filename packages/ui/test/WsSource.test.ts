@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { WsSource } from '../src/source/WsSource.js';
+import { DEFAULT_BACKOFF, WsSource } from '../src/source/WsSource.js';
 import type { SourceStatus } from '../src/source/DocumentSource.js';
 
 class FakeWebSocket extends EventTarget {
@@ -48,7 +48,23 @@ const make = () =>
   new WsSource('ws://x/ws', {
     WebSocketImpl: FakeWebSocket as unknown as typeof WebSocket,
     backoffMs: [10, 20],
+    heartbeatMs: 0,
   });
+
+/** A source whose /healthz answers as `up()` says. */
+function probed(up: () => boolean) {
+  const fetchImpl = vi.fn(async (url: string) => {
+    if (!up()) throw new TypeError('Failed to fetch');
+    return new Response('ok');
+  });
+  const src = new WsSource('ws://x/ws', {
+    WebSocketImpl: FakeWebSocket as unknown as typeof WebSocket,
+    backoffMs: [5000],
+    heartbeatMs: 2000,
+    fetchImpl: fetchImpl as unknown as typeof fetch,
+  });
+  return { src, fetchImpl };
+}
 
 describe('WsSource', () => {
   it('sends hello on open and flushes the queue', () => {
@@ -123,5 +139,66 @@ describe('WsSource', () => {
     // Later messages flow live, once each.
     s.message({ type: 'tree', path: 'docs', entries: [] });
     expect(got).toEqual(['welcome', 'tree', 'tree']);
+  });
+
+  it('polls the server every 2s and notices it gone even while the socket looks open', async () => {
+    let up = true;
+    const { src, fetchImpl } = probed(() => up);
+    const seen: SourceStatus[] = [];
+    src.onStatus((st) => seen.push(st));
+    FakeWebSocket.instances[0]!.open();
+    await vi.advanceTimersByTimeAsync(2000);
+    expect(fetchImpl).toHaveBeenCalledWith('http://x/healthz', expect.anything());
+    expect(src.status).toBe('open');
+    up = false;
+    await vi.advanceTimersByTimeAsync(2000);
+    expect(src.status).toBe('reconnecting');
+    src.close();
+  });
+
+  it('while reconnecting, a check that finds the server reconnects without waiting out the backoff', async () => {
+    let up = false;
+    const { src } = probed(() => up);
+    FakeWebSocket.instances[0]!.close();
+    expect(src.status).toBe('reconnecting');
+    const before = FakeWebSocket.instances.length;
+    up = true;
+    await vi.advanceTimersByTimeAsync(2000);
+    expect(FakeWebSocket.instances.length).toBe(before + 1);
+    src.close();
+  });
+
+  it('check() asks at once, for a navigation', async () => {
+    const { src, fetchImpl } = probed(() => false);
+    FakeWebSocket.instances[0]!.open();
+    src.check();
+    await vi.advanceTimersByTimeAsync(0);
+    expect(fetchImpl).toHaveBeenCalledTimes(1);
+    expect(src.status).toBe('reconnecting');
+    src.close();
+  });
+
+  it('a slow answer counts as no answer', async () => {
+    const fetchImpl = vi.fn(
+      (_url: string, init?: RequestInit) =>
+        new Promise<Response>((_, reject) =>
+          init?.signal?.addEventListener('abort', () => reject(new DOMException('aborted'))),
+        ),
+    );
+    const src = new WsSource('ws://x/ws', {
+      WebSocketImpl: FakeWebSocket as unknown as typeof WebSocket,
+      backoffMs: [5000],
+      heartbeatMs: 2000,
+      fetchImpl: fetchImpl as unknown as typeof fetch,
+    });
+    FakeWebSocket.instances[0]!.open();
+    src.check();
+    await vi.advanceTimersByTimeAsync(1999);
+    expect(src.status).toBe('reconnecting');
+    src.close();
+  });
+
+  it('the default backoff never waits more than 2s between tries', () => {
+    expect(Math.max(...DEFAULT_BACKOFF)).toBeLessThanOrEqual(2000);
   });
 });

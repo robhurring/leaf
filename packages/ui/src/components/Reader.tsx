@@ -117,13 +117,15 @@ export function Reader(props: ReaderProps) {
     (target: string, replace = false) => {
       const [path, slug] = target.split('#', 2);
       const p = path ?? '';
+      // A server that went away while the page sat idle shows as disconnected right away.
+      source.check?.();
       (replace ? router.replace : router.push)(p, slug);
       props.onPathChange?.(p);
       useDocuments.getState().open(p);
       pendingSlug.current = slug ?? null;
       if (!slug) mainRef.current?.scrollTo?.({ top: 0 });
     },
-    [router, props.onPathChange], // eslint-disable-line react-hooks/exhaustive-deps
+    [router, source, props.onPathChange], // eslint-disable-line react-hooks/exhaustive-deps
   );
 
   // Initial document: the URL's path, the controlled prop, or the folder's README.
