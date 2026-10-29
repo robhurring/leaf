@@ -61,6 +61,7 @@ Then the parts a static page can't do:
 - **Live.** Edit the file in your editor, or let an agent write it, and the page follows. No reload, no flash, and the scroll position stays put.
 - **Zoom in.** Hover a diagram to zoom it and pan it where it sits, or open the zoomed view to pinch, pan, and draw on it with a pencil. Ink fades on its own unless you pin it. Copy the picture to the clipboard or download the SVG.
 - **More diagrams.** PlantUML and Excalidraw next to Mermaid. A broken diagram shows its error in place instead of a blank box.
+- **Animations.** A ` ```three ` or ` ```canvas ` block runs as a live pane, for illustrating an idea while you present: drag a 3D scene around, watch a sort step through. See [Live animation blocks](#live-animation-blocks).
 - **Find anything.** `⌘K` searches headings, file names, and the text of every file in the folder from one box; `⌘F` finds in the open document.
 - **File header.** The path and when the file was created and changed sit above the document, with the last commit beneath it as a `git log` line, linked to your remote along with its pull request. Properties opens the frontmatter and file details in place. Links to the web open in your browser. Code, CSV, diagram, and image files fill the window, their controls in a toolbar under the header. A diagram file opens ready to pan, zoom, and draw on.
 - **Mentions and topics.** `@user` and `#topic` light up and link where you say, or to GitHub when you're inside a GitHub checkout.
@@ -71,6 +72,17 @@ Then the parts a static page can't do:
 ![a sequence diagram zoomed in, with a green pencil stroke drawn over it](docs/screenshots/stage.jpg)
 
 ![the dark appearance, showing the five alert styles](docs/screenshots/dark.jpg)
+
+## Live animation blocks
+
+Two fence languages run their code instead of showing it:
+
+- ` ```three ` gets `THREE` and `OrbitControls`, plus a `scene`, a `camera` (at `z = 5`), and a `renderer` already sized to the pane. leaf draws the scene every frame; call `manual()` to draw it yourself.
+- ` ```canvas ` gets a `canvas` and its 2D `ctx`, already scaled for the screen, with `width` and `height` in CSS pixels.
+
+Both get `onFrame(fn)`, which calls `fn(t, dt)` every frame with the milliseconds since the pane started and since the last frame, and `theme` (`'light'` or `'dark'`, with a `themechange` event on `window` when it changes). The code runs as the body of an async function, so `await` works at the top. A pane is 320 pixels tall; set another height in the fence: ` ```three height=480 `.
+
+Each pane runs in a sandboxed frame: it can't reach leaf, your files, or the network, so a document from anyone is safe to open. It plays only while it's on screen, and rests when the window is hidden or you pause it; with reduced motion on, it starts paused on its first frame. An error shows under the pane with its line. See `examples/animations.md`.
 
 ## Settings
 

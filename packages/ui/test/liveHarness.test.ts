@@ -210,6 +210,15 @@ describe('live pane harness', () => {
     expect((window as unknown as { count: number }).count).toBe(2);
   });
 
+  it('a play that arrives before the first frame keeps it running', async () => {
+    await run('window.count = 0; onFrame(() => window.count++);', { paused: true });
+    send({ leaf: 'live', type: 'play' });
+    frame();
+    frame();
+    frame();
+    expect((window as unknown as { count: number }).count).toBe(3);
+  });
+
   it('still works after being turned into source text, as the frame receives it', async () => {
     const copy = new Function(`return ${harness.toString()}`)() as typeof harness;
     await run('onFrame(() => {});', {}, copy);

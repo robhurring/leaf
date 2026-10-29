@@ -46,8 +46,8 @@ export function buildSrcdoc(boot: Boot, harnessSource: string): string {
     `<!doctype html><html data-theme="${boot.theme}"><head>`,
     `<meta http-equiv="Content-Security-Policy" content="${FRAME_CSP}">`,
     '<meta charset="utf-8">',
-    '<style>html,body{margin:0;height:100%;overflow:hidden}',
-    'html[data-theme=light] body{background:#ffffff}html[data-theme=dark] body{background:#0d1117}</style>',
+    // Transparent, so the pane sits on whatever page leaf is showing.
+    '<style>html{color-scheme:normal}html,body{margin:0;height:100%;overflow:hidden;background:transparent}</style>',
     '</head><body>',
     `<script type="application/json" id="leaf-boot">${scriptJson(data)}</script>`,
     libs ? `<script>${scriptText(libs.three)}</script>` : '',

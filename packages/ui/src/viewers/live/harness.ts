@@ -24,14 +24,20 @@ export function harness(win: Window): void {
   // The block runs inside a wrapper function, so its line 1 is some lines into the
   // wrapper; measure how many with a probe built the same way.
   const AsyncFunction = Object.getPrototypeOf(async () => {}).constructor;
-  const lineIn = (stack: string | undefined): number | undefined => {
-    const m = new RegExp(`${SOURCE.replace('.', '\\.')}:(\\d+)`).exec(stack ?? '');
-    return m ? Number(m[1]) : undefined;
+  // The line an error was thrown on, in the wrapper: from the stack where it names the
+  // block (Chromium, Firefox), else from the error itself (WebKit's `line`, Firefox's
+  // `lineNumber`).
+  const lineOf = (e: unknown): number | undefined => {
+    if (!(e instanceof Error)) return undefined;
+    const m = new RegExp(`${SOURCE.replace('.', '\\.')}:(\\d+)`).exec(e.stack ?? '');
+    if (m) return Number(m[1]);
+    const own = (e as any).line ?? (e as any).lineNumber;
+    return typeof own === 'number' ? own : undefined;
   };
   let offset = 0;
   try {
     new AsyncFunction(`throw new Error()\n//# sourceURL=${SOURCE}`)().catch((e: Error) => {
-      offset = (lineIn(e.stack) ?? 1) - 1;
+      offset = (lineOf(e) ?? 1) - 1;
     });
   } catch {
     // No line numbers then.
@@ -39,7 +45,7 @@ export function harness(win: Window): void {
   const report = (e: unknown, raw?: number) => {
     if (failed) return;
     failed = true;
-    const at = raw ?? lineIn(e instanceof Error ? e.stack : undefined);
+    const at = raw ?? lineOf(e);
     const line = at !== undefined && at - offset >= 1 ? at - offset : undefined;
     post({ type: 'error', message: String(e instanceof Error ? e : (e ?? 'Error')), line });
   };
@@ -165,9 +171,14 @@ export function harness(win: Window): void {
     if (e.source !== win.parent) return;
     const d = e.data as { leaf?: string; type?: string; theme?: 'light' | 'dark' };
     if (!d || d.leaf !== 'live') return;
-    if (d.type === 'pause') setPaused(true);
-    else if (d.type === 'play') setPaused(false);
-    else if (d.type === 'theme' && (d.theme === 'light' || d.theme === 'dark')) {
+    if (d.type === 'pause') {
+      // Before the first frame, let it draw so a resting pane still shows its picture.
+      if (running && !drewFirst) firstOnly = true;
+      else setPaused(true);
+    } else if (d.type === 'play') {
+      firstOnly = false;
+      setPaused(false);
+    } else if (d.type === 'theme' && (d.theme === 'light' || d.theme === 'dark')) {
       theme = d.theme;
       doc.documentElement.dataset.theme = theme;
       win.dispatchEvent(new Event('themechange'));
@@ -179,6 +190,7 @@ export function harness(win: Window): void {
   let elapsed = 0;
   let running = false;
   let firstOnly = boot.paused;
+  let drewFirst = false;
   let draw: (() => void) | null = null;
   let manual = false;
   const loop = (ts: number) => {
@@ -193,6 +205,7 @@ export function harness(win: Window): void {
       report(e);
       return;
     }
+    drewFirst = true;
     if (firstOnly) {
       firstOnly = false;
       setPaused(true);

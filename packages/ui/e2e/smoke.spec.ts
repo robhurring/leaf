@@ -51,6 +51,7 @@ test('examples render without console errors', async ({ page }) => {
     'frontmatter.md',
     'html.md',
     'outline-and-numbering.md',
+    'animations.md',
   ]) {
     await page.goto('/' + f);
     await expect(page.locator('article.leaf-doc')).toBeVisible();
@@ -203,4 +204,38 @@ test('the document grows with the window', async ({ page }) => {
   const text = (await page.locator('.leaf-main-inner').boundingBox())!;
   expect(col.width).toBeGreaterThan(1500);
   expect(text.width).toBeGreaterThan(col.width - 120);
+});
+
+test('live panes run, pause, and show their errors', async ({ page }) => {
+  const errors = collectErrors(page);
+  await page.goto('/animations.md');
+  const panes = page.locator('.leaf-live');
+  await expect(panes.first()).toBeVisible();
+  const torus = page.locator('.leaf-live[data-kind="three"]').first();
+  await expect(async () => torus.scrollIntoViewIfNeeded({ timeout: 1000 })).toPass();
+  // three.js needs WebGL; a headless engine without it must say so in the pane.
+  await expect(torus).toHaveAttribute('data-state', /running|error/);
+  if ((await torus.getAttribute('data-state')) === 'error')
+    await expect(torus.getByRole('alert')).toContainText(/WebGL/i);
+  const sine = page.locator('.leaf-live[data-kind="canvas"]').first();
+  await expect(async () => sine.scrollIntoViewIfNeeded({ timeout: 1000 })).toPass();
+  await expect(sine).toHaveAttribute('data-state', 'running');
+  // It moves: the picture changes from one moment to the next.
+  const picture = () =>
+    page
+      .frameLocator('.leaf-live[data-kind="canvas"] iframe')
+      .first()
+      .locator('canvas')
+      .evaluate((c: HTMLCanvasElement) => c.toDataURL());
+  const before = await picture();
+  await expect.poll(picture, { timeout: 3000 }).not.toBe(before);
+  await sine.hover();
+  await sine.getByRole('button', { name: 'Pause' }).click();
+  await expect(sine).toHaveAttribute('data-state', 'paused');
+  const broken = page.locator('.leaf-live').last();
+  await expect(async () => broken.scrollIntoViewIfNeeded({ timeout: 1000 })).toPass();
+  await expect(broken).toHaveAttribute('data-state', 'error');
+  await expect(broken.getByRole('alert')).toContainText('line 3');
+  await expect(broken.getByRole('alert')).toContainText('undefinedThing');
+  expect(errors).toEqual([]);
 });

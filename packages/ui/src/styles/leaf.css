@@ -2745,6 +2745,8 @@ html[data-resizing] .leaf-blame-resizer::after {
   display: block;
   width: 100%;
   border: 0;
+  /* The same scheme as the frame's document, or browsers paint an opaque backdrop. */
+  color-scheme: normal;
 }
 .leaf-live[data-fill],
 .leaf-live[data-fill] .leaf-live-view,

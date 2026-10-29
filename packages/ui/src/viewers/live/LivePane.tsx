@@ -42,10 +42,16 @@ export function LivePane(props: ViewerProps & { fill?: boolean }) {
   const [hidden, setHidden] = useState(() => document.hidden);
   const [showCode, setShowCode] = useState(false);
   const [generation, setGeneration] = useState(0);
-  const [ready, setReady] = useState(false);
-  const [loaded, setLoaded] = useState(false);
-  const [failure, setFailure] = useState<Failure | null>(null);
+  // What the current frame has said, keyed by which frame it is, so a new frame (new
+  // code or a restart) starts fresh without an effect racing its load event.
+  const [heard, setHeard] = useState<{
+    key: string;
+    loaded?: boolean;
+    ready?: boolean;
+    failure?: Failure;
+  }>({ key: '' });
   const [libs, setLibs] = useState<Libs | null | undefined>(kind === 'three' ? undefined : null);
+  const [libsFailure, setLibsFailure] = useState<Failure | undefined>();
   const host = useRef<HTMLDivElement>(null);
   // The inline pane rests while its block is shown large in the Stage.
   const inStage = useStage(
@@ -58,7 +64,8 @@ export function LivePane(props: ViewerProps & { fill?: boolean }) {
     let live = true;
     loadThreeLibs().then(
       (l) => live && setLibs(l),
-      (e: unknown) => live && setFailure({ message: e instanceof Error ? e.message : String(e) }),
+      (e: unknown) =>
+        live && setLibsFailure({ message: e instanceof Error ? e.message : String(e) }),
     );
     return () => {
       live = false;
@@ -91,11 +98,12 @@ export function LivePane(props: ViewerProps & { fill?: boolean }) {
 
   const send = (msg: ToFrame) => frame.current?.contentWindow?.postMessage(msg, '*');
 
-  useEffect(() => {
-    setReady(false);
-    setLoaded(false);
-    setFailure(null);
-  }, [srcdoc, generation]);
+  const frameKey = `${hash}:${generation}:${libs ? 1 : 0}`;
+  const now = heard.key === frameKey ? heard : { key: frameKey };
+  const hear = (what: Partial<typeof heard>) =>
+    setHeard((h) => ({ ...(h.key === frameKey ? h : {}), ...what, key: frameKey }));
+  const { loaded = false, ready = false } = now;
+  const failure = now.failure ?? libsFailure;
 
   useEffect(() => {
     if (loaded) send({ leaf: 'live', type: running ? 'play' : 'pause' });
@@ -109,12 +117,12 @@ export function LivePane(props: ViewerProps & { fill?: boolean }) {
     const onMessage = (e: MessageEvent) => {
       if (!frame.current || e.source !== frame.current.contentWindow) return;
       if (!isFromFrame(e.data)) return;
-      if (e.data.type === 'ready') setReady(true);
-      else setFailure({ message: e.data.message, line: e.data.line });
+      if (e.data.type === 'ready') hear({ ready: true });
+      else hear({ failure: { message: e.data.message, line: e.data.line } });
     };
     window.addEventListener('message', onMessage);
     return () => window.removeEventListener('message', onMessage);
-  }, []);
+  });
 
   useEffect(() => {
     const onVisibility = () => setHidden(document.hidden);
@@ -156,7 +164,7 @@ export function LivePane(props: ViewerProps & { fill?: boolean }) {
               sandbox="allow-scripts"
               srcDoc={srcdoc}
               style={height ? { height } : undefined}
-              onLoad={() => setLoaded(true)}
+              onLoad={() => hear({ loaded: true })}
             />
           )
         )}
