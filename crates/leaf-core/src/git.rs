@@ -6,7 +6,9 @@ use std::path::{Path, PathBuf};
 use std::sync::Mutex;
 use std::time::Duration;
 
-use leaf_protocol::GitInfo;
+use leaf_protocol::{BlameHunk, GitInfo};
+
+use crate::source::Blame;
 use tokio::process::Command;
 
 const SEP: char = '\u{1f}';
@@ -91,6 +93,7 @@ pub struct GitInfoProvider {
     repo_root: Lazy<Option<PathBuf>>,
     remote: Lazy<Option<String>>,
     cache: Mutex<HashMap<PathBuf, (f64, Option<GitInfo>)>>,
+    blames: Mutex<HashMap<PathBuf, (f64, Option<Vec<BlameHunk>>)>>,
 }
 
 impl GitInfoProvider {
@@ -100,6 +103,7 @@ impl GitInfoProvider {
             repo_root: Lazy::default(),
             remote: Lazy::default(),
             cache: Mutex::new(HashMap::new()),
+            blames: Mutex::new(HashMap::new()),
         }
     }
 
@@ -150,6 +154,45 @@ impl GitInfoProvider {
         info
     }
 
+    /// Who last changed each line of `abs`, cached per path and mtime. None when the
+    /// file isn't tracked (or git isn't there).
+    pub async fn blame(&self, abs: &Path, mtime: f64) -> Option<Blame> {
+        let cached = {
+            let cache = self.blames.lock().unwrap_or_else(|e| e.into_inner());
+            cache
+                .get(abs)
+                .filter(|(m, _)| *m == mtime)
+                .map(|(_, h)| h.clone())
+        };
+        let hunks = match cached {
+            Some(h) => h,
+            None => {
+                let h = self.blame_lookup(abs).await;
+                self.blames
+                    .lock()
+                    .unwrap_or_else(|e| e.into_inner())
+                    .insert(abs.to_path_buf(), (mtime, h.clone()));
+                h
+            }
+        };
+        Some(Blame {
+            hunks: hunks?,
+            repo_url: self.repo_url().await,
+        })
+    }
+
+    async fn blame_lookup(&self, abs: &Path) -> Option<Vec<BlameHunk>> {
+        self.repo_root().await?;
+        let abs_str = abs.to_string_lossy();
+        let out = git(
+            &self.root_dir,
+            &["blame", "--incremental", "--", &abs_str],
+            Duration::from_secs(10),
+        )
+        .await?;
+        Some(parse_incremental(&out))
+    }
+
     async fn lookup(&self, abs: &Path) -> Option<GitInfo> {
         self.repo_root().await?;
         let format = format!("--format=%H{SEP}%an{SEP}%at{SEP}%s");
@@ -179,4 +222,79 @@ impl GitInfoProvider {
             repo_url: self.repo_url().await,
         })
     }
+}
+
+/// Parses `git blame --incremental`: hunks in any order, each a `<sha> <orig> <final>
+/// <count>` line, the commit's headers the first time it appears, then `filename`.
+/// Returns them in line order, neighbours from the same commit merged.
+pub fn parse_incremental(out: &str) -> Vec<BlameHunk> {
+    #[derive(Default, Clone)]
+    struct Commit {
+        author: String,
+        time: i64,
+        summary: String,
+    }
+    let mut commits: HashMap<String, Commit> = HashMap::new();
+    let mut raw: Vec<(String, u32, u32)> = Vec::new();
+    let mut current: Option<String> = None;
+    for line in out.lines() {
+        let mut parts = line.split(' ');
+        let first = parts.next().unwrap_or("");
+        let is_head = first.len() == 40 && first.bytes().all(|b| b.is_ascii_hexdigit());
+        if is_head {
+            let nums: Vec<u32> = parts.filter_map(|p| p.parse().ok()).collect();
+            if let [_, start, count] = nums[..] {
+                raw.push((first.to_string(), start, count));
+                commits.entry(first.to_string()).or_default();
+                current = Some(first.to_string());
+            }
+            continue;
+        }
+        let Some(sha) = &current else { continue };
+        let c = commits.entry(sha.clone()).or_default();
+        if let Some(v) = line.strip_prefix("author ") {
+            c.author = v.to_string();
+        } else if let Some(v) = line.strip_prefix("author-time ") {
+            c.time = v.trim().parse().unwrap_or(0);
+        } else if let Some(v) = line.strip_prefix("summary ") {
+            c.summary = v.to_string();
+        } else if line.starts_with("filename ") {
+            current = None;
+        }
+    }
+    raw.sort_by_key(|(_, start, _)| *start);
+    let mut hunks: Vec<BlameHunk> = Vec::new();
+    for (sha, start, count) in raw {
+        if let Some(last) = hunks.last_mut()
+            && last.commit == sha
+            && last.start + last.lines == start
+        {
+            last.lines += count;
+            continue;
+        }
+        let uncommitted = sha.bytes().all(|b| b == b'0');
+        let c = commits.get(&sha).cloned().unwrap_or_default();
+        hunks.push(if uncommitted {
+            BlameHunk {
+                start,
+                lines: count,
+                commit: sha,
+                author: String::new(),
+                date: 0,
+                summary: String::new(),
+                uncommitted: true,
+            }
+        } else {
+            BlameHunk {
+                start,
+                lines: count,
+                commit: sha,
+                author: c.author,
+                date: c.time * 1000,
+                summary: c.summary,
+                uncommitted: false,
+            }
+        });
+    }
+    hunks
 }

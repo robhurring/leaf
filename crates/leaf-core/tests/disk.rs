@@ -298,3 +298,77 @@ async fn read_reports_the_creation_time_where_the_filesystem_has_one() {
         assert!(created > 0.0 && created <= d.mtime + 1.0);
     }
 }
+
+#[tokio::test]
+async fn blame_groups_lines_by_commit_and_marks_uncommitted_ones() {
+    let repo = tempfile::tempdir().unwrap();
+    let r = repo.path().canonicalize().unwrap();
+    let git = |args: &[&str], who: &str| {
+        let st = Command::new("git")
+            .args([
+                "-c",
+                &format!("user.name={who}"),
+                "-c",
+                "user.email=t@example.com",
+            ])
+            .args(args)
+            .current_dir(&r)
+            .output()
+            .unwrap();
+        assert!(
+            st.status.success(),
+            "git {args:?}: {}",
+            String::from_utf8_lossy(&st.stderr)
+        );
+    };
+    git(&["init", "-q"], "A");
+    std::fs::write(r.join("doc.md"), "one\ntwo\nthree\n").unwrap();
+    std::fs::write(r.join("untracked.md"), "u\n").unwrap();
+    git(&["add", "doc.md"], "Ann");
+    git(&["commit", "-q", "-m", "first"], "Ann");
+    std::fs::write(r.join("doc.md"), "one\nTWO\nthree\nfour\n").unwrap();
+    git(&["commit", "-q", "-am", "second"], "Bo");
+    std::fs::write(r.join("doc.md"), "one\nTWO\nTHREE\nfour\n").unwrap();
+
+    let s = src(&r);
+    let blame = s
+        .blame("doc.md")
+        .await
+        .unwrap()
+        .expect("a tracked file has blame");
+    let shape: Vec<(u32, u32, &str, &str, bool)> = blame
+        .hunks
+        .iter()
+        .map(|h| {
+            (
+                h.start,
+                h.lines,
+                h.author.as_str(),
+                h.summary.as_str(),
+                h.uncommitted,
+            )
+        })
+        .collect();
+    assert_eq!(
+        shape,
+        vec![
+            (1, 1, "Ann", "first", false),
+            (2, 1, "Bo", "second", false),
+            (3, 1, "", "", true),
+            (4, 1, "Bo", "second", false),
+        ]
+    );
+    assert_eq!(blame.hunks[0].commit.len(), 40);
+    assert!(blame.hunks[0].date > 1_600_000_000_000, "unix milliseconds");
+    assert_eq!(blame.hunks[1].commit, blame.hunks[3].commit);
+    // Untracked files and folders outside git have none.
+    assert!(s.blame("untracked.md").await.unwrap().is_none());
+    assert!(
+        src(&fixture().root)
+            .blame("README.md")
+            .await
+            .unwrap()
+            .is_none()
+    );
+    assert!(s.blame("../escape.md").await.is_err());
+}

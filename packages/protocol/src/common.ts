@@ -75,6 +75,21 @@ export const GitInfo = z.object({
 });
 export type GitInfo = z.infer<typeof GitInfo>;
 
+/** Consecutive lines last changed by the same commit (`git blame`, grouped). */
+export const BlameHunk = z.object({
+  /** 1-based first line. */
+  start: z.number().int().positive(),
+  lines: z.number().int().positive(),
+  commit: z.string(),
+  author: z.string(),
+  /** Unix milliseconds of the commit's author date. */
+  date: z.number(),
+  summary: z.string(),
+  /** Changed in the working tree and not committed yet (no commit, author, or date). */
+  uncommitted: z.boolean().optional(),
+});
+export type BlameHunk = z.infer<typeof BlameHunk>;
+
 export const RootInfo = z.object({ kind: z.enum(['file', 'dir']), name: z.string() });
 export type RootInfo = z.infer<typeof RootInfo>;
 

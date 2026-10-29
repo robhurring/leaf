@@ -1,0 +1,25 @@
+{
+  "type": "blameHunks",
+  "path": "docs/guide.md",
+  "hunks": [
+    {
+      "start": 1,
+      "lines": 3,
+      "commit": "abcdef1234567890abcdef1234567890abcdef12",
+      "author": "Rob",
+      "date": 1700000000000,
+      "summary": "docs: guide"
+    },
+    {
+      "start": 4,
+      "lines": 1,
+      "commit": "0000000000000000000000000000000000000000",
+      "author": "",
+      "date": 0,
+      "summary": "",
+      "uncommitted": true
+    }
+  ],
+  "repoUrl": "https://github.com/rob/leaf",
+  "inReplyTo": "b"
+}

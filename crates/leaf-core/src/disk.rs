@@ -328,6 +328,15 @@ impl Source for DiskSource {
         })
     }
 
+    async fn blame(&self, path: &str) -> Result<Option<crate::source::Blame>, SourceError> {
+        let abs = self.locate(path).await?;
+        let mtime = tokio::fs::metadata(&abs)
+            .await
+            .map(|m| mtime_ms(&m))
+            .unwrap_or_default();
+        Ok(self.git.blame(&abs, mtime).await)
+    }
+
     async fn locate(&self, path: &str) -> Result<PathBuf, SourceError> {
         let abs = self.resolve(path)?;
         let not_found = || {

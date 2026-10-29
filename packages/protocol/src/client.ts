@@ -37,6 +37,13 @@ export const SearchTextMessage = z.object({
   ...envelope,
 });
 
+/** Who last changed each line of a file, from git. */
+export const BlameMessage = z.object({
+  type: z.literal('blame'),
+  path: z.string(),
+  ...envelope,
+});
+
 /** A patch of reader settings for the server to keep. */
 export const PreferencesMessage = z.object({
   type: z.literal('preferences'),
@@ -53,6 +60,7 @@ export const ClientMessage = z.discriminatedUnion('type', [
   SearchMessage,
   SearchTextMessage,
   PreferencesMessage,
+  BlameMessage,
 ]);
 
 export type HelloMessage = z.infer<typeof HelloMessage>;
@@ -63,6 +71,7 @@ export type UnsubscribeMessage = z.infer<typeof UnsubscribeMessage>;
 export type SearchMessage = z.infer<typeof SearchMessage>;
 export type SearchTextMessage = z.infer<typeof SearchTextMessage>;
 export type PreferencesMessage = z.infer<typeof PreferencesMessage>;
+export type BlameMessage = z.infer<typeof BlameMessage>;
 export type ClientMessage = z.infer<typeof ClientMessage>;
 export type ClientMessageType = ClientMessage['type'];
 

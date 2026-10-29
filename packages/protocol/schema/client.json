@@ -214,6 +214,26 @@
             "preferences"
           ],
           "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "type": {
+              "type": "string",
+              "const": "blame"
+            },
+            "path": {
+              "type": "string"
+            },
+            "id": {
+              "$ref": "#/definitions/client/anyOf/0/properties/id"
+            }
+          },
+          "required": [
+            "type",
+            "path"
+          ],
+          "additionalProperties": false
         }
       ]
     }

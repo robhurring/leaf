@@ -426,6 +426,73 @@
           "properties": {
             "type": {
               "type": "string",
+              "const": "blameHunks"
+            },
+            "path": {
+              "type": "string"
+            },
+            "hunks": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "start": {
+                    "type": "integer",
+                    "exclusiveMinimum": 0
+                  },
+                  "lines": {
+                    "type": "integer",
+                    "exclusiveMinimum": 0
+                  },
+                  "commit": {
+                    "type": "string"
+                  },
+                  "author": {
+                    "type": "string"
+                  },
+                  "date": {
+                    "type": "number"
+                  },
+                  "summary": {
+                    "type": "string"
+                  },
+                  "uncommitted": {
+                    "type": "boolean"
+                  }
+                },
+                "required": [
+                  "start",
+                  "lines",
+                  "commit",
+                  "author",
+                  "date",
+                  "summary"
+                ],
+                "additionalProperties": false
+              }
+            },
+            "repoUrl": {
+              "type": "string"
+            },
+            "id": {
+              "$ref": "#/definitions/server/anyOf/0/properties/id"
+            },
+            "inReplyTo": {
+              "$ref": "#/definitions/server/anyOf/0/properties/inReplyTo"
+            }
+          },
+          "required": [
+            "type",
+            "path",
+            "hunks"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "type": {
+              "type": "string",
               "const": "error"
             },
             "code": {

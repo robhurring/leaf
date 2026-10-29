@@ -1,8 +1,8 @@
 use serde::{Deserialize, Serialize};
 
 use crate::{
-    Capabilities, Change, Config, Encoding, Entry, ErrorCode, GitInfo, Participant, Preferences,
-    RootInfo,
+    BlameHunk, Capabilities, Change, Config, Encoding, Entry, ErrorCode, GitInfo, Participant,
+    Preferences, RootInfo,
 };
 
 /// One line containing a text query: 1-based line number and the line's text.
@@ -82,6 +82,16 @@ pub enum ServerMessage {
         #[serde(skip_serializing_if = "Option::is_none")]
         in_reply_to: Option<String>,
     },
+    /// The reply to `blame`: line groups in order; empty when the file isn't in git.
+    #[serde(rename_all = "camelCase")]
+    BlameHunks {
+        path: String,
+        hunks: Vec<BlameHunk>,
+        #[serde(skip_serializing_if = "Option::is_none")]
+        repo_url: Option<String>,
+        #[serde(skip_serializing_if = "Option::is_none")]
+        in_reply_to: Option<String>,
+    },
     #[serde(rename_all = "camelCase")]
     Error {
         code: ErrorCode,
@@ -103,6 +113,7 @@ impl ServerMessage {
             | ServerMessage::Changed { in_reply_to, .. }
             | ServerMessage::Matches { in_reply_to, .. }
             | ServerMessage::TextMatches { in_reply_to, .. }
+            | ServerMessage::BlameHunks { in_reply_to, .. }
             | ServerMessage::Error { in_reply_to, .. } => in_reply_to,
         };
         *slot = id.map(str::to_string);

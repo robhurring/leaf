@@ -321,6 +321,19 @@ impl Engine {
                 self.prefs.save(preferences).await;
                 vec![]
             }
+            ClientMessage::Blame { path, .. } => match self.source.blame(&path).await {
+                Ok(blame) => {
+                    let (hunks, repo_url) =
+                        blame.map(|b| (b.hunks, b.repo_url)).unwrap_or_default();
+                    vec![ServerMessage::BlameHunks {
+                        path,
+                        hunks,
+                        repo_url,
+                        in_reply_to: None,
+                    }]
+                }
+                Err(e) => vec![error_message(e)],
+            },
         };
         for m in &reply {
             tracing::debug!(client = session.0, msg = ?m, "send");

@@ -3,7 +3,9 @@
 use std::fmt;
 
 use async_trait::async_trait;
-use leaf_protocol::{Capabilities, Encoding, Entry, ErrorCode, GitInfo, RootInfo, TextHit};
+use leaf_protocol::{
+    BlameHunk, Capabilities, Encoding, Entry, ErrorCode, GitInfo, RootInfo, TextHit,
+};
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct FileData {
@@ -19,6 +21,14 @@ pub struct FileData {
     /// Unix milliseconds the file was created, where the filesystem records it.
     pub created: Option<f64>,
     pub git: Option<GitInfo>,
+}
+
+/// Who last changed each line of a file, from git.
+#[derive(Debug, Clone, PartialEq)]
+pub struct Blame {
+    pub hunks: Vec<BlameHunk>,
+    /// The repository's web page, for linking commits.
+    pub repo_url: Option<String>,
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -54,6 +64,10 @@ pub trait Source: Send + Sync {
     /// Lines containing `q` (case-insensitive) across the source's text files.
     async fn search_text(&self, _q: &str, _limit: usize) -> Result<Vec<TextHit>, SourceError> {
         Ok(Vec::new())
+    }
+    /// Who last changed each line of `path`; None when the file isn't in git.
+    async fn blame(&self, _path: &str) -> Result<Option<Blame>, SourceError> {
+        Ok(None)
     }
     /// The file on disk for `path`, when this source has one: confined, not ignored, a file.
     /// Lets a transport stream bytes without reading them through `read`.

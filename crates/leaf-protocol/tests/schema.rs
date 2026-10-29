@@ -24,6 +24,7 @@ fn every_client_fixture_round_trips_and_validates() {
         "search",
         "searchText",
         "preferences",
+        "blame",
     ] {
         let v = fixture(name);
         assert!(
@@ -49,6 +50,7 @@ fn every_server_fixture_round_trips_and_validates() {
         "changed",
         "matches",
         "textMatches",
+        "blameHunks",
         "error",
     ] {
         let v = fixture(name);

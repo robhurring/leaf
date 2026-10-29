@@ -83,6 +83,23 @@ pub struct GitInfo {
     pub repo_url: Option<String>,
 }
 
+/// Consecutive lines last changed by the same commit (`git blame`, grouped).
+#[derive(Serialize, Deserialize, Clone, Debug, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct BlameHunk {
+    /// 1-based first line.
+    pub start: u32,
+    pub lines: u32,
+    pub commit: String,
+    pub author: String,
+    /// Unix milliseconds of the commit's author date.
+    pub date: i64,
+    pub summary: String,
+    /// Changed in the working tree and not committed yet (no commit, author, or date).
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub uncommitted: bool,
+}
+
 #[derive(Serialize, Deserialize, Clone, Copy, Debug, PartialEq, Eq)]
 #[serde(rename_all = "lowercase")]
 pub enum Theme {

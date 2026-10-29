@@ -1,6 +1,7 @@
 import { z } from 'zod';
 import {
   PROTOCOL_VERSION,
+  BlameHunk,
   Capabilities,
   Config,
   Entry,
@@ -72,6 +73,15 @@ export const TextMatchesMessage = z.object({
   hits: z.array(TextHit),
   ...replyEnvelope,
 });
+/** The reply to `blame`: line groups in order; empty when the file isn't in git. */
+export const BlameHunksMessage = z.object({
+  type: z.literal('blameHunks'),
+  path: z.string(),
+  hunks: z.array(BlameHunk),
+  /** Web URL of the repository, for linking commits. */
+  repoUrl: z.string().optional(),
+  ...replyEnvelope,
+});
 export const ErrorMessage = z.object({
   type: z.literal('error'),
   code: ErrorCode,
@@ -87,6 +97,7 @@ export const ServerMessage = z.discriminatedUnion('type', [
   ChangedMessage,
   MatchesMessage,
   TextMatchesMessage,
+  BlameHunksMessage,
   ErrorMessage,
 ]);
 
@@ -97,6 +108,7 @@ export type ChangedMessage = z.infer<typeof ChangedMessage>;
 export type MatchesMessage = z.infer<typeof MatchesMessage>;
 export type TextHit = z.infer<typeof TextHit>;
 export type TextMatchesMessage = z.infer<typeof TextMatchesMessage>;
+export type BlameHunksMessage = z.infer<typeof BlameHunksMessage>;
 export type ErrorMessage = z.infer<typeof ErrorMessage>;
 export type ServerMessage = z.infer<typeof ServerMessage>;
 export type ServerMessageType = ServerMessage['type'];

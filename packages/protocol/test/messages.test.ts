@@ -148,4 +148,24 @@ describe('protocol', () => {
     });
     expect(welcome).toMatchObject({ capabilities: { rawUrls: true } });
   });
+
+  it('blame asks for a path; blameHunks answers with line groups, uncommitted ones marked', () => {
+    expect(parseClientMessage({ type: 'blame', path: 'a.md', id: 'b' })).toEqual({
+      type: 'blame',
+      path: 'a.md',
+      id: 'b',
+    });
+    const reply = parseServerMessage({
+      type: 'blameHunks',
+      path: 'a.md',
+      hunks: [
+        { start: 1, lines: 2, commit: 'c', author: 'Rob', date: 1, summary: 's' },
+        { start: 3, lines: 1, commit: '0', author: '', date: 0, summary: '', uncommitted: true },
+      ],
+    });
+    expect(reply.type === 'blameHunks' && reply.hunks[1]!.uncommitted).toBe(true);
+    expect(() =>
+      parseServerMessage({ type: 'blameHunks', path: 'a.md', hunks: [{ start: 0, lines: 1 }] }),
+    ).toThrow();
+  });
 });

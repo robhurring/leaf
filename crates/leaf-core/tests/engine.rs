@@ -372,3 +372,24 @@ async fn search_text_replies_with_text_matches() {
             if q == "hi" && id == "t" && hits.len() == 1 && hits[0].path == "README.md" && hits[0].line == 1
     ));
 }
+
+#[tokio::test]
+async fn blame_replies_in_kind_and_empty_when_the_source_has_none() {
+    let (e, _d) = engine().await;
+    let s = e.connect();
+    e.handle(s, hello("h")).await;
+    let out = e
+        .handle(
+            s,
+            ClientMessage::Blame {
+                path: "README.md".into(),
+                id: Some("b".into()),
+            },
+        )
+        .await;
+    assert!(matches!(
+        &out[0],
+        ServerMessage::BlameHunks { path, hunks, repo_url: None, in_reply_to: Some(id) }
+            if path == "README.md" && hunks.is_empty() && id == "b"
+    ));
+}

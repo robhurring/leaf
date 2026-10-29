@@ -59,6 +59,13 @@ pub enum ClientMessage {
         #[serde(skip_serializing_if = "Option::is_none")]
         id: Option<String>,
     },
+    /// Who last changed each line of a file, from git.
+    #[serde(rename_all = "camelCase")]
+    Blame {
+        path: String,
+        #[serde(skip_serializing_if = "Option::is_none")]
+        id: Option<String>,
+    },
 }
 
 impl ClientMessage {
@@ -71,7 +78,8 @@ impl ClientMessage {
             | ClientMessage::Unsubscribe { id, .. }
             | ClientMessage::Search { id, .. }
             | ClientMessage::SearchText { id, .. }
-            | ClientMessage::Preferences { id, .. } => id.as_deref(),
+            | ClientMessage::Preferences { id, .. }
+            | ClientMessage::Blame { id, .. } => id.as_deref(),
         }
     }
 }
@@ -85,6 +93,7 @@ pub const CLIENT_MESSAGE_TYPES: &[&str] = &[
     "search",
     "searchText",
     "preferences",
+    "blame",
 ];
 
 pub fn is_known_client_type(t: &str) -> bool {
