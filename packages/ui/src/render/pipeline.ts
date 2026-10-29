@@ -1,5 +1,12 @@
 // markdown string + registries → React element. Pure: no store, no network.
-import { createElement, Fragment, type ReactElement, type ReactNode } from 'react';
+import {
+  cloneElement,
+  createElement,
+  Fragment,
+  isValidElement,
+  type ReactElement,
+  type ReactNode,
+} from 'react';
 import { unified } from 'unified';
 import remarkParse from 'remark-parse';
 import remarkFrontmatter from 'remark-frontmatter';
@@ -125,8 +132,19 @@ export async function renderMarkdown(src: string, opts: RenderOptions): Promise<
     img: image(opts.docPath),
     'leaf-code': CodeBlock as never,
     ...opts.components,
-    'leaf-node': ((props: { 'data-slot': string }) =>
-      createElement(Fragment, null, slots[Number(props['data-slot'])] as ReactNode)) as never,
+    // A rendered block (a diagram's frame) gets the fence's source lines it stands for.
+    'leaf-node': ((props: { 'data-slot': string; 'data-pos'?: string }) => {
+      const node = slots[Number(props['data-slot'])] as ReactNode;
+      return createElement(
+        Fragment,
+        null,
+        props['data-pos'] && isValidElement(node)
+          ? cloneElement(node as ReactElement<{ 'data-pos'?: string }>, {
+              'data-pos': props['data-pos'],
+            })
+          : node,
+      );
+    }) as never,
   };
   const element = toJsxRuntime(tree, {
     Fragment: JsxFragment,

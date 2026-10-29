@@ -28,6 +28,8 @@ type Props = {
   lang?: string;
   children: ReactNode;
   className?: string;
+  /** The block's source lines in its document, for overlays that anchor to them. */
+  'data-pos'?: string;
 };
 
 /** The rendered picture inside the frame: the diagram's svg or img, never a toolbar icon. */
@@ -42,7 +44,14 @@ type View = { x: number; y: number; scale: number };
 const HOME: View = { x: 0, y: 0, scale: 1 };
 const clampScale = (s: number) => Math.min(8, Math.max(0.25, s));
 
-export function BlockFrame({ viewer, props, lang, children, className = '' }: Props) {
+export function BlockFrame({
+  viewer,
+  props,
+  lang,
+  children,
+  className = '',
+  'data-pos': pos,
+}: Props) {
   const host = useRef<HTMLDivElement>(null);
   const [result, setResult] = useState<'ok' | 'failed' | null>(null);
   const [picture, setPicture] = useState<'svg' | 'img' | null>(null);
@@ -228,6 +237,7 @@ export function BlockFrame({ viewer, props, lang, children, className = '' }: Pr
     <div
       ref={host}
       className={`leaf-block leaf-frame ${className}`}
+      data-pos={pos}
       data-lang={lang ?? viewer.id}
       data-viewer={viewer.id}
       data-full={slot ? '' : undefined}

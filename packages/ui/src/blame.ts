@@ -63,3 +63,18 @@ export function blameTitle(h: BlameHunk, now = Date.now()): string {
   if (h.uncommitted) return 'Changed here, not committed yet';
   return `${h.commit.slice(0, 7)} ${h.author}, ${formatWhen(h.date, now)}\n${h.summary}`;
 }
+
+/** The narrowest the text may get beside blame before the annotations step aside. */
+const MIN_TEXT = 560;
+
+/** Whether a blame column of `blameWidth` leaves room to read in an area `width` wide. */
+export function blameFits(width: number, blameWidth: number): boolean {
+  // Zero: not measured yet; assume it fits rather than flash hidden.
+  return width === 0 || width - blameWidth >= MIN_TEXT;
+}
+
+/** `docs: guide (#42)` → the message and the pull request number GitHub appended. */
+export function splitPr(summary: string): { message: string; pr?: string } {
+  const m = /\s*\(#(\d+)\)\s*$/.exec(summary);
+  return m ? { message: summary.slice(0, m.index), pr: m[1] } : { message: summary };
+}

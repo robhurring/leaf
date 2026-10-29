@@ -13,6 +13,9 @@ export const SIDEBAR_MIN = 160;
 export const SIDEBAR_MAX = 480;
 export const SIDEBAR_DEFAULT = 260;
 export type Side = 'tree' | 'outline';
+/** The blame column's width range, in CSS pixels. */
+export const BLAME_MIN = 160;
+export const BLAME_MAX = 480;
 
 export type UiState = {
   treeOpen: boolean;
@@ -29,10 +32,11 @@ export type UiState = {
   setShowGit(v: boolean): void;
   /** Git blame beside the lines of code and markdown files. */
   blame: boolean;
-  /** Every blame block expanded to its commit, author, and date. */
-  blameDetails: boolean;
+  /** The blame annotation column's width in CSS pixels. */
+  blameWidth: number;
   setBlame(v: boolean): void;
-  setBlameDetails(v: boolean): void;
+  /** Clamped to BLAME_MIN..BLAME_MAX. */
+  setBlameWidth(px: number): void;
   setTreeOpen(v: boolean): void;
   setOutlineOpen(v: boolean): void;
   setNumbering(v: boolean): void;
@@ -56,7 +60,7 @@ export const UI_DEFAULTS = {
   outlineWidth: SIDEBAR_DEFAULT,
   showGit: true,
   blame: false,
-  blameDetails: false,
+  blameWidth: 220,
 };
 
 export const useUi = create<UiState>()(
@@ -66,7 +70,8 @@ export const useUi = create<UiState>()(
       setTreeOpen: (treeOpen) => set({ treeOpen }),
       setShowGit: (showGit) => set({ showGit }),
       setBlame: (blame) => set({ blame }),
-      setBlameDetails: (blameDetails) => set({ blameDetails }),
+      setBlameWidth: (px) =>
+        set({ blameWidth: Math.round(Math.min(BLAME_MAX, Math.max(BLAME_MIN, px))) }),
       setOutlineOpen: (outlineOpen) => set({ outlineOpen }),
       setNumbering: (numbering) => set({ numbering }),
       setTheme: (theme) => set({ theme }),

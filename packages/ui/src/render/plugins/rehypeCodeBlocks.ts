@@ -54,12 +54,14 @@ async function resolveBlock(
   deps: CodeBlockDeps,
   original: Element,
 ): Promise<Element> {
+  // The fence's source lines (from rehypePos) stay on whatever replaces it.
+  const pos = original.properties['data-pos'] as string | undefined;
   const custom = deps.handlers?.renderBlock?.(lang, source, meta);
-  if (custom !== undefined) return slot(custom, deps.slots);
+  if (custom !== undefined) return slot(custom, deps.slots, pos);
   const entry = deps.blocks.resolve(lang);
-  if (entry) return slot(entry.render(source, meta, deps.ctx), deps.slots);
+  if (entry) return slot(entry.render(source, meta, deps.ctx), deps.slots, pos);
   const unknown = deps.handlers?.onUnknownBlock?.(lang, source);
-  if (unknown !== undefined) return slot(unknown, deps.slots);
+  if (unknown !== undefined) return slot(unknown, deps.slots, pos);
   const highlighted = deps.highlight === false ? null : await highlightToHast(source, lang);
   return {
     type: 'element',
@@ -69,6 +71,7 @@ async function resolveBlock(
       'data-meta': meta || undefined,
       'data-code': source,
       'data-doc': deps.ctx.docPath,
+      'data-pos': pos,
     },
     position: original.position,
     children: highlighted
@@ -77,12 +80,12 @@ async function resolveBlock(
   };
 }
 
-function slot(node: ReactNode, slots: NodeSlots): Element {
+function slot(node: ReactNode, slots: NodeSlots, pos?: string): Element {
   slots.push(node);
   return {
     type: 'element',
     tagName: 'leaf-node',
-    properties: { 'data-slot': String(slots.length - 1) },
+    properties: { 'data-slot': String(slots.length - 1), 'data-pos': pos },
     children: [],
   };
 }

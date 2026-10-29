@@ -3,6 +3,7 @@
 import { useContext, useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { DocToolsContext } from '../../components/Properties.js';
+import { BlameResizer, BlameShownContext } from '../../components/BlameColumn.js';
 import type { EditorView } from '@codemirror/view';
 import type { Viewer, ViewerProps } from '../types.js';
 import { BinaryCard } from '../binary/index.js';
@@ -10,7 +11,6 @@ import { track } from '../../render/progress.js';
 import { load } from '../../render/connection.js';
 import { Check, Copy, WrapText } from '../../icons/index.js';
 import { useAppearance } from '../appearance.js';
-import { useUi } from '../../store/ui.js';
 import { useDocuments } from '../../store/documents.js';
 
 /** `#L3` or `#L3-L7` → a 1-based line range. */
@@ -48,32 +48,16 @@ export function CodeRich(props: ViewerProps) {
   // The view is created asynchronously; effects that configure it wait for this.
   const [ready, setReady] = useState(0);
 
-  // Blame in the gutter, for a whole file in git with blame switched on.
-  const blameOn = useUi((s) => s.blame) && !!slot && !!file.git;
-  const blameDetails = useUi((s) => s.blameDetails);
+  // Blame in the gutter, for a whole file in git with blame showing.
+  const shown = useContext(BlameShownContext);
+  const blameOn = !!shown && !!slot && !!file.git;
   const blame = useDocuments((s) => s.blame[file.path]);
-  const [openHunks, setOpenHunks] = useState<ReadonlySet<number>>(new Set());
   useEffect(() => {
     const view = viewRef.current;
     const editor = editorRef.current;
     if (!view || !editor) return;
-    editor.setBlame(
-      view,
-      blameOn && blame
-        ? {
-            hunks: blame.hunks,
-            details: blameDetails,
-            open: openHunks,
-            onToggle: (start) =>
-              setOpenHunks((o) => {
-                const next = new Set(o);
-                if (!next.delete(start)) next.add(start);
-                return next;
-              }),
-          }
-        : null,
-    );
-  }, [ready, blameOn, blame, blameDetails, openHunks]);
+    editor.setBlame(view, blameOn && blame ? { hunks: blame.hunks, repoUrl: blame.repoUrl } : null);
+  }, [ready, blameOn, blame]);
   useEffect(() => {
     if (viewRef.current && editorRef.current) editorRef.current.setDark(viewRef.current, dark);
   }, [dark]);
@@ -157,9 +141,16 @@ export function CodeRich(props: ViewerProps) {
       className="leaf-code-file"
       data-lang={file.lang ?? 'text'}
       data-full={slot ? '' : undefined}
+      data-blame={blameOn && blame ? '' : undefined}
+      style={
+        blameOn && shown
+          ? ({ '--leaf-blame-w': `${shown.width}px` } as React.CSSProperties)
+          : undefined
+      }
     >
       {slot ? createPortal(tools, slot) : <div className="leaf-code-file-bar">{tools}</div>}
       <div ref={host} className="leaf-code-file-editor" />
+      {blameOn && blame && shown && <BlameResizer width={shown.width} />}
     </div>
   );
 }

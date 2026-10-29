@@ -261,7 +261,7 @@ describe('Reader', () => {
       commit: 'b'.repeat(40),
       author: 'Bo',
       date: Date.now() - 2 * 86_400_000,
-      summary: 'setup',
+      summary: 'setup (#42)',
     };
     const blamed = () =>
       scripted(
@@ -285,7 +285,7 @@ describe('Reader', () => {
           },
         },
       ).source;
-    beforeEach(() => useUi.setState({ blame: false, blameDetails: false }));
+    beforeEach(() => useUi.setState({ blame: false, blameWidth: 220 }));
 
     it('the header offers blame for markdown and code in git, not for diagrams or files outside git', async () => {
       render(<Reader source={blamed()} />);
@@ -302,28 +302,73 @@ describe('Reader', () => {
       expect(within(head()).queryByRole('button', { name: 'Blame' })).toBeNull();
     });
 
-    it('markdown: a bar beside each block; one click expands it, Details expands them all', async () => {
+    it('markdown: every block annotated with commit, author, age, and the commit message', async () => {
       render(<Reader source={blamed()} />);
       await screen.findByRole('heading', { name: 'Title', level: 1 });
       const head = screen.getByRole('region', { name: 'File' });
-      expect(document.querySelector('.leaf-blame-bar')).toBeNull();
+      expect(document.querySelector('.leaf-blame-block')).toBeNull();
       fireEvent.click(within(head).getByRole('button', { name: 'Blame' }));
       await waitFor(() =>
-        expect(document.querySelectorAll('.leaf-blame-bar').length).toBeGreaterThan(1),
+        expect(document.querySelectorAll('.leaf-blame-block').length).toBeGreaterThan(1),
       );
-      const bars = [...document.querySelectorAll<HTMLElement>('.leaf-blame-bar')];
+      const blocks = [...document.querySelectorAll<HTMLElement>('.leaf-blame-block')];
       // The title (line 1) is the old commit; a later block is the fresh one.
-      expect(bars[0]!.title).toContain('aaaaaaa Ann');
-      expect(bars.some((b) => b.title.includes('bbbbbbb Bo'))).toBe(true);
-      expect(document.querySelector('.leaf-blame-label')).toBeNull();
-      fireEvent.click(bars[0]!);
-      expect(document.querySelectorAll('.leaf-blame-label')).toHaveLength(1);
-      expect(document.querySelector('.leaf-blame-label')!.textContent).toMatch(/^aaaaaaa Ann /);
-      fireEvent.click(within(head).getByRole('button', { name: 'Blame details' }));
-      expect(document.querySelectorAll('.leaf-blame-label').length).toBe(bars.length);
-      expect(useUi.getState().blameDetails).toBe(true);
+      expect(blocks[0]!.querySelector('.leaf-blame-label')!.textContent).toMatch(/^aaaaaaa Ann /);
+      expect(blocks[0]!.querySelector('.leaf-blame-summary')!.textContent).toBe('start');
+      // The commit and its pull request link out; the PR number leaves the message line.
+      const sha = blocks[0]!.querySelector<HTMLAnchorElement>('a.leaf-blame-sha')!;
+      expect(sha.textContent).toBe('aaaaaaa');
+      expect(sha.href).toBe(`https://github.com/rob/leaf/commit/${'a'.repeat(40)}`);
+      const fresh = blocks.find(
+        (b) => b.querySelector('.leaf-blame-summary')?.textContent === 'setup',
+      )!;
+      expect(fresh).toBeTruthy();
+      const pr = fresh.querySelector<HTMLAnchorElement>('a.leaf-blame-pr')!;
+      expect(pr.textContent).toBe('#42');
+      expect(pr.href).toBe('https://github.com/rob/leaf/pull/42');
+      expect(blocks[0]!.querySelector('a.leaf-blame-pr')).toBeNull();
+      // One mode: no separate details control.
+      expect(within(head).queryByRole('button', { name: 'Blame details' })).toBeNull();
       fireEvent.click(within(head).getByRole('button', { name: 'Blame' }));
-      expect(document.querySelector('.leaf-blame-bar')).toBeNull();
+      expect(document.querySelector('.leaf-blame-block')).toBeNull();
+    });
+
+    it('a fenced code block, wrapped in its frame, is annotated like any block', async () => {
+      useUi.setState({ blame: true });
+      const md = '# T\n\n```js\nconst a = 1\n```\n\nAfter.\n';
+      const source = scripted(
+        { 'README.md': md },
+        {
+          git: { 'README.md': git },
+          blame: {
+            'README.md': [
+              { start: 1, lines: 2, ...old },
+              { start: 3, lines: 3, ...fresh },
+              { start: 6, lines: 2, ...old },
+            ],
+          },
+        },
+      ).source;
+      render(<Reader source={source} />);
+      await screen.findByRole('heading', { name: 'T', level: 1 });
+      await waitFor(() => expect(document.querySelectorAll('.leaf-blame-block')).toHaveLength(3));
+      const labels = [...document.querySelectorAll('.leaf-blame-block .leaf-blame-label')].map(
+        (l) => l.textContent!.slice(0, 11),
+      );
+      expect(labels).toEqual(['aaaaaaa Ann', 'bbbbbbb Bo ', 'aaaaaaa Ann']);
+    });
+
+    it('the annotation column can be dragged wider or narrower, down to a minimum', async () => {
+      useUi.setState({ blame: true, blameWidth: 220 });
+      render(<Reader source={blamed()} />);
+      await screen.findByRole('heading', { name: 'Title', level: 1 });
+      const handle = await screen.findByRole('separator', { name: 'Resize blame' });
+      expect(handle.getAttribute('aria-valuenow')).toBe('220');
+      fireEvent.keyDown(handle, { key: 'ArrowRight' });
+      expect(useUi.getState().blameWidth).toBe(236);
+      for (let i = 0; i < 20; i++) fireEvent.keyDown(handle, { key: 'ArrowLeft' });
+      expect(useUi.getState().blameWidth).toBe(160);
+      expect(JSON.parse(localStorage.getItem('leaf.ui')!).state.blameWidth).toBe(160);
     });
 
     it('code files: blame in the editor gutter', async () => {
@@ -341,11 +386,14 @@ describe('Reader', () => {
       ];
       expect(cells.some((c) => c.title.includes('aaaaaaa Ann'))).toBe(true);
       expect(cells.some((c) => c.title.includes('bbbbbbb Bo'))).toBe(true);
-      useUi.setState({ blameDetails: true });
+      // Annotated from the start: the label on each block's first line, its message under it.
       await waitFor(() =>
         expect(document.querySelector('.cm-blame-gutter .leaf-blame-label')?.textContent).toMatch(
           /^aaaaaaa Ann /,
         ),
+      );
+      expect(document.querySelector('.cm-blame-gutter .leaf-blame-summary')?.textContent).toBe(
+        'start',
       );
     });
   });

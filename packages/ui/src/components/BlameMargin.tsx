@@ -1,9 +1,13 @@
-// Blame beside a rendered markdown document: each top-level block gets a bar in the
-// left margin, shaded by how recently its newest line changed. A click on a bar shows
-// that block's commit, author, and date; with details on, every block shows them.
-import { useLayoutEffect, useState } from 'react';
+// Blame beside a rendered markdown document: each top-level block gets a region of the
+// annotation column, as tall as the block, tinted by how recently its newest line
+// changed, with the commit, author, age, and message.
+import { useLayoutEffect, useRef, useState } from 'react';
 import type { BlameHunk } from '@leaf/protocol';
-import { blameLabel, blameTitle, freshness, hunksIn } from '../blame.js';
+import { freshness, hunksIn } from '../blame.js';
+import { BlameAnnotation } from './BlameColumn.js';
+
+/** Blocks shorter than this have room for the label line only. */
+const SHORT = 38;
 
 type Block = { key: string; top: number; height: number; hunk: BlameHunk };
 
@@ -24,75 +28,69 @@ function newest(hunks: BlameHunk[]): BlameHunk | undefined {
 export function BlameMargin({
   host,
   hunks,
-  details,
+  repoUrl,
 }: {
-  /** The element holding the rendered article; bars are placed against it. */
+  /** The element holding the rendered article; regions are placed against it. */
   host: HTMLElement | null;
   hunks: BlameHunk[];
-  details: boolean;
+  repoUrl?: string;
 }) {
   const [blocks, setBlocks] = useState<Block[]>([]);
-  const [open, setOpen] = useState<Set<string>>(new Set());
+  const self = useRef<HTMLDivElement>(null);
 
   useLayoutEffect(() => {
-    const article = host?.querySelector('article');
-    if (!host || !article) return;
+    if (!host) return;
     const measure = () => {
+      const article = host.querySelector('article');
+      if (!article) return setBlocks([]);
       const base = host.getBoundingClientRect().top;
       const out: Block[] = [];
-      for (const el of article.querySelectorAll(':scope > [data-pos]')) {
-        const lines = linesOf(el);
+      for (const child of article.children) {
+        // A block or its frame (a fenced code block's) carries its source lines.
+        const el = child.matches('[data-pos]') ? child : child.querySelector('[data-pos]');
+        const lines = el && linesOf(el);
         if (!lines) continue;
         const hunk = newest(hunksIn(hunks, lines[0], lines[1]));
         if (!hunk) continue;
-        const r = el.getBoundingClientRect();
+        const r = child.getBoundingClientRect();
         out.push({ key: `${lines[0]}`, top: r.top - base, height: r.height, hunk });
       }
       setBlocks(out);
     };
     measure();
-    // Blocks move as images and diagrams load and as the window resizes.
-    if (typeof ResizeObserver === 'undefined') return;
-    const ro = new ResizeObserver(measure);
-    ro.observe(article);
-    return () => ro.disconnect();
+    // The document renders progressively, and blocks move as images and diagrams load
+    // and as the window resizes.
+    // Changes to the margin itself don't move the blocks; ignoring them avoids a loop.
+    const mo = new MutationObserver((records) => {
+      if (records.some((r) => !self.current?.contains(r.target))) measure();
+    });
+    mo.observe(host, { childList: true, subtree: true });
+    const ro = typeof ResizeObserver === 'undefined' ? null : new ResizeObserver(measure);
+    ro?.observe(host);
+    return () => {
+      mo.disconnect();
+      ro?.disconnect();
+    };
   }, [host, hunks]);
 
   const fresh = freshness(hunks);
   return (
-    <div className={`leaf-blame-margin ${details ? 'leaf-blame-details' : ''}`} aria-label="Blame">
-      {blocks.map((b) => {
-        const shown = details || open.has(b.key);
-        return (
-          <div
-            key={b.key}
-            className={`leaf-blame-block ${b.hunk.uncommitted ? 'leaf-blame-uncommitted' : ''}`}
-            style={
-              {
-                top: b.top,
-                height: b.height,
-                '--leaf-blame-fresh': fresh.get(b.hunk.commit) ?? 1,
-              } as React.CSSProperties
-            }
-          >
-            <button
-              type="button"
-              className="leaf-blame-bar"
-              title={blameTitle(b.hunk)}
-              aria-label={blameLabel(b.hunk)}
-              aria-expanded={shown}
-              onClick={() =>
-                setOpen((o) => {
-                  const next = new Set(o);
-                  if (!next.delete(b.key)) next.add(b.key);
-                  return next;
-                })
-              }
-            />
-            {shown && <span className="leaf-blame-label">{blameLabel(b.hunk)}</span>}
-          </div>
-        );
-      })}
+    <div className="leaf-blame-margin" aria-label="Blame" ref={self}>
+      {blocks.map((b) => (
+        <div
+          key={b.key}
+          className={`leaf-blame-block ${b.hunk.uncommitted ? 'leaf-blame-uncommitted' : ''} ${b.height < SHORT ? 'leaf-blame-short' : ''}`}
+          style={
+            {
+              top: b.top,
+              height: b.height,
+              '--leaf-blame-fresh': fresh.get(b.hunk.commit) ?? 1,
+            } as React.CSSProperties
+          }
+        >
+          <BlameAnnotation hunk={b.hunk} repoUrl={repoUrl} />
+        </div>
+      ))}
     </div>
   );
 }

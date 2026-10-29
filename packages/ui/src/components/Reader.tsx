@@ -24,6 +24,8 @@ import { Stage } from '../stage/Stage.js';
 import { useStage } from '../store/stage.js';
 import { ProgressBar } from './ProgressBar.js';
 import { BlameMargin } from './BlameMargin.js';
+import { BlameResizer, BlameShownContext } from './BlameColumn.js';
+import { blameFits } from '../blame.js';
 import { AppearanceContext, useResolvedAppearance } from '../viewers/appearance.js';
 import { AssetContext, rawUrl, type AssetResolver } from '../render/components/assetContext.js';
 import { useAssets } from '../store/assets.js';
@@ -334,6 +336,17 @@ export function Reader(props: ReaderProps) {
     if (blameOn && path) useDocuments.getState().requestBlame(path);
   }, [blameOn, path]);
   const [markdownHost, setMarkdownHost] = useState<HTMLDivElement | null>(null);
+  // The column steps aside when the document area gets too narrow for it and the text.
+  const [mainWidth, setMainWidth] = useState(0);
+  useEffect(() => {
+    const el = mainRef.current;
+    if (!el || typeof ResizeObserver === 'undefined') return;
+    const ro = new ResizeObserver(() => setMainWidth(el.clientWidth));
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, []);
+  const blameShown =
+    blameOn && blameFits(mainWidth, ui.blameWidth) ? { width: ui.blameWidth } : null;
 
   // Only markdown has an outline; other files hide it without touching the saved setting.
   const outlineAvailable = !file || isMarkdown;
@@ -416,9 +429,7 @@ export function Reader(props: ReaderProps) {
                     blameAvailable
                       ? {
                           on: ui.blame,
-                          details: ui.blameDetails,
                           onToggle: () => ui.setBlame(!ui.blame),
-                          onToggleDetails: () => ui.setBlameDetails(!ui.blameDetails),
                         }
                       : undefined
                   }
@@ -435,65 +446,77 @@ export function Reader(props: ReaderProps) {
                     onClose={() => setFind(null)}
                   />
                 )}
-                <DocToolsContext.Provider value={file && !isMarkdown ? toolsEl : null}>
-                  <main className="leaf-main" ref={mainRef}>
-                    <ErrorBoundary label="document" resetKey={`${path}:${file?.mtime ?? ''}`}>
-                      {isMarkdown && file ? (
-                        <div
-                          className="leaf-main-inner"
-                          ref={setMarkdownHost}
-                          data-blame={blameOn ? (ui.blameDetails ? 'details' : 'bars') : undefined}
-                          data-viewer="markdown"
-                          onClick={(e) => {
-                            const a = (e.target as HTMLElement).closest?.(
-                              'a[data-nav]',
-                            ) as HTMLAnchorElement | null;
-                            if (!a || e.metaKey || e.ctrlKey) return;
-                            e.preventDefault();
-                            navigate(a.dataset.nav!);
-                          }}
-                        >
-                          <NumberingContext.Provider value={numbering}>
-                            <Markdown
-                              source={file.content ?? ''}
-                              docPath={file.path}
-                              config={config}
-                              handlers={handlers}
-                              numbering={numbering}
-                              linkBase={base}
-                              onRendered={onRendered}
-                            />
-                          </NumberingContext.Provider>
-                          {blameOn && blame && (
-                            <BlameMargin
-                              host={markdownHost}
-                              hunks={blame.hunks}
-                              details={ui.blameDetails}
-                            />
-                          )}
-                        </div>
-                      ) : nothingToOpen ? (
-                        <div className="leaf-doc-state" role="status">
-                          <p className="leaf-doc-state-title">
-                            No document at the top of this folder
-                          </p>
-                          <p className="leaf-doc-state-detail">Pick a file from the tree.</p>
-                        </div>
-                      ) : (
-                        <DocumentView
-                          file={file}
-                          error={error}
-                          path={path}
-                          config={config}
-                          handlers={handlers}
-                          numbering={numbering}
-                          linkBase={base}
-                          onNavigate={(t) => navigate(t)}
-                        />
-                      )}
-                    </ErrorBoundary>
-                  </main>
-                </DocToolsContext.Provider>
+                <BlameShownContext.Provider value={blameShown}>
+                  <DocToolsContext.Provider value={file && !isMarkdown ? toolsEl : null}>
+                    <main className="leaf-main" ref={mainRef}>
+                      <ErrorBoundary label="document" resetKey={`${path}:${file?.mtime ?? ''}`}>
+                        {isMarkdown && file ? (
+                          <div
+                            className="leaf-main-inner"
+                            ref={setMarkdownHost}
+                            data-blame={blameShown ? '' : undefined}
+                            style={
+                              blameShown
+                                ? ({
+                                    '--leaf-blame-w': `${blameShown.width}px`,
+                                  } as React.CSSProperties)
+                                : undefined
+                            }
+                            data-viewer="markdown"
+                            onClick={(e) => {
+                              const a = (e.target as HTMLElement).closest?.(
+                                'a[data-nav]',
+                              ) as HTMLAnchorElement | null;
+                              if (!a || e.metaKey || e.ctrlKey) return;
+                              e.preventDefault();
+                              navigate(a.dataset.nav!);
+                            }}
+                          >
+                            <NumberingContext.Provider value={numbering}>
+                              <Markdown
+                                source={file.content ?? ''}
+                                docPath={file.path}
+                                config={config}
+                                handlers={handlers}
+                                numbering={numbering}
+                                linkBase={base}
+                                onRendered={onRendered}
+                              />
+                            </NumberingContext.Provider>
+                            {blameShown && blame && (
+                              <>
+                                <BlameMargin
+                                  host={markdownHost}
+                                  hunks={blame.hunks}
+                                  repoUrl={blame.repoUrl}
+                                />
+                                <BlameResizer width={blameShown.width} />
+                              </>
+                            )}
+                          </div>
+                        ) : nothingToOpen ? (
+                          <div className="leaf-doc-state" role="status">
+                            <p className="leaf-doc-state-title">
+                              No document at the top of this folder
+                            </p>
+                            <p className="leaf-doc-state-detail">Pick a file from the tree.</p>
+                          </div>
+                        ) : (
+                          <DocumentView
+                            file={file}
+                            error={error}
+                            path={path}
+                            config={config}
+                            handlers={handlers}
+                            numbering={numbering}
+                            linkBase={base}
+                            onNavigate={(t) => navigate(t)}
+                          />
+                        )}
+                      </ErrorBoundary>
+                    </main>
+                  </DocToolsContext.Provider>
+                </BlameShownContext.Provider>
               </div>
             </div>
             {outlineShown && (

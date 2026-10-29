@@ -35,7 +35,13 @@ export function FramedCodeBlock(props: Props) {
     config: {},
   };
   return (
-    <BlockFrame viewer={code} props={viewerProps} lang={lang} className="leaf-codeblock">
+    <BlockFrame
+      viewer={code}
+      props={viewerProps}
+      lang={lang}
+      className="leaf-codeblock"
+      data-pos={props['data-pos']}
+    >
       {props.children}
     </BlockFrame>
   );

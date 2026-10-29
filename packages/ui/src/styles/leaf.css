@@ -2461,104 +2461,129 @@ html[data-shell='app'] .leaf-side-head h2 {
    ::-webkit-scrollbar styling would make WebKit draw a permanent one. */
 
 /* ---------- blame ---------- */
+/* A column of annotations left of the text: each block (markdown) or run of lines
+   (code) from one commit gets a region tinted in the accent color, deeper the newer the
+   commit (amber where not committed), a bar on its left, the commit, author, and age
+   on one line, and the message, cut to fit, under it. Its right edge drags. */
+:root {
+  --leaf-blame-w: 220px;
+  --leaf-blame-uncommitted: #d29922;
+}
 .leaf-dochead-blame {
   display: flex;
   align-items: center;
   gap: 2px;
 }
-/* A bar per block (markdown) or line (code), in the accent color, more saturated the
-   newer the commit; amber for lines changed and not committed. A label shows the
-   commit, author, and date where a block is expanded. */
-.leaf-main-inner[data-viewer='markdown'][data-blame] {
-  position: relative;
-}
-.leaf-main-inner[data-viewer='markdown'][data-blame='details'] {
-  padding-left: calc(var(--leaf-blame-label-w) + 40px);
-}
-:root {
-  --leaf-blame-label-w: 200px;
-  --leaf-blame-uncommitted: #d29922;
-}
-.leaf-blame-margin {
-  position: absolute;
-  inset: 0 auto 0 0;
-  width: 0;
-  pointer-events: none;
-}
-.leaf-blame-block {
-  position: absolute;
-  left: 10px;
-  display: flex;
-  align-items: flex-start;
-  gap: 8px;
-}
-.leaf-blame-bar {
-  flex: none;
-  align-self: stretch;
-  width: 4px;
-  padding: 0;
-  border: 0;
-  border-radius: 2px;
-  background: color-mix(
+.leaf-blame-block,
+.leaf-blame-cell {
+  --leaf-blame-color: color-mix(
     in srgb,
     var(--leaf-accent) calc(var(--leaf-blame-fresh, 1) * 100%),
-    var(--leaf-line)
+    var(--leaf-line-2)
   );
-  cursor: pointer;
-  pointer-events: auto;
-  transition: width 0.1s;
+  box-sizing: border-box;
+  overflow: hidden;
+  border-left: 3px solid var(--leaf-blame-color);
+  background: color-mix(in srgb, var(--leaf-blame-color) 12%, transparent);
 }
-.leaf-blame-bar:hover,
-.leaf-blame-bar[aria-expanded='true'] {
-  width: 6px;
+.leaf-blame-block.leaf-blame-uncommitted,
+.leaf-blame-cell.leaf-blame-uncommitted {
+  --leaf-blame-color: var(--leaf-blame-uncommitted);
 }
-.leaf-blame-uncommitted .leaf-blame-bar {
-  background: var(--leaf-blame-uncommitted);
+.leaf-blame-text {
+  display: block;
+  min-width: 0;
 }
-.leaf-blame-label {
-  max-width: var(--leaf-blame-label-w);
+.leaf-blame-label,
+.leaf-blame-summary {
+  display: block;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+.leaf-blame-label {
   font: 11px/1.6 var(--leaf-font-mono);
   color: var(--leaf-text-2);
-  pointer-events: auto;
 }
-/* Code: one cell per line; the bars of a hunk's lines join into one. */
-.cm-blame-gutter {
-  cursor: pointer;
+.leaf-blame-summary {
+  font: 11.5px/1.5 var(--leaf-font-ui);
+  color: var(--leaf-text);
+}
+.leaf-blame-sha,
+.leaf-blame-pr {
+  color: var(--leaf-accent);
+  text-decoration: none;
+}
+.leaf-blame-sha:hover,
+.leaf-blame-pr:hover {
+  text-decoration: underline;
+}
+.leaf-blame-resizer {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: var(--leaf-blame-w);
+  z-index: 3;
+  width: 7px;
+  margin-left: -3px;
+  cursor: col-resize;
+  touch-action: none;
+}
+.leaf-blame-resizer::after {
+  content: '';
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 3px;
+  width: 1px;
+  background: var(--leaf-line);
+}
+.leaf-blame-resizer:hover::after,
+.leaf-blame-resizer:focus-visible::after,
+html[data-resizing] .leaf-blame-resizer::after {
+  width: 2px;
+  background: var(--leaf-accent);
+}
+.leaf-blame-resizer:focus-visible {
+  outline: 0;
+}
+/* Markdown: the column sits in the document's left padding. */
+.leaf-main-inner[data-viewer='markdown'][data-blame] {
+  position: relative;
+  padding-left: calc(var(--leaf-blame-w) + 32px);
+}
+.leaf-blame-margin {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 0;
+  width: var(--leaf-blame-w);
+}
+.leaf-blame-short .leaf-blame-summary {
+  display: none;
+}
+.leaf-blame-block {
+  position: absolute;
+  left: 0;
+  right: 0;
+  padding: 2px 10px 0;
+}
+/* Code: one gutter cell per line; a run's cells join into one region. */
+.leaf-code-file[data-blame] {
+  position: relative;
 }
 .cm-blame-gutter .cm-gutterElement {
   padding: 0;
 }
 .leaf-blame-cell {
-  position: relative;
+  width: var(--leaf-blame-w);
   height: 100%;
-  min-width: 10px;
-  padding: 0 10px 0 14px;
-  box-sizing: border-box;
+  padding: 0 10px;
 }
-.leaf-blame-cell::before {
-  content: '';
-  position: absolute;
-  top: 0;
-  bottom: 0;
-  left: 4px;
-  width: 3px;
-  background: color-mix(
-    in srgb,
-    var(--leaf-accent) calc(var(--leaf-blame-fresh, 1) * 100%),
-    var(--leaf-line)
-  );
+.leaf-blame-cell.leaf-blame-first {
+  box-shadow: inset 0 1px 0 var(--leaf-block-bg);
 }
-.leaf-blame-first::before {
-  top: 2px;
-  border-radius: 2px 2px 0 0;
-}
-.leaf-blame-cell.leaf-blame-uncommitted::before {
-  background: var(--leaf-blame-uncommitted);
-}
-.leaf-blame-cell .leaf-blame-label {
-  display: block;
-  font-size: 11px;
+.leaf-blame-cell .leaf-blame-label,
+.leaf-blame-cell .leaf-blame-summary {
+  line-height: inherit;
 }

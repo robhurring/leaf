@@ -4,7 +4,7 @@
 import { createContext, useEffect, useLayoutEffect, useRef, useState, type ReactNode } from 'react';
 import { shortenPath } from './shortenPath.js';
 import type { FileMessage, GitInfo } from '@leaf/protocol';
-import { Blame, BlameDetails, Chevron, FilePlus, PencilLine, Sliders } from '../icons/index.js';
+import { Blame, Chevron, FilePlus, PencilLine, Sliders } from '../icons/index.js';
 import { IconButton } from './IconButton.js';
 import { formatBytes, formatDate, formatWhen } from '../viewers/binary/format.js';
 import { useUi } from '../store/ui.js';
@@ -12,9 +12,7 @@ import { useUi } from '../store/ui.js';
 /** Blame controls, when the open file can show blame. */
 export type BlameControls = {
   on: boolean;
-  details: boolean;
   onToggle(): void;
-  onToggleDetails(): void;
 };
 
 type Props = {
@@ -235,17 +233,6 @@ export function Properties({ file, frontmatter, toolsRef, blame }: Props) {
         </div>
         {blame && (
           <div className="leaf-dochead-blame" role="group" aria-label="Blame">
-            {blame.on && (
-              <IconButton
-                small
-                label="Blame details"
-                title="Show who changed each block, and when"
-                pressed={blame.details}
-                onClick={blame.onToggleDetails}
-              >
-                <BlameDetails size={15} />
-              </IconButton>
-            )}
             <IconButton
               small
               label="Blame"

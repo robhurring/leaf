@@ -7,7 +7,7 @@ import {
   type Extension,
 } from '@codemirror/state';
 import type { BlameHunk } from '@leaf/protocol';
-import { blameLabel, blameTitle, freshness, hunkAt } from '../../blame.js';
+import { blameTitle, freshness, hunkAt, shortAge, splitPr } from '../../blame.js';
 import {
   EditorView,
   GutterMarker,
@@ -104,79 +104,90 @@ export function selectedLineRange(view: EditorView): { from: number; to: number 
   return { from: view.state.doc.lineAt(from).number, to: view.state.doc.lineAt(to).number };
 }
 
-/** Blame as the editor shows it: the hunks, and which ones show their label. */
+/** Blame as the editor shows it. */
 export type EditorBlame = {
   hunks: BlameHunk[];
-  /** Every hunk shows its label. */
-  details: boolean;
-  /** Start lines of the hunks expanded one by one. */
-  open: ReadonlySet<number>;
-  /** A click on a hunk's cells. */
-  onToggle(start: number): void;
+  /** The repository's web page, for linking commits and pull requests. */
+  repoUrl?: string;
 };
 
-/** One gutter cell: a bar shaded by the commit's freshness; the label on a hunk's first line. */
+const el = (tag: string, className: string, text?: string): HTMLElement => {
+  const e = document.createElement(tag);
+  e.className = className;
+  if (text !== undefined) e.textContent = text;
+  return e;
+};
+const linkOrText = (href: string | undefined, className: string, text: string): HTMLElement => {
+  if (!href) return el('span', className, text);
+  const a = el('a', className, text) as HTMLAnchorElement;
+  a.href = href;
+  a.target = '_blank';
+  a.rel = 'noreferrer';
+  return a;
+};
+
+/** `abc1234 Rob 3d #42`, the hash and PR linked (as BlameAnnotation renders it). */
+function labelDom(h: BlameHunk, repoUrl?: string): HTMLElement {
+  if (h.uncommitted) return el('span', 'leaf-blame-label', 'Not committed yet');
+  const { pr } = splitPr(h.summary);
+  const line = el('span', 'leaf-blame-label');
+  line.append(
+    linkOrText(repoUrl && `${repoUrl}/commit/${h.commit}`, 'leaf-blame-sha', h.commit.slice(0, 7)),
+    ' ',
+    el('span', 'leaf-blame-author', h.author),
+    ' ',
+    el('span', 'leaf-blame-age', shortAge(h.date)),
+  );
+  if (pr)
+    line.append(' ', linkOrText(repoUrl && `${repoUrl}/pull/${pr}`, 'leaf-blame-pr', `#${pr}`));
+  return line;
+}
+
+/** One gutter cell: the hunk's tint and bar; its label on the first line, its message on the second. */
 class BlameCell extends GutterMarker {
   constructor(
     readonly hunk: BlameHunk,
-    readonly first: boolean,
-    readonly label: boolean,
+    readonly row: number,
     readonly fresh: number,
+    readonly repoUrl?: string,
   ) {
     super();
   }
   eq(o: BlameCell): boolean {
     return (
       o.hunk === this.hunk &&
-      o.first === this.first &&
-      o.label === this.label &&
-      o.fresh === this.fresh
+      o.row === this.row &&
+      o.fresh === this.fresh &&
+      o.repoUrl === this.repoUrl
     );
   }
   toDOM(): Node {
-    const el = document.createElement('div');
-    el.className = `leaf-blame-cell${this.first ? ' leaf-blame-first' : ''}${this.hunk.uncommitted ? ' leaf-blame-uncommitted' : ''}`;
-    el.style.setProperty('--leaf-blame-fresh', String(this.fresh));
-    el.title = blameTitle(this.hunk);
-    if (this.label) {
-      const text = document.createElement('span');
-      text.className = 'leaf-blame-label';
-      text.textContent = blameLabel(this.hunk);
-      el.appendChild(text);
-    }
-    return el;
+    const h = this.hunk;
+    const last = this.row === h.lines - 1;
+    const cell = el(
+      'div',
+      `leaf-blame-cell${this.row === 0 ? ' leaf-blame-first' : ''}${last ? ' leaf-blame-last' : ''}${h.uncommitted ? ' leaf-blame-uncommitted' : ''}`,
+    );
+    cell.style.setProperty('--leaf-blame-fresh', String(this.fresh));
+    cell.title = blameTitle(h);
+    if (this.row === 0) cell.append(labelDom(h, this.repoUrl));
+    else if (this.row === 1 && !h.uncommitted)
+      cell.append(el('span', 'leaf-blame-summary', splitPr(h.summary).message));
+    return cell;
   }
 }
 
 function blameGutter(b: EditorBlame): Extension {
   const fresh = freshness(b.hunks);
-  const labels = b.details || b.open.size > 0;
-  // The widest label sizes the gutter, so it doesn't jump as lines scroll in.
-  const widest = b.hunks.reduce<BlameHunk | undefined>(
-    (w, h) => (!w || blameLabel(h).length > blameLabel(w).length ? h : w),
-    undefined,
-  );
   return gutter({
     class: 'cm-blame-gutter',
     lineMarker(view, line) {
       const n = view.state.doc.lineAt(line.from).number;
       const h = hunkAt(b.hunks, n);
-      if (!h) return null;
-      const first = n === h.start;
-      const label = first && (b.details || b.open.has(h.start));
-      return new BlameCell(h, first, label, fresh.get(h.commit) ?? 1);
+      return h ? new BlameCell(h, n - h.start, fresh.get(h.commit) ?? 1, b.repoUrl) : null;
     },
-    initialSpacer: () =>
-      labels && widest
-        ? new BlameCell(widest, true, true, 1)
-        : new BlameCell(b.hunks[0]!, false, false, 1),
-    domEventHandlers: {
-      mousedown(view, line) {
-        const h = hunkAt(b.hunks, view.state.doc.lineAt(line.from).number);
-        if (h) b.onToggle(h.start);
-        return true;
-      },
-    },
+    // The column's width comes from --leaf-blame-w; an empty cell holds it.
+    initialSpacer: () => new BlameCell(b.hunks[0]!, 2, 1),
   });
 }
 
