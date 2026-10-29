@@ -2729,3 +2729,56 @@ html[data-resizing] .leaf-blame-resizer::after {
     0 0 0 1px var(--leaf-line),
     0 12px 32px rgba(0, 0, 0, 0.18);
 }
+
+/* ---------- live animation panes ---------- */
+/* A three or canvas block running in its frame, full width, at the fence's height.
+   Play, restart, and view code sit bottom-left, shown on hover like the block tools. */
+.leaf-live {
+  position: relative;
+}
+.leaf-live-view {
+  position: relative;
+  overflow: hidden;
+  border-radius: var(--leaf-radius-sm);
+}
+.leaf-live iframe {
+  display: block;
+  width: 100%;
+  border: 0;
+}
+.leaf-live[data-fill],
+.leaf-live[data-fill] .leaf-live-view,
+.leaf-live[data-fill] iframe {
+  height: 100%;
+}
+.leaf-live-source {
+  box-sizing: border-box;
+  height: 100%;
+  margin: 0;
+  padding: 12px 16px;
+  overflow: auto;
+  font: 12.5px/1.55 var(--leaf-font-mono);
+  color: var(--leaf-text);
+}
+.leaf-live-controls {
+  position: absolute;
+  left: 8px;
+  bottom: 8px;
+  display: flex;
+  gap: 2px;
+  padding: 2px;
+  border-radius: 8px;
+  border: 1px solid var(--leaf-line);
+  background: var(--leaf-glass);
+  -webkit-backdrop-filter: blur(20px);
+  backdrop-filter: blur(20px);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
+  opacity: 0;
+  transition: opacity 0.12s;
+  z-index: 2;
+}
+.leaf-live:hover .leaf-live-controls,
+.leaf-live:focus-within .leaf-live-controls,
+.leaf-live[data-state='paused'] .leaf-live-controls {
+  opacity: 1;
+}

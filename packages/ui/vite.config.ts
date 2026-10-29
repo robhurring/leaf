@@ -1,5 +1,6 @@
 import { defineConfig } from 'vite';
 import react from '@vitejs/plugin-react';
+import { threeBundle } from './three-bundle.js';
 import tailwindcss from '@tailwindcss/vite';
 
 const serverPort = process.env.PORT ?? '4321';
@@ -7,7 +8,7 @@ const serverPort = process.env.PORT ?? '4321';
 // The app the leaf CLI serves. In dev, Vite fronts the page and proxies the
 // protocol endpoints to the leaf server so the server code path is identical.
 export default defineConfig({
-  plugins: [react(), tailwindcss()],
+  plugins: [react(), tailwindcss(), threeBundle()],
   appType: 'spa',
   build: { outDir: 'dist/app', emptyOutDir: true },
   server: {

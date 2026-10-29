@@ -34,3 +34,6 @@ export { PencilLine } from './PencilLine.js';
 export { Sliders } from './Sliders.js';
 export { Unplugged } from './Unplugged.js';
 export { Blame } from './Blame.js';
+export { Play } from './Play.js';
+export { Pause } from './Pause.js';
+export { Restart } from './Restart.js';

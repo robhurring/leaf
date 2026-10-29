@@ -43,9 +43,11 @@ Object.defineProperty(globalThis, 'IntersectionObserver', {
   value: FakeIntersectionObserver,
   configurable: true,
 });
-/** Simulates `el` scrolling into view for every observer watching it. */
-(globalThis as unknown as { intersect: (el: Element) => void }).intersect = (el) => {
+/** Simulates `el` scrolling into view (or out of it) for every observer watching it. */
+(
+  globalThis as unknown as { intersect: (el: Element, isIntersecting?: boolean) => void }
+).intersect = (el, isIntersecting = true) => {
   for (const io of ioInstances)
-    if (io.targets.has(el)) io.callback([{ target: el, isIntersecting: true }]);
+    if (io.targets.has(el)) io.callback([{ target: el, isIntersecting }]);
 };
 if (!Element.prototype.scrollIntoView) Element.prototype.scrollIntoView = () => {};

@@ -1,8 +1,9 @@
 import { defineConfig } from 'vitest/config';
 import react from '@vitejs/plugin-react';
+import { threeBundle } from './three-bundle.js';
 
 export default defineConfig({
-  plugins: [react()],
+  plugins: [react(), threeBundle()],
   test: {
     name: 'ui',
     environment: 'happy-dom',

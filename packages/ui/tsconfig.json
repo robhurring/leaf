@@ -9,5 +9,13 @@
     "rootDir": ".",
     "noEmit": true
   },
-  "include": ["src", "test", "e2e", "vite.config.ts", "vite.lib.config.ts", "vitest.config.ts"]
+  "include": [
+    "src",
+    "test",
+    "e2e",
+    "vite.config.ts",
+    "vite.lib.config.ts",
+    "vitest.config.ts",
+    "three-bundle.ts"
+  ]
 }
