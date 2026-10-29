@@ -165,22 +165,26 @@ function PropertiesPanel({ front, facts, git }: { front: Row[]; facts: Row[]; gi
   const setShowGit = useUi((s) => s.setShowGit);
   return (
     <div className="leaf-props-panel">
-      <table id="leaf-props-table" className="leaf-props-table">
-        <Group label="Frontmatter" rows={front} />
-        <Group label="File" rows={facts} />
-      </table>
+      <div className="leaf-props-scroll">
+        <table id="leaf-props-table" className="leaf-props-table">
+          <Group label="Frontmatter" rows={front} />
+          <Group label="File" rows={facts} />
+        </table>
+      </div>
       {git && (
-        <label className="leaf-props-option">
-          <button
-            type="button"
-            role="switch"
-            className="leaf-switch"
-            aria-checked={showGit}
-            aria-label="Show last commit"
-            onClick={() => setShowGit(!showGit)}
-          />
-          <span>Show last commit</span>
-        </label>
+        <div className="leaf-props-bar" role="toolbar" aria-label="Properties options">
+          <label className="leaf-props-option">
+            <button
+              type="button"
+              role="switch"
+              className="leaf-switch"
+              aria-checked={showGit}
+              aria-label="Show last commit"
+              onClick={() => setShowGit(!showGit)}
+            />
+            <span>Show last commit</span>
+          </label>
+        </div>
       )}
     </div>
   );

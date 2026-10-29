@@ -1599,17 +1599,28 @@ html[data-resizing] .leaf-resizer::after {
 .leaf-props-toggle[aria-expanded='true'] {
   color: var(--leaf-text);
 }
-/* A setting at the foot of the properties: a small switch and its label. */
-.leaf-props-option {
+/* The properties' own settings: a toolbar along the panel's foot, edge to edge, like
+   the file tools line. Only the switch and its label are the click target. */
+.leaf-props-bar {
   display: flex;
   align-items: center;
-  gap: 8px;
-  margin-top: 10px;
-  padding-top: 10px;
+  gap: 12px;
+  min-height: 34px;
+  padding: 2px 12px 2px 20px;
+  box-sizing: border-box;
   border-top: 1px solid var(--leaf-line);
+  background: color-mix(in srgb, var(--leaf-doc-text) 5%, var(--leaf-doc-bg));
+}
+.leaf-props-option {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
   font: 12px var(--leaf-font-ui);
   color: var(--leaf-text-2);
   cursor: pointer;
+}
+.leaf-props-option:hover {
+  color: var(--leaf-text);
 }
 .leaf-switch {
   position: relative;
@@ -1650,11 +1661,13 @@ html[data-resizing] .leaf-resizer::after {
 /* The property table, expanding down inside the header: labels left, values right. */
 .leaf-props-panel {
   background: var(--leaf-dochead-shade);
+  border-top: 1px solid var(--leaf-line);
+  animation: leaf-props-open 0.16s ease-out;
+}
+.leaf-props-scroll {
   max-height: 42vh;
   overflow: auto;
   padding: 2px 20px 12px;
-  border-top: 1px solid var(--leaf-line);
-  animation: leaf-props-open 0.16s ease-out;
 }
 @keyframes leaf-props-open {
   from {

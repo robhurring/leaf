@@ -171,6 +171,21 @@ describe('Properties', () => {
     expect(document.querySelector('.leaf-dochead-git')).toBeTruthy();
   });
 
+  it('the switch sits in a full-width toolbar under the table, and only the switch and its label toggle it', () => {
+    render(<Properties file={file} />);
+    fireEvent.click(screen.getByRole('button', { name: /properties/i }));
+    const bar = screen.getByRole('toolbar', { name: 'Properties options' });
+    const table = screen.getByRole('table');
+    // Below the table and outside its scrolling area, so its edge spans the panel.
+    expect(table.compareDocumentPosition(bar) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(bar.closest('.leaf-props-scroll')).toBeNull();
+    const show = screen.getByRole('switch', { name: 'Show last commit' });
+    fireEvent.click(bar);
+    expect(show.getAttribute('aria-checked')).toBe('true');
+    fireEvent.click(screen.getByText('Show last commit'));
+    expect(show.getAttribute('aria-checked')).toBe('false');
+  });
+
   it('no git, no switch', () => {
     render(<Properties file={{ ...file, git: undefined }} />);
     fireEvent.click(screen.getByRole('button', { name: /properties/i }));
