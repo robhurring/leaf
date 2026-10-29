@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import type { BlameHunk } from '@leaf/protocol';
-import { blameFits, blameLabel, freshness, hunkAt, hunksIn, splitPr } from '../src/blame.js';
+import { blameLabel, freshness, hunkAt, hunksIn, splitPr } from '../src/blame.js';
 
 const DAY = 86_400_000;
 const NOW = 1_800_000_000_000;
@@ -54,13 +54,6 @@ describe('blame helpers', () => {
     );
   });
 
-  it('the annotation column hides when the document area is too narrow to keep it and the text', () => {
-    expect(blameFits(1000, 220)).toBe(true);
-    expect(blameFits(700, 220)).toBe(false);
-    expect(blameFits(800, 160)).toBe(true);
-    // Not measured yet (zero width): assume it fits rather than flash hidden.
-    expect(blameFits(0, 220)).toBe(true);
-  });
 
   it('splits a trailing pull request number off a commit message', () => {
     expect(splitPr('docs: guide (#42)')).toEqual({ message: 'docs: guide', pr: '42' });

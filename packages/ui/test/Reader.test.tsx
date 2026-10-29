@@ -358,6 +358,32 @@ describe('Reader', () => {
       expect(labels).toEqual(['aaaaaaa Ann', 'bbbbbbb Bo ', 'aaaaaaa Ann']);
     });
 
+    it('blame shows however narrow the window: the button decides, not the width', async () => {
+      useUi.setState({ blame: true });
+      const width = vi.spyOn(HTMLElement.prototype, 'clientWidth', 'get').mockReturnValue(500);
+      // Measured at once, as a real window would be.
+      vi.stubGlobal(
+        'ResizeObserver',
+        class {
+          constructor(private cb: () => void) {}
+          observe() {
+            this.cb();
+          }
+          disconnect() {}
+        },
+      );
+      try {
+        render(<Reader source={blamed()} />);
+        await screen.findByRole('heading', { name: 'Title', level: 1 });
+        await waitFor(() =>
+          expect(document.querySelectorAll('.leaf-blame-block').length).toBeGreaterThan(0),
+        );
+      } finally {
+        width.mockRestore();
+        vi.unstubAllGlobals();
+      }
+    });
+
     it('the annotation column can be dragged wider or narrower, down to a minimum', async () => {
       useUi.setState({ blame: true, blameWidth: 220 });
       render(<Reader source={blamed()} />);

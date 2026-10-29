@@ -25,7 +25,6 @@ import { useStage } from '../store/stage.js';
 import { ProgressBar } from './ProgressBar.js';
 import { BlameMargin } from './BlameMargin.js';
 import { BlameResizer, BlameShownContext } from './BlameColumn.js';
-import { blameFits } from '../blame.js';
 import { AppearanceContext, useResolvedAppearance } from '../viewers/appearance.js';
 import { AssetContext, rawUrl, type AssetResolver } from '../render/components/assetContext.js';
 import { useAssets } from '../store/assets.js';
@@ -336,17 +335,7 @@ export function Reader(props: ReaderProps) {
     if (blameOn && path) useDocuments.getState().requestBlame(path);
   }, [blameOn, path]);
   const [markdownHost, setMarkdownHost] = useState<HTMLDivElement | null>(null);
-  // The column steps aside when the document area gets too narrow for it and the text.
-  const [mainWidth, setMainWidth] = useState(0);
-  useEffect(() => {
-    const el = mainRef.current;
-    if (!el || typeof ResizeObserver === 'undefined') return;
-    const ro = new ResizeObserver(() => setMainWidth(el.clientWidth));
-    ro.observe(el);
-    return () => ro.disconnect();
-  }, []);
-  const blameShown =
-    blameOn && blameFits(mainWidth, ui.blameWidth) ? { width: ui.blameWidth } : null;
+  const blameShown = blameOn ? { width: ui.blameWidth } : null;
 
   // Only markdown has an outline; other files hide it without touching the saved setting.
   const outlineAvailable = !file || isMarkdown;
