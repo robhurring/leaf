@@ -54,7 +54,6 @@ describe('blame helpers', () => {
     );
   });
 
-
   it('splits a trailing pull request number off a commit message', () => {
     expect(splitPr('docs: guide (#42)')).toEqual({ message: 'docs: guide', pr: '42' });
     expect(splitPr('no pr here')).toEqual({ message: 'no pr here' });
