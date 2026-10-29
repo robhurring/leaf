@@ -33,3 +33,5 @@ export { FilePlus } from './FilePlus.js';
 export { PencilLine } from './PencilLine.js';
 export { Sliders } from './Sliders.js';
 export { Unplugged } from './Unplugged.js';
+export { Blame } from './Blame.js';
+export { BlameDetails } from './BlameDetails.js';

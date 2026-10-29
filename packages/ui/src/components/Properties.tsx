@@ -4,12 +4,22 @@
 import { createContext, useEffect, useLayoutEffect, useRef, useState, type ReactNode } from 'react';
 import { shortenPath } from './shortenPath.js';
 import type { FileMessage, GitInfo } from '@leaf/protocol';
-import { Chevron, FilePlus, PencilLine, Sliders } from '../icons/index.js';
+import { Blame, BlameDetails, Chevron, FilePlus, PencilLine, Sliders } from '../icons/index.js';
+import { IconButton } from './IconButton.js';
 import { formatBytes, formatDate, formatWhen } from '../viewers/binary/format.js';
 import { useUi } from '../store/ui.js';
 
+/** Blame controls, when the open file can show blame. */
+export type BlameControls = {
+  on: boolean;
+  details: boolean;
+  onToggle(): void;
+  onToggleDetails(): void;
+};
+
 type Props = {
   file: FileMessage;
+  blame?: BlameControls;
   frontmatter?: Record<string, unknown>;
   /** Receives the element viewers render their controls into. */
   toolsRef?: (el: HTMLElement | null) => void;
@@ -190,7 +200,7 @@ function PropertiesPanel({ front, facts, git }: { front: Row[]; facts: Row[]; gi
   );
 }
 
-export function Properties({ file, frontmatter, toolsRef }: Props) {
+export function Properties({ file, frontmatter, toolsRef, blame }: Props) {
   const fm = Object.entries(frontmatter ?? {});
   const [open, setOpen] = useState(false);
   const showGit = useUi((s) => s.showGit);
@@ -223,6 +233,30 @@ export function Properties({ file, frontmatter, toolsRef }: Props) {
           )}
           <Stamp label="Modified" ms={file.mtime} icon={<PencilLine size={13} />} />
         </div>
+        {blame && (
+          <div className="leaf-dochead-blame" role="group" aria-label="Blame">
+            {blame.on && (
+              <IconButton
+                small
+                label="Blame details"
+                title="Show who changed each block, and when"
+                pressed={blame.details}
+                onClick={blame.onToggleDetails}
+              >
+                <BlameDetails size={15} />
+              </IconButton>
+            )}
+            <IconButton
+              small
+              label="Blame"
+              title="Blame: who last changed each part of this file"
+              pressed={blame.on}
+              onClick={blame.onToggle}
+            >
+              <Blame size={15} />
+            </IconButton>
+          </div>
+        )}
         <PropertiesToggle open={open} count={fm.length} onToggle={() => setOpen((o) => !o)} />
       </div>
       {file.git && showGit && (

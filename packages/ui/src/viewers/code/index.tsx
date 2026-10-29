@@ -10,6 +10,8 @@ import { track } from '../../render/progress.js';
 import { load } from '../../render/connection.js';
 import { Check, Copy, WrapText } from '../../icons/index.js';
 import { useAppearance } from '../appearance.js';
+import { useUi } from '../../store/ui.js';
+import { useDocuments } from '../../store/documents.js';
 
 /** `#L3` or `#L3-L7` → a 1-based line range. */
 export function parseLineHash(hash: string): { from: number; to: number } | null {
@@ -43,6 +45,35 @@ export function CodeRich(props: ViewerProps) {
   const slot = useContext(DocToolsContext);
 
   const editorRef = useRef<typeof import('./editor.js') | null>(null);
+  // The view is created asynchronously; effects that configure it wait for this.
+  const [ready, setReady] = useState(0);
+
+  // Blame in the gutter, for a whole file in git with blame switched on.
+  const blameOn = useUi((s) => s.blame) && !!slot && !!file.git;
+  const blameDetails = useUi((s) => s.blameDetails);
+  const blame = useDocuments((s) => s.blame[file.path]);
+  const [openHunks, setOpenHunks] = useState<ReadonlySet<number>>(new Set());
+  useEffect(() => {
+    const view = viewRef.current;
+    const editor = editorRef.current;
+    if (!view || !editor) return;
+    editor.setBlame(
+      view,
+      blameOn && blame
+        ? {
+            hunks: blame.hunks,
+            details: blameDetails,
+            open: openHunks,
+            onToggle: (start) =>
+              setOpenHunks((o) => {
+                const next = new Set(o);
+                if (!next.delete(start)) next.add(start);
+                return next;
+              }),
+          }
+        : null,
+    );
+  }, [ready, blameOn, blame, blameDetails, openHunks]);
   useEffect(() => {
     if (viewRef.current && editorRef.current) editorRef.current.setDark(viewRef.current, dark);
   }, [dark]);
@@ -66,6 +97,7 @@ export function CodeRich(props: ViewerProps) {
         dark,
       );
       viewRef.current = view;
+      setReady((n) => n + 1);
       const initial = parseLineHash(location.hash);
       if (initial) {
         editor.selectLines(view, initial.from, false);

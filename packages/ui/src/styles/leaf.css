@@ -2459,3 +2459,106 @@ html[data-shell='app'] .leaf-side-head h2 {
 }
 /* Scrollbars are left to the system: macOS overlay scrollbars fade when idle, and any
    ::-webkit-scrollbar styling would make WebKit draw a permanent one. */
+
+/* ---------- blame ---------- */
+.leaf-dochead-blame {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+}
+/* A bar per block (markdown) or line (code), in the accent color, more saturated the
+   newer the commit; amber for lines changed and not committed. A label shows the
+   commit, author, and date where a block is expanded. */
+.leaf-main-inner[data-viewer='markdown'][data-blame] {
+  position: relative;
+}
+.leaf-main-inner[data-viewer='markdown'][data-blame='details'] {
+  padding-left: calc(var(--leaf-blame-label-w) + 40px);
+}
+:root {
+  --leaf-blame-label-w: 200px;
+  --leaf-blame-uncommitted: #d29922;
+}
+.leaf-blame-margin {
+  position: absolute;
+  inset: 0 auto 0 0;
+  width: 0;
+  pointer-events: none;
+}
+.leaf-blame-block {
+  position: absolute;
+  left: 10px;
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+}
+.leaf-blame-bar {
+  flex: none;
+  align-self: stretch;
+  width: 4px;
+  padding: 0;
+  border: 0;
+  border-radius: 2px;
+  background: color-mix(
+    in srgb,
+    var(--leaf-accent) calc(var(--leaf-blame-fresh, 1) * 100%),
+    var(--leaf-line)
+  );
+  cursor: pointer;
+  pointer-events: auto;
+  transition: width 0.1s;
+}
+.leaf-blame-bar:hover,
+.leaf-blame-bar[aria-expanded='true'] {
+  width: 6px;
+}
+.leaf-blame-uncommitted .leaf-blame-bar {
+  background: var(--leaf-blame-uncommitted);
+}
+.leaf-blame-label {
+  max-width: var(--leaf-blame-label-w);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font: 11px/1.6 var(--leaf-font-mono);
+  color: var(--leaf-text-2);
+  pointer-events: auto;
+}
+/* Code: one cell per line; the bars of a hunk's lines join into one. */
+.cm-blame-gutter {
+  cursor: pointer;
+}
+.cm-blame-gutter .cm-gutterElement {
+  padding: 0;
+}
+.leaf-blame-cell {
+  position: relative;
+  height: 100%;
+  min-width: 10px;
+  padding: 0 10px 0 14px;
+  box-sizing: border-box;
+}
+.leaf-blame-cell::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 4px;
+  width: 3px;
+  background: color-mix(
+    in srgb,
+    var(--leaf-accent) calc(var(--leaf-blame-fresh, 1) * 100%),
+    var(--leaf-line)
+  );
+}
+.leaf-blame-first::before {
+  top: 2px;
+  border-radius: 2px 2px 0 0;
+}
+.leaf-blame-cell.leaf-blame-uncommitted::before {
+  background: var(--leaf-blame-uncommitted);
+}
+.leaf-blame-cell .leaf-blame-label {
+  display: block;
+  font-size: 11px;
+}

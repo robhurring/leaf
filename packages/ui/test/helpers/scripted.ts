@@ -1,8 +1,22 @@
-import type { Capabilities, ClientMessage, RootInfo, ServerMessage } from '@leaf/protocol';
+import type {
+  BlameHunk,
+  Capabilities,
+  ClientMessage,
+  GitInfo,
+  RootInfo,
+  ServerMessage,
+} from '@leaf/protocol';
 import { createSource, type FunctionSource } from '../../src/source/createSource.js';
 
 type Binary = { base64: string; mime: string };
-type Opts = { root?: RootInfo; capabilities?: Capabilities };
+type Opts = {
+  root?: RootInfo;
+  capabilities?: Capabilities;
+  /** Last-commit info per path, as a file in a git repository has. */
+  git?: Record<string, GitInfo>;
+  /** Blame per path; paths without it answer with no hunks. */
+  blame?: Record<string, BlameHunk[]>;
+};
 
 /** A DocumentSource over an in-memory file map, recording everything the UI sends. */
 export function scripted(
@@ -83,9 +97,18 @@ export function scripted(
             url: '/raw/' + msg.path,
             size: content.length,
             mtime: 1,
+            ...(opts.git?.[msg.path] ? { git: opts.git[msg.path] } : {}),
             inReplyTo: msg.id,
           });
         }
+        case 'blame':
+          return emit({
+            type: 'blameHunks',
+            path: msg.path,
+            hunks: opts.blame?.[msg.path] ?? [],
+            repoUrl: 'https://github.com/rob/leaf',
+            inReplyTo: msg.id,
+          });
         case 'search': {
           const q = msg.q.toLowerCase();
           const entries = Object.keys(files)

@@ -6,9 +6,12 @@ import {
   StateEffect,
   type Extension,
 } from '@codemirror/state';
+import type { BlameHunk } from '@leaf/protocol';
+import { blameLabel, blameTitle, freshness, hunkAt } from '../../blame.js';
 import {
   EditorView,
   GutterMarker,
+  gutter,
   gutterLineClass,
   lineNumbers,
   highlightSpecialChars,
@@ -101,6 +104,89 @@ export function selectedLineRange(view: EditorView): { from: number; to: number 
   return { from: view.state.doc.lineAt(from).number, to: view.state.doc.lineAt(to).number };
 }
 
+/** Blame as the editor shows it: the hunks, and which ones show their label. */
+export type EditorBlame = {
+  hunks: BlameHunk[];
+  /** Every hunk shows its label. */
+  details: boolean;
+  /** Start lines of the hunks expanded one by one. */
+  open: ReadonlySet<number>;
+  /** A click on a hunk's cells. */
+  onToggle(start: number): void;
+};
+
+/** One gutter cell: a bar shaded by the commit's freshness; the label on a hunk's first line. */
+class BlameCell extends GutterMarker {
+  constructor(
+    readonly hunk: BlameHunk,
+    readonly first: boolean,
+    readonly label: boolean,
+    readonly fresh: number,
+  ) {
+    super();
+  }
+  eq(o: BlameCell): boolean {
+    return (
+      o.hunk === this.hunk &&
+      o.first === this.first &&
+      o.label === this.label &&
+      o.fresh === this.fresh
+    );
+  }
+  toDOM(): Node {
+    const el = document.createElement('div');
+    el.className = `leaf-blame-cell${this.first ? ' leaf-blame-first' : ''}${this.hunk.uncommitted ? ' leaf-blame-uncommitted' : ''}`;
+    el.style.setProperty('--leaf-blame-fresh', String(this.fresh));
+    el.title = blameTitle(this.hunk);
+    if (this.label) {
+      const text = document.createElement('span');
+      text.className = 'leaf-blame-label';
+      text.textContent = blameLabel(this.hunk);
+      el.appendChild(text);
+    }
+    return el;
+  }
+}
+
+function blameGutter(b: EditorBlame): Extension {
+  const fresh = freshness(b.hunks);
+  const labels = b.details || b.open.size > 0;
+  // The widest label sizes the gutter, so it doesn't jump as lines scroll in.
+  const widest = b.hunks.reduce<BlameHunk | undefined>(
+    (w, h) => (!w || blameLabel(h).length > blameLabel(w).length ? h : w),
+    undefined,
+  );
+  return gutter({
+    class: 'cm-blame-gutter',
+    lineMarker(view, line) {
+      const n = view.state.doc.lineAt(line.from).number;
+      const h = hunkAt(b.hunks, n);
+      if (!h) return null;
+      const first = n === h.start;
+      const label = first && (b.details || b.open.has(h.start));
+      return new BlameCell(h, first, label, fresh.get(h.commit) ?? 1);
+    },
+    initialSpacer: () =>
+      labels && widest
+        ? new BlameCell(widest, true, true, 1)
+        : new BlameCell(b.hunks[0]!, false, false, 1),
+    domEventHandlers: {
+      mousedown(view, line) {
+        const h = hunkAt(b.hunks, view.state.doc.lineAt(line.from).number);
+        if (h) b.onToggle(h.start);
+        return true;
+      },
+    },
+  });
+}
+
+const blame = new Compartment();
+
+/** Shows blame in the gutter of a live view, or takes it away (null). */
+export function setBlame(view: EditorView, b: EditorBlame | null): void {
+  view.dispatch({ effects: blame.reconfigure(b && b.hunks.length ? blameGutter(b) : []) });
+}
+
 // Token colors follow the page's appearance; swapped live through a compartment.
 const appearance = new Compartment();
 const appearanceExtension = (dark: boolean): Extension => [
@@ -124,6 +210,8 @@ export function createReadOnlyView(
   dark = false,
 ): EditorView {
   const extensions: Extension[] = [
+    // Before the line numbers, so blame is the outermost gutter.
+    blame.of([]),
     lineNumbers({
       domEventHandlers: {
         mousedown(view, line, event) {

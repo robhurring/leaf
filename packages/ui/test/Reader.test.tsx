@@ -3,6 +3,7 @@ import { render, screen, fireEvent, waitFor, within } from '@testing-library/rea
 import { Reader } from '../src/components/Reader.js';
 import { useDocuments } from '../src/store/documents.js';
 import { scripted, README, GUIDE } from './helpers/scripted.js';
+import { useUi } from '../src/store/ui.js';
 import { runCommand } from '../src/commands.js';
 
 beforeEach(() => {
@@ -246,5 +247,106 @@ describe('Reader', () => {
     expect(back.disabled).toBe(true);
     fireEvent.click(forward);
     await waitFor(() => expect(location.pathname).toBe('/notes.txt'));
+  });
+
+  describe('blame', () => {
+    const git = { commit: 'c'.repeat(40), author: 'Rob', date: 1, message: 'm' };
+    const old = {
+      commit: 'a'.repeat(40),
+      author: 'Ann',
+      date: Date.now() - 400 * 86_400_000,
+      summary: 'start',
+    };
+    const fresh = {
+      commit: 'b'.repeat(40),
+      author: 'Bo',
+      date: Date.now() - 2 * 86_400_000,
+      summary: 'setup',
+    };
+    const blamed = () =>
+      scripted(
+        {
+          'README.md': README,
+          'notes.txt': 'one\ntwo\nthree\n',
+          'flow.mmd': 'graph LR\nA-->B\n',
+          'plain.md': '# Plain\n',
+        },
+        {
+          git: { 'README.md': git, 'notes.txt': git, 'flow.mmd': git },
+          blame: {
+            'README.md': [
+              { start: 1, lines: 4, ...old },
+              { start: 5, lines: 12, ...fresh },
+            ],
+            'notes.txt': [
+              { start: 1, lines: 2, ...old },
+              { start: 3, lines: 1, ...fresh },
+            ],
+          },
+        },
+      ).source;
+    beforeEach(() => useUi.setState({ blame: false, blameDetails: false }));
+
+    it('the header offers blame for markdown and code in git, not for diagrams or files outside git', async () => {
+      render(<Reader source={blamed()} />);
+      await screen.findByRole('heading', { name: 'Title', level: 1 });
+      const head = () => screen.getByRole('region', { name: 'File' });
+      expect(within(head()).getByRole('button', { name: 'Blame' })).toBeTruthy();
+      fireEvent.click(screen.getByText('flow.mmd'));
+      await waitFor(() =>
+        expect(within(head()).getByLabelText('Path').textContent).toBe('flow.mmd'),
+      );
+      expect(within(head()).queryByRole('button', { name: 'Blame' })).toBeNull();
+      fireEvent.click(screen.getByText('plain.md'));
+      await screen.findByRole('heading', { name: 'Plain', level: 1 });
+      expect(within(head()).queryByRole('button', { name: 'Blame' })).toBeNull();
+    });
+
+    it('markdown: a bar beside each block; one click expands it, Details expands them all', async () => {
+      render(<Reader source={blamed()} />);
+      await screen.findByRole('heading', { name: 'Title', level: 1 });
+      const head = screen.getByRole('region', { name: 'File' });
+      expect(document.querySelector('.leaf-blame-bar')).toBeNull();
+      fireEvent.click(within(head).getByRole('button', { name: 'Blame' }));
+      await waitFor(() =>
+        expect(document.querySelectorAll('.leaf-blame-bar').length).toBeGreaterThan(1),
+      );
+      const bars = [...document.querySelectorAll<HTMLElement>('.leaf-blame-bar')];
+      // The title (line 1) is the old commit; a later block is the fresh one.
+      expect(bars[0]!.title).toContain('aaaaaaa Ann');
+      expect(bars.some((b) => b.title.includes('bbbbbbb Bo'))).toBe(true);
+      expect(document.querySelector('.leaf-blame-label')).toBeNull();
+      fireEvent.click(bars[0]!);
+      expect(document.querySelectorAll('.leaf-blame-label')).toHaveLength(1);
+      expect(document.querySelector('.leaf-blame-label')!.textContent).toMatch(/^aaaaaaa Ann /);
+      fireEvent.click(within(head).getByRole('button', { name: 'Blame details' }));
+      expect(document.querySelectorAll('.leaf-blame-label').length).toBe(bars.length);
+      expect(useUi.getState().blameDetails).toBe(true);
+      fireEvent.click(within(head).getByRole('button', { name: 'Blame' }));
+      expect(document.querySelector('.leaf-blame-bar')).toBeNull();
+    });
+
+    it('code files: blame in the editor gutter', async () => {
+      useUi.setState({ blame: true });
+      render(<Reader source={blamed()} />);
+      await screen.findByRole('heading', { name: 'Title', level: 1 });
+      fireEvent.click(screen.getByText('notes.txt'));
+      await waitFor(() =>
+        expect(
+          document.querySelectorAll('.cm-blame-gutter .leaf-blame-cell').length,
+        ).toBeGreaterThan(0),
+      );
+      const cells = [
+        ...document.querySelectorAll<HTMLElement>('.cm-blame-gutter .leaf-blame-cell'),
+      ];
+      expect(cells.some((c) => c.title.includes('aaaaaaa Ann'))).toBe(true);
+      expect(cells.some((c) => c.title.includes('bbbbbbb Bo'))).toBe(true);
+      useUi.setState({ blameDetails: true });
+      await waitFor(() =>
+        expect(document.querySelector('.cm-blame-gutter .leaf-blame-label')?.textContent).toMatch(
+          /^aaaaaaa Ann /,
+        ),
+      );
+    });
   });
 });

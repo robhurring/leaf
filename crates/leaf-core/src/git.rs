@@ -88,12 +88,15 @@ impl<T: Clone> Lazy<T> {
     }
 }
 
+/// A file's blame as last looked up: None when it isn't tracked.
+type BlameCacheEntry = Option<Vec<BlameHunk>>;
+
 pub struct GitInfoProvider {
     root_dir: PathBuf,
     repo_root: Lazy<Option<PathBuf>>,
     remote: Lazy<Option<String>>,
     cache: Mutex<HashMap<PathBuf, (f64, Option<GitInfo>)>>,
-    blames: Mutex<HashMap<PathBuf, (f64, Option<Vec<BlameHunk>>)>>,
+    blames: Mutex<HashMap<PathBuf, (f64, BlameCacheEntry)>>,
 }
 
 impl GitInfoProvider {

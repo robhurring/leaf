@@ -5,6 +5,7 @@ import { create } from 'zustand';
 import { applyRemotePreferences, syncPreferences } from './preferences.js';
 import { useAssets } from './assets.js';
 import type {
+  BlameHunk,
   Capabilities,
   Config,
   Entry,
@@ -36,7 +37,11 @@ export type DocumentsState = {
   /** Headings of the open document, reported by the markdown viewer after rendering. */
   headings: Heading[];
   frontmatter?: Record<string, unknown>;
+  /** Git blame per path, once asked for: who last changed each line. */
+  blame: Record<string, { hunks: BlameHunk[]; repoUrl?: string }>;
 
+  /** Asks for `path`'s blame; it's asked again whenever the file changes. */
+  requestBlame(path: string): void;
   setHeadings(headings: Heading[], frontmatter?: Record<string, unknown>): void;
   attach(source: DocumentSource): () => void;
   open(path: string): void;
@@ -75,6 +80,7 @@ const initial = () => ({
   expandAllCapped: false,
   headings: [] as Heading[],
   frontmatter: undefined,
+  blame: {} as Record<string, { hunks: BlameHunk[]; repoUrl?: string }>,
 });
 
 const isUnder = (path: string, dir: string) =>
@@ -147,7 +153,10 @@ export const useDocuments = create<DocumentsState>((set, get) => {
                 },
               };
             });
-          } else read(path);
+          } else {
+            read(path);
+            if (get().blame[path]) send({ type: 'blame', path, id: nextId() });
+          }
         }
         for (const dir of ['', ...expanded])
           if (touched.some((t) => parentOf(t) === dir)) list(dir);
@@ -155,6 +164,14 @@ export const useDocuments = create<DocumentsState>((set, get) => {
       }
       case 'matches':
         set({ matches: msg.entries });
+        return;
+      case 'blameHunks':
+        set((s) => ({
+          blame: {
+            ...s.blame,
+            [msg.path]: { hunks: msg.hunks, ...(msg.repoUrl ? { repoUrl: msg.repoUrl } : {}) },
+          },
+        }));
         return;
       case 'textMatches':
         // Only the newest query's answer counts; older replies can arrive late.
@@ -226,6 +243,10 @@ export const useDocuments = create<DocumentsState>((set, get) => {
 
     refresh(path) {
       read(path);
+    },
+
+    requestBlame(path) {
+      send({ type: 'blame', path, id: nextId() });
     },
 
     expand(dir) {

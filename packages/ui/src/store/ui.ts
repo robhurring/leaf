@@ -27,6 +27,12 @@ export type UiState = {
   /** The last commit line in the file header. */
   showGit: boolean;
   setShowGit(v: boolean): void;
+  /** Git blame beside the lines of code and markdown files. */
+  blame: boolean;
+  /** Every blame block expanded to its commit, author, and date. */
+  blameDetails: boolean;
+  setBlame(v: boolean): void;
+  setBlameDetails(v: boolean): void;
   setTreeOpen(v: boolean): void;
   setOutlineOpen(v: boolean): void;
   setNumbering(v: boolean): void;
@@ -49,6 +55,8 @@ export const UI_DEFAULTS = {
   treeWidth: SIDEBAR_DEFAULT,
   outlineWidth: SIDEBAR_DEFAULT,
   showGit: true,
+  blame: false,
+  blameDetails: false,
 };
 
 export const useUi = create<UiState>()(
@@ -57,6 +65,8 @@ export const useUi = create<UiState>()(
       ...UI_DEFAULTS,
       setTreeOpen: (treeOpen) => set({ treeOpen }),
       setShowGit: (showGit) => set({ showGit }),
+      setBlame: (blame) => set({ blame }),
+      setBlameDetails: (blameDetails) => set({ blameDetails }),
       setOutlineOpen: (outlineOpen) => set({ outlineOpen }),
       setNumbering: (numbering) => set({ numbering }),
       setTheme: (theme) => set({ theme }),

@@ -23,6 +23,7 @@ import { DocToolsContext, Properties } from './Properties.js';
 import { Stage } from '../stage/Stage.js';
 import { useStage } from '../store/stage.js';
 import { ProgressBar } from './ProgressBar.js';
+import { BlameMargin } from './BlameMargin.js';
 import { AppearanceContext, useResolvedAppearance } from '../viewers/appearance.js';
 import { AssetContext, rawUrl, type AssetResolver } from '../render/components/assetContext.js';
 import { useAssets } from '../store/assets.js';
@@ -324,6 +325,16 @@ export function Reader(props: ReaderProps) {
     return () => cancelAnimationFrame(f);
   }, [native, file]);
 
+  // Blame: for markdown and code files in git; diagrams and the rest don't show it.
+  const blameAvailable =
+    !!file?.git && (isMarkdown || (file !== undefined && viewers.forFile(file).id === 'code'));
+  const blameOn = blameAvailable && ui.blame;
+  const blame = useDocuments((s) => (file ? s.blame[file.path] : undefined));
+  useEffect(() => {
+    if (blameOn && path) useDocuments.getState().requestBlame(path);
+  }, [blameOn, path]);
+  const [markdownHost, setMarkdownHost] = useState<HTMLDivElement | null>(null);
+
   // Only markdown has an outline; other files hide it without touching the saved setting.
   const outlineAvailable = !file || isMarkdown;
   const outlineOn = outlineAvailable && outlineOpen;
@@ -397,7 +408,21 @@ export function Reader(props: ReaderProps) {
             {treeAvailable && treeOpen && <Resizer side="tree" />}
             <div className="leaf-doc-col">
               {file && (
-                <Properties file={file} frontmatter={docs.frontmatter} toolsRef={setToolsEl} />
+                <Properties
+                  file={file}
+                  frontmatter={docs.frontmatter}
+                  toolsRef={setToolsEl}
+                  blame={
+                    blameAvailable
+                      ? {
+                          on: ui.blame,
+                          details: ui.blameDetails,
+                          onToggle: () => ui.setBlame(!ui.blame),
+                          onToggleDetails: () => ui.setBlameDetails(!ui.blameDetails),
+                        }
+                      : undefined
+                  }
+                />
               )}
               <div className="leaf-main-wrap">
                 {find && (
@@ -416,6 +441,8 @@ export function Reader(props: ReaderProps) {
                       {isMarkdown && file ? (
                         <div
                           className="leaf-main-inner"
+                          ref={setMarkdownHost}
+                          data-blame={blameOn ? (ui.blameDetails ? 'details' : 'bars') : undefined}
                           data-viewer="markdown"
                           onClick={(e) => {
                             const a = (e.target as HTMLElement).closest?.(
@@ -437,6 +464,13 @@ export function Reader(props: ReaderProps) {
                               onRendered={onRendered}
                             />
                           </NumberingContext.Provider>
+                          {blameOn && blame && (
+                            <BlameMargin
+                              host={markdownHost}
+                              hunks={blame.hunks}
+                              details={ui.blameDetails}
+                            />
+                          )}
                         </div>
                       ) : nothingToOpen ? (
                         <div className="leaf-doc-state" role="status">

@@ -64,6 +64,7 @@ Then the parts a static page can't do:
 - **Find anything.** `⌘K` searches headings, file names, and the text of every file in the folder from one box; `⌘F` finds in the open document.
 - **File header.** The path and when the file was created and changed sit above the document, with the last commit beneath it as a `git log` line, linked to your remote along with its pull request. Properties opens the frontmatter and file details in place. Links to the web open in your browser. Code, CSV, diagram, and image files fill the window, their controls in a toolbar under the header. A diagram file opens ready to pan, zoom, and draw on.
 - **Mentions and topics.** `@user` and `#topic` light up and link where you say, or to GitHub when you're inside a GitHub checkout.
+- **Blame.** For a file in git, the blame button in the file header puts a bar beside each block of a document (each line of code), darker the newer the change and amber where it isn't committed. Click a bar for its commit, author, and age, or turn on details to see them all.
 - **Other files too.** Code in a read-only editor with line selection you can link to, CSV as a sortable, filterable table, images on a checkerboard, media, and a card for anything else.
 - **Native, light and dark.** The window is a Mac app: title bar, menus, system font. Light, dark, or follow the system, remembered across runs along with the sidebars, numbering, and text size. In a browser, GitHub, Glass, Card, and Paper change how the document reads.
 
