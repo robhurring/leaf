@@ -1,11 +1,13 @@
 // markdown string + registries → React element. Pure: no store, no network.
 import {
   cloneElement,
+  createContext,
   createElement,
   Fragment,
   isValidElement,
   type ReactElement,
   type ReactNode,
+  useContext,
 } from 'react';
 import { unified } from 'unified';
 import remarkParse from 'remark-parse';
@@ -72,6 +74,25 @@ const schema = {
   },
 };
 
+// The rendered blocks (diagrams, live panes) of the document being shown. One stable
+// component reads them, so a re-render of the document (an edit elsewhere, the color
+// pass) updates a block in place instead of mounting it again.
+const Slots = createContext<NodeSlots>([]);
+
+/** A rendered block, which gets the fence's source lines it stands for. */
+function LeafNode(props: { 'data-slot': string; 'data-pos'?: string }) {
+  const node = useContext(Slots)[Number(props['data-slot'])];
+  return createElement(
+    Fragment,
+    null,
+    props['data-pos'] && isValidElement(node)
+      ? cloneElement(node as ReactElement<{ 'data-pos'?: string }>, {
+          'data-pos': props['data-pos'],
+        })
+      : node,
+  );
+}
+
 export async function renderMarkdown(src: string, opts: RenderOptions): Promise<Rendered> {
   const reg = { ...defaultRegistries, ...opts.registries };
   let headings: Heading[] = [];
@@ -132,26 +153,15 @@ export async function renderMarkdown(src: string, opts: RenderOptions): Promise<
     img: image(opts.docPath),
     'leaf-code': CodeBlock as never,
     ...opts.components,
-    // A rendered block (a diagram's frame) gets the fence's source lines it stands for.
-    'leaf-node': ((props: { 'data-slot': string; 'data-pos'?: string }) => {
-      const node = slots[Number(props['data-slot'])] as ReactNode;
-      return createElement(
-        Fragment,
-        null,
-        props['data-pos'] && isValidElement(node)
-          ? cloneElement(node as ReactElement<{ 'data-pos'?: string }>, {
-              'data-pos': props['data-pos'],
-            })
-          : node,
-      );
-    }) as never,
+    'leaf-node': LeafNode as never,
   };
-  const element = toJsxRuntime(tree, {
+  const body = toJsxRuntime(tree, {
     Fragment: JsxFragment,
     jsx,
     jsxs,
     components,
     passNode: false,
   });
+  const element = createElement(Slots.Provider, { value: slots }, body);
   return { element, headings, frontmatter };
 }

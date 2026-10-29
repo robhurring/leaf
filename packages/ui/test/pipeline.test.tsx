@@ -162,3 +162,27 @@ describe('renderMarkdown', () => {
     expect(h).toContain('data-lang="typescript"');
   });
 });
+
+describe('re-rendering a document', () => {
+  it('keeps a rendered block mounted when only other text changes', async () => {
+    const { createBlockRegistry } = await import('../src/render/registries/index.js');
+    const { render: mount } = await import('@testing-library/react');
+    const { createElement, useEffect } = await import('react');
+    let mounts = 0;
+    function Probe() {
+      useEffect(() => {
+        mounts++;
+      }, []);
+      return createElement('div', { 'data-testid': 'probe' });
+    }
+    const blocks = createBlockRegistry();
+    blocks.register({ lang: 'probe', render: () => createElement(Probe) });
+    const doc = (title: string) => `# ${title}\n\n\`\`\`probe\nx\n\`\`\`\n`;
+    const first = await renderMarkdown(doc('One'), { ...base, registries: { blocks } });
+    const second = await renderMarkdown(doc('Two'), { ...base, registries: { blocks } });
+    const view = mount(first.element);
+    view.rerender(second.element);
+    expect(view.container.textContent).toContain('Two');
+    expect(mounts).toBe(1);
+  });
+});
