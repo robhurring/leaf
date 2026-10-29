@@ -42,13 +42,18 @@ const surface = new THREE.Mesh(
 );
 const lines = new THREE.MeshBasicMaterial({ wireframe: true, transparent: true, opacity: 0.1 });
 surface.add(new THREE.Mesh(geo, lines));
-surface.rotation.x = -Math.PI / 2.6;
+surface.rotation.x = -Math.PI / 2;
 scene.add(surface);
 scene.add(new THREE.AmbientLight(0xffffff, 0.6));
 const sun = new THREE.DirectionalLight(0xffffff, 2);
 sun.position.set(2, 5, 3);
 scene.add(sun);
-camera.position.set(0, 0.6, 7);
+// Look down on the surface from high enough to see all of it; back off in a narrow pane.
+const frameIt = () => {
+  const k = Math.max(1, 1.3 / camera.aspect);
+  camera.position.set(0, 6.5 * k, 7.5 * k);
+  camera.lookAt(0, -0.5, 0);
+};
 
 const ink = () => lines.color.set(theme === 'dark' ? 0xffffff : 0x000000);
 ink();
@@ -56,6 +61,7 @@ addEventListener('themechange', ink);
 
 const pos = geo.attributes.position;
 onFrame((t) => {
+  frameIt();
   const s = t / 1000;
   for (let i = 0; i < pos.count; i++) {
     const x = pos.getX(i);
@@ -79,10 +85,12 @@ const faint = () => (theme === 'dark' ? 'rgba(230,237,243,0.2)' : 'rgba(31,35,40
 const SPEED = () => width / 15000; // the wave crosses the pane in about 15 seconds
 const samples = [];
 
+// Lines, dots, and text grow with the pane, so it reads in the zoomed view too.
+const scale = () => Math.max(1, height / 300);
 const dot = (x, y, color) => {
   ctx.fillStyle = color;
   ctx.beginPath();
-  ctx.arc(x, y, 5, 0, Math.PI * 2);
+  ctx.arc(x, y, 5 * scale(), 0, Math.PI * 2);
   ctx.fill();
 };
 
@@ -100,7 +108,7 @@ onFrame((t) => {
 
   ctx.clearRect(0, 0, width, height);
   ctx.strokeStyle = faint();
-  ctx.lineWidth = 1;
+  ctx.lineWidth = scale();
   ctx.beginPath();
   ctx.moveTo(0, cy);
   ctx.lineTo(width, cy);
@@ -110,7 +118,7 @@ onFrame((t) => {
   ctx.stroke();
 
   ctx.strokeStyle = ink();
-  ctx.lineWidth = 1.5;
+  ctx.lineWidth = 1.5 * scale();
   ctx.beginPath();
   ctx.moveTo(cx, cy);
   ctx.lineTo(px, py);
@@ -125,7 +133,7 @@ onFrame((t) => {
   ctx.setLineDash([]);
 
   ctx.strokeStyle = blue;
-  ctx.lineWidth = 2.5;
+  ctx.lineWidth = 2.5 * scale();
   ctx.beginPath();
   samples.forEach((s, i) => {
     const x = startX + (t - s.t) * SPEED();
@@ -137,9 +145,12 @@ onFrame((t) => {
   dot(px, py, red);
   dot(startX, py, blue);
   ctx.fillStyle = ink();
-  ctx.font = '13px system-ui, sans-serif';
-  ctx.fillText('a point turning', cx - 44, cy + r + 26);
-  ctx.fillText('its height over time: sin θ', startX + 8, 22);
+  const size = Math.max(13, Math.round(height / 22));
+  ctx.font = `${size}px system-ui, sans-serif`;
+  ctx.textAlign = 'center';
+  ctx.fillText('a point turning', cx, cy + r + size * 2);
+  ctx.textAlign = 'left';
+  ctx.fillText('its height over time: sin θ', startX + 8, size * 1.8);
 });
 ```
 
@@ -214,10 +225,11 @@ function step() {
 function draw() {
   const dark = theme === 'dark';
   ctx.clearRect(0, 0, width, height);
+  const size = Math.max(13, Math.round(height / 20));
   const gap = 4;
   const w = (width - 40 - gap * (n - 1)) / n;
   bars.forEach((v, k) => {
-    const h = v * (height - 64);
+    const h = v * (height - 24 - size * 2.6);
     const placed = done || k >= n - pass;
     const active = !done && last && (k === last.at || k === last.at + 1);
     ctx.fillStyle = active
@@ -232,8 +244,8 @@ function draw() {
     ctx.fillRect(20 + k * (w + gap), height - 24 - h, w, h);
   });
   ctx.fillStyle = dark ? '#e6edf3' : '#1f2328';
-  ctx.font = '13px system-ui, sans-serif';
-  ctx.fillText(done ? 'sorted' : `pass ${pass + 1}`, 20, 22);
+  ctx.font = `${size}px system-ui, sans-serif`;
+  ctx.fillText(done ? 'sorted' : `pass ${pass + 1}`, 20, size * 1.7);
 }
 
 reset();
