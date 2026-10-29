@@ -117,6 +117,19 @@ describe('BlockFrame', () => {
       expect(tools.querySelector(`[aria-label="${name}"]`), name).toBeTruthy();
   });
 
+  it('a viewer that does not zoom offers the zoomed view but no zoom or pan in place', () => {
+    const still = { ...mermaid, id: 'still', stage: {} };
+    render(
+      <BlockFrame viewer={still} props={props} lang="still">
+        <div />
+      </BlockFrame>,
+    );
+    const tools = screen.getByRole('group', { name: 'Block tools' });
+    expect(tools.querySelector('[aria-label="Open zoomed view"]')).toBeTruthy();
+    expect(tools.querySelector('[aria-label="Zoom in"]')).toBeNull();
+    expect(tools.querySelector('[aria-label="Pan"]')).toBeNull();
+  });
+
   it('a code block offers only copy', () => {
     render(
       <BlockFrame viewer={code} props={{ ...props, content: 'x' }} lang="typescript">

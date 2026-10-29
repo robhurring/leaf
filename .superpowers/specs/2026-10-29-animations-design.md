@@ -28,8 +28,8 @@ that show off what's possible.
   `srcdoc` — never `allow-same-origin` — so it has an opaque origin: no access to
   leaf's DOM, storage, Tauri/IPC, the websocket, or files. The frame document carries
   a CSP meta that blocks all network (`default-src 'none'; script-src 'unsafe-inline'
-  'unsafe-eval'; style-src 'unsafe-inline'; img-src data: blob:; media-src data: blob:;
-  font-src data:`). Because of this, panes run automatically for any file, from anyone;
+'unsafe-eval'; style-src 'unsafe-inline'; img-src data: blob:; media-src data: blob:;
+font-src data:`). Because of this, panes run automatically for any file, from anyone;
   there is no per-file trust prompt. (Decided by Claude; Rob didn't pick a trust model.)
 - **Bundled libraries, offline.** three.js is a dependency of `packages/ui` (pin a
   current release) and its source is inlined into the frame (the opaque-origin frame

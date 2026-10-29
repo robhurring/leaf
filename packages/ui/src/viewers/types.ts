@@ -14,6 +14,8 @@ export type ViewerProps = {
   handlers?: Handlers;
   numbering?: boolean;
   linkBase?: string;
+  /** A fenced block's info string after the language (`height=480`); '' when none. */
+  meta?: string;
   /** Forces a light or dark rendering; otherwise the document's appearance applies. */
   appearance?: 'light' | 'dark';
 };

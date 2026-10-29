@@ -35,10 +35,12 @@
 ### Task 1: Fence meta reaches viewers; in-place zoom only for zoomable viewers
 
 **Files:**
+
 - Modify: `packages/ui/src/viewers/types.ts` (ViewerProps), `packages/ui/src/viewers/index.ts` (block bridge), `packages/ui/src/components/BlockFrame.tsx` (`zoomable`)
 - Test: `packages/ui/test/viewers.test.tsx`, `packages/ui/test/BlockFrame.test.tsx`
 
 **Interfaces:**
+
 - Produces: `ViewerProps.meta?: string` — the fence info string after the language (e.g. `'height=480'`), `''` when none. BlockFrame shows in-place zoom/pan tools only when `viewer.stage?.zoom` is true; "Open zoomed view" still shows for any viewer with `stage` defined.
 
 - [ ] **Step 1: Write failing tests**
@@ -52,22 +54,28 @@
 ### Task 2: The frame document
 
 **Files:**
+
 - Create: `packages/ui/src/viewers/live/frame.ts`
 - Test: `packages/ui/test/liveFrame.test.ts`
 
 **Interfaces:**
+
 - Produces:
   ```ts
   export type LiveKind = 'three' | 'canvas';
   export type Theme = 'light' | 'dark';
   export type Libs = { three: string }; // one classic script that sets window.THREE and window.OrbitControls
   export type Boot = { kind: LiveKind; code: string; theme: Theme; paused: boolean; libs?: Libs };
-  export const FRAME_CSP: string;            // exactly the Global Constraints value
+  export const FRAME_CSP: string; // exactly the Global Constraints value
   export function paneHeight(meta: string | undefined): number; // 320 default, clamp 120–1200
   export function buildSrcdoc(boot: Boot, harnessSource: string): string;
   // messages
-  export type ToFrame = { leaf: 'live'; type: 'play' | 'pause' | 'restart' } | { leaf: 'live'; type: 'theme'; theme: Theme };
-  export type FromFrame = { leaf: 'live'; type: 'ready' } | { leaf: 'live'; type: 'error'; message: string; line?: number };
+  export type ToFrame =
+    | { leaf: 'live'; type: 'play' | 'pause' | 'restart' }
+    | { leaf: 'live'; type: 'theme'; theme: Theme };
+  export type FromFrame =
+    | { leaf: 'live'; type: 'ready' }
+    | { leaf: 'live'; type: 'error'; message: string; line?: number };
   export function isFromFrame(data: unknown): data is FromFrame;
   ```
 - The boot object goes into the srcdoc as `<script type="application/json" id="leaf-boot">` with every `<` written as `<` (and ` `/` ` escaped); the harness reads and `JSON.parse`s it.
@@ -86,10 +94,12 @@
 ### Task 3: The harness that runs inside the frame
 
 **Files:**
+
 - Create: `packages/ui/src/viewers/live/harness.ts`
 - Test: `packages/ui/test/liveHarness.test.ts`
 
 **Interfaces:**
+
 - Consumes: `Boot`, `ToFrame`, `FromFrame` (Task 2).
 - Produces: `export function harness(win: Window): void` — fully self-contained (no imports, no references outside its body; it is serialized with `.toString()`), reads `#leaf-boot`, and:
   - wraps `win.requestAnimationFrame`/`cancelAnimationFrame`, `setTimeout`/`setInterval`/`clear*` so nothing fires while paused (timers keep their remaining delay and resume);
@@ -122,12 +132,14 @@
 ### Task 4: The pane and the viewer
 
 **Files:**
+
 - Create: `packages/ui/src/viewers/live/index.tsx` (viewer `live`), `packages/ui/src/viewers/live/LivePane.tsx`, `packages/ui/src/viewers/live/libs.ts`
 - Create: `packages/ui/three-bundle.ts` — a Vite plugin `threeBundle()` resolving `virtual:leaf-three`; its `load` runs `esbuild.build({ stdin: { contents: "import * as THREE from 'three'; import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js'; window.THREE = THREE; window.OrbitControls = OrbitControls;", resolveDir: <packages/ui>, loader: 'js' }, bundle: true, format: 'iife', minify: true, write: false })` and returns `export default <JSON-stringified text>`. Add it to `vite.config.ts` plugins and declare the module in a `.d.ts`. (esbuild is already in node_modules via Vite; add it to `packages/ui` devDependencies explicitly.)
 - Modify: `packages/ui/src/viewers/index.ts` (register), `packages/ui/package.json` (`three` ^0.186.1, `@types/three` dev), `packages/ui/src/icons/` (Play, Pause, Restart, Code if missing), `packages/ui/src/styles/leaf.css` (`.leaf-live*`)
 - Test: `packages/ui/test/live.test.tsx` — note `live.test.tsx` exists already (live reload); name this `livePane.test.tsx`
 
 **Interfaces:**
+
 - Consumes: Tasks 1–3.
 - Produces: `export const live: Viewer` with `id: 'live'`, `matches: { lang: ['three', 'canvas'] }`, `stage: {}`, `Inline` and `Rich` both `LivePane` (Rich fills its container's height instead of `paneHeight`). `libs.ts`: `export function loadThreeLibs(): Promise<Libs>` using `import('virtual:leaf-three')` (default export: the bundled script text), cached in a module-level promise, wrapped in `track(load(...))` like mermaid.
 - LivePane behavior:
@@ -157,11 +169,13 @@
 ### Task 5: Examples, docs, end-to-end
 
 **Files:**
+
 - Create: `examples/animations.md`
 - Modify: `examples/README.md` (Markdown list, after Diagrams: `- [Animations](./animations.md): live three.js and canvas blocks for illustrating ideas, a broken one, and presenting them in the Stage.`), `README.md` (a "Live animation blocks" section: the two languages, their globals, `height=`, the sandbox — no network, no access to leaf or files), `packages/ui/e2e/smoke.spec.ts`
 - Test: `packages/ui/e2e/smoke.spec.ts`
 
 **Example content** (each preceded by a sentence on what it illustrates; each must look good in light and dark):
+
 1. `three`: a lit, slowly rotating torus knot with `OrbitControls` (drag to look around), `height=400`.
 2. `three`: a wave surface (PlaneGeometry vertices displaced by `sin` over time) with a wireframe overlay.
 3. `canvas`: a sine wave traced by a point on a turning circle (unit circle → sine), labels drawn on canvas.

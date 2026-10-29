@@ -1,7 +1,9 @@
 import { describe, it, expect, vi } from 'vitest';
 import { render, screen, waitFor } from '@testing-library/react';
 import type { FileMessage } from '@leaf/protocol';
+import type { ReactElement } from 'react';
 import { viewers } from '../src/viewers/index.js';
+import { registries } from '../src/render/registries/index.js';
 import { binary } from '../src/viewers/binary/index.js';
 import { code } from '../src/viewers/code/index.js';
 import { media } from '../src/viewers/media/index.js';
@@ -40,6 +42,15 @@ describe('viewer registry', () => {
 
   it('forLang resolves registered fence languages', () => {
     expect(viewers.forLang('nope')).toBeUndefined();
+  });
+
+  it('a fenced block hands its info string after the language to the viewer', () => {
+    const el = registries.blocks
+      .resolve('mermaid')!
+      .render('graph TD', 'height=480', { docPath: 'a.md', config: {} }) as ReactElement<{
+      props: { meta?: string };
+    }>;
+    expect(el.props.props.meta).toBe('height=480');
   });
 });
 

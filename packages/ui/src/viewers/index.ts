@@ -24,7 +24,7 @@ for (const v of viewers.all()) {
   for (const lang of v.matches.lang ?? []) {
     registries.blocks.register({
       lang,
-      render: (code, _meta, ctx) => {
+      render: (code, meta, ctx) => {
         const props: ViewerProps = {
           file: {
             type: 'file',
@@ -38,6 +38,7 @@ for (const v of viewers.all()) {
             content: code,
           },
           content: code,
+          meta,
           docPath: ctx.docPath,
           config: ctx.config,
         };
