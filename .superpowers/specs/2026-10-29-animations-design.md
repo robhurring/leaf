@@ -2,18 +2,20 @@
 
 ## Intent
 
-Rob wants markdown in leaf to be able to show things that move: a three.js scene, a
-canvas sketch, a small CSS/HTML demo. A fenced code block of one of the new kinds is
+Rob wants a nice way to illustrate things in his documents when presenting or sharing
+them: something that moves, written as a three.js scene or a 2D canvas sketch right in
+the markdown. A fenced code block of one of the new kinds is
 replaced by a live pane, the way mermaid blocks become diagrams today. "JS-fiddle-ish":
 the pane runs the code, the code is one toggle away.
 
 Success: Rob writes (or Claude writes for him) a ` ```three ` block in a note, opens it in
 leaf, and sees a spinning scene in the document; edits the file and the pane restarts
-with the new code; ships with examples that show off what's possible.
+with the new code; zooms it to the Stage to present it large; ships with examples
+that show off what's possible.
 
 ## Goals
 
-- Three new fence languages, each rendered as a live pane:
+- Two new fence languages, each rendered as a live pane:
   - `three` — JavaScript with three.js ready: `THREE`, plus `scene`, `camera`,
     `renderer` already made and sized to the pane, and `onFrame(fn)` where
     `fn(t, dt)` gets ms since start and since the last frame. The harness renders
@@ -22,8 +24,6 @@ with the new code; ships with examples that show off what's possible.
     aspect with the pane.
   - `canvas` — JavaScript with a 2D canvas ready: `canvas`, `ctx`, `width`, `height`
     (CSS px, the canvas is scaled for device pixel ratio), and `onFrame(fn)`.
-  - `html-live` — a whole HTML snippet/page (markup, `<style>`, `<script>`) dropped
-    into the frame's body as-is.
 - **Sandboxed, always.** Every pane is an `<iframe sandbox="allow-scripts">` with
   `srcdoc` — never `allow-same-origin` — so it has an opaque origin: no access to
   leaf's DOM, storage, Tauri/IPC, the websocket, or files. The frame document carries
@@ -67,10 +67,12 @@ with the new code; ships with examples that show off what's possible.
   mermaid).
 - **Examples.** `examples/animations.md` showcasing each kind, with real eye candy:
   e.g. a lit, rotating three.js object with orbit-ish auto camera motion, a particle
-  field or wave surface in three.js, a 2D canvas flow field or bouncing-balls sketch, an
-  `html-live` CSS animation, and one deliberately broken block showing the error view.
+  field or wave surface in three.js, 2D canvas sketches that explain something (a
+  flow field, a sine wave built from a turning circle, a sorting algorithm stepping),
+  and one deliberately broken block showing the error view. Panes take pointer input
+  (OrbitControls drag in a three example), which matters when presenting.
   Link it from `examples/README.md` like the other examples.
-- **Docs.** README section on live blocks: the three languages, the globals each gets,
+- **Docs.** README section on live blocks: the two languages, the globals each gets,
   `height=`, and the sandbox (what panes can't do).
 
 ## Non-goals
@@ -80,6 +82,7 @@ with the new code; ships with examples that show off what's possible.
   leaf bundles (three.js, including the addons Rich wants: OrbitControls). An `import`
   from a URL fails under the CSP and shows as an error.
 - p5, d3, other libraries (later, if wanted).
+- Live HTML/CSS blocks (an `html-live` kind was considered; Rob dropped it).
 - Whole-file viewers (`.three.js` files etc.). Fenced blocks only.
 - Messages from a pane to leaf beyond ready and error. A pane can't navigate leaf,
   open links in leaf, or read the document.
