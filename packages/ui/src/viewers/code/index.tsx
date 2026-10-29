@@ -7,6 +7,7 @@ import type { EditorView } from '@codemirror/view';
 import type { Viewer, ViewerProps } from '../types.js';
 import { BinaryCard } from '../binary/index.js';
 import { track } from '../../render/progress.js';
+import { load } from '../../render/connection.js';
 import { Check, Copy, WrapText } from '../../icons/index.js';
 import { useAppearance } from '../appearance.js';
 
@@ -52,7 +53,7 @@ export function CodeRich(props: ViewerProps) {
     let view: EditorView | null = null;
     let gone = false;
     // CodeMirror loads the first time a code file (or a zoomed code block) opens.
-    void track(import('./editor.js')).then((editor) => {
+    void track(load(() => import('./editor.js'))).then((editor) => {
       if (gone) return;
       editorRef.current = editor;
       view = editor.createReadOnlyView(

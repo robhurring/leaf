@@ -1,5 +1,6 @@
 // Everything the UI knows about the document tree and open files. Fed only by a
 // DocumentSource; components never talk to a source directly.
+import { setConnection } from '../render/connection.js';
 import { create } from 'zustand';
 import { applyRemotePreferences, syncPreferences } from './preferences.js';
 import { useAssets } from './assets.js';
@@ -198,7 +199,10 @@ export const useDocuments = create<DocumentsState>((set, get) => {
       source = src;
       useAssets.getState().attach((m) => src.send(m));
       const offMsg = src.onMessage(onMessage);
-      const offStatus = src.onStatus((status) => set({ status }));
+      const offStatus = src.onStatus((status) => {
+        setConnection(status);
+        set({ status });
+      });
       return () => {
         offMsg();
         offStatus();

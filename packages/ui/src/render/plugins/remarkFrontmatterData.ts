@@ -2,6 +2,7 @@
 import type { Root } from 'mdast';
 import type { VFile } from 'vfile';
 import { track } from '../progress.js';
+import { load } from '../connection.js';
 
 export function remarkFrontmatterData() {
   return async (tree: Root, file: VFile) => {
@@ -9,7 +10,7 @@ export function remarkFrontmatterData() {
     if (i < 0) return;
     const node = tree.children[i] as { value: string };
     // The YAML parser loads only for documents that have frontmatter.
-    const { parse } = await track(import('yaml'));
+    const { parse } = await track(load(() => import('yaml')));
     try {
       file.data.frontmatter = parse(node.value) as Record<string, unknown>;
     } catch {

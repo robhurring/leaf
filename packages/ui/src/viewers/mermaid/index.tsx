@@ -1,6 +1,7 @@
 // Mermaid, rendered in the browser. Memoized on content so live edits elsewhere
 // in the document never re-render a diagram; parse errors show in place.
 import { track } from '../../render/progress.js';
+import { load } from '../../render/connection.js';
 import { useEffect, useMemo, useState } from 'react';
 import type { Viewer, ViewerProps } from '../types.js';
 import { DiagramError } from '../diagramError.js';
@@ -15,7 +16,7 @@ async function renderMermaid(code: string, dark: boolean): Promise<string> {
   let p = cache.get(key);
   if (!p) {
     p = (async () => {
-      const mermaid = (await track(import('mermaid'))).default;
+      const mermaid = (await track(load(() => import('mermaid')))).default;
       mermaid.initialize({
         startOnLoad: false,
         theme: dark ? 'dark' : 'default',

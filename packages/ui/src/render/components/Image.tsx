@@ -1,4 +1,5 @@
-import { useContext } from 'react';
+import { useContext, useEffect, useState } from 'react';
+import { useConnection } from '../connection.js';
 import { resolveRelative, isAbsoluteUrl } from '../paths.js';
 import { AssetContext, rawUrl } from './assetContext.js';
 
@@ -12,6 +13,24 @@ export function image(docPath: string) {
       isAbsoluteUrl(src) || src.startsWith('/') || src.startsWith('data:')
         ? src
         : resolve(resolveRelative(docPath, src));
+    // An image that failed while the server was out of reach loads again once it is back.
+    const offline = useConnection((s) => s.offline);
+    const [failedOffline, setFailedOffline] = useState(false);
+    const [attempt, setAttempt] = useState(0);
+    useEffect(() => {
+      if (offline || !failedOffline) return;
+      setFailedOffline(false);
+      setAttempt((n) => n + 1);
+    }, [offline, failedOffline]);
+    if (failedOffline)
+      return (
+        <span
+          className="leaf-image-pending leaf-image-offline"
+          role="img"
+          aria-label={`${props.alt || 'Image'}, waiting for leaf`}
+          data-pos={props['data-pos']}
+        />
+      );
     if (resolved === null)
       return (
         <span
@@ -24,12 +43,16 @@ export function image(docPath: string) {
       );
     return (
       <img
+        key={attempt}
         className="leaf-image"
         src={resolved}
         alt={props.alt ?? ''}
         title={props.title}
         data-pos={props['data-pos']}
         loading="lazy"
+        onError={() => {
+          if (useConnection.getState().offline) setFailedOffline(true);
+        }}
       />
     );
   };

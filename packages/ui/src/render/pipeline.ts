@@ -24,6 +24,7 @@ import { rehypeInline, type NodeSlots } from './plugins/rehypeInline.js';
 import { rehypePos } from './plugins/rehypePos.js';
 import { rehypeMathPending } from './plugins/rehypeMathPending.js';
 import { track } from './progress.js';
+import { load } from './connection.js';
 import { CodeBlock } from './components/CodeBlock.js';
 import { heading } from './components/Heading.js';
 import { image } from './components/Image.js';
@@ -74,9 +75,9 @@ export async function renderMarkdown(src: string, opts: RenderOptions): Promise<
   const needsHtml = /<[A-Za-z!/]/.test(src);
   const needsMath = src.includes('$') && opts.math !== false;
   const [raw, katex] = await Promise.all([
-    needsHtml ? track(import('rehype-raw')) : null,
+    needsHtml ? track(load(() => import('rehype-raw'))) : null,
     needsMath
-      ? track(Promise.all([import('rehype-katex'), import('katex/dist/katex.min.css')]))
+      ? track(load(() => Promise.all([import('rehype-katex'), import('katex/dist/katex.min.css')])))
       : null,
   ]);
 

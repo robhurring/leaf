@@ -2076,6 +2076,39 @@ a.leaf-pill:hover {
     leaf-fade-in 0.2s 0.2s forwards,
     leaf-spin 0.8s linear infinite;
 }
+/* The server is out of reach: loaders stop spinning and show a cut cable. Whatever
+   they were waiting for is retried when the socket comes back. */
+.leaf-offline-mark {
+  color: var(--leaf-text-2);
+}
+html[data-connection='lost'] .leaf-diagram[aria-busy='true']::after,
+.leaf-image-offline::after,
+html[data-connection='lost'] .leaf-image-pending::after {
+  content: '';
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 22px;
+  height: 22px;
+  margin: -11px 0 0 -11px;
+  border: 0;
+  border-radius: 0;
+  background: var(--leaf-text-2);
+  -webkit-mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='1.7' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m19 5 3-3M2 22l3-3'/%3E%3Cpath d='M6.3 20.3a2.4 2.4 0 0 0 3.4 0L12 18l-6-6-2.3 2.3a2.4 2.4 0 0 0 0 3.4Z'/%3E%3Cpath d='M7.5 13.5 10 11M10.5 16.5 13 14'/%3E%3Cpath d='m12 6 6 6 2.3-2.3a2.4 2.4 0 0 0 0-3.4l-2.6-2.6a2.4 2.4 0 0 0-3.4 0Z'/%3E%3C/svg%3E")
+    center / contain no-repeat;
+  mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='1.7' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m19 5 3-3M2 22l3-3'/%3E%3Cpath d='M6.3 20.3a2.4 2.4 0 0 0 3.4 0L12 18l-6-6-2.3 2.3a2.4 2.4 0 0 0 0 3.4Z'/%3E%3Cpath d='M7.5 13.5 10 11M10.5 16.5 13 14'/%3E%3Cpath d='m12 6 6 6 2.3-2.3a2.4 2.4 0 0 0 0-3.4l-2.6-2.6a2.4 2.4 0 0 0-3.4 0Z'/%3E%3C/svg%3E")
+    center / contain no-repeat;
+  opacity: 0;
+  animation: leaf-fade-in 0.2s forwards;
+}
+html[data-connection='lost'] .leaf-image-pending,
+.leaf-image-offline {
+  position: relative;
+  animation: none;
+}
+html[data-connection='lost'] .leaf-math-pending {
+  animation: none;
+}
 @keyframes leaf-fade-in {
   to {
     opacity: 1;

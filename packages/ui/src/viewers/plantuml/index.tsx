@@ -3,6 +3,7 @@ import { useEffect, useState } from 'react';
 import type { Viewer, ViewerProps } from '../types.js';
 import { useAppearance } from '../appearance.js';
 import { track } from '../../render/progress.js';
+import { load } from '../../render/connection.js';
 import { preparePlantUml } from './prepare.js';
 
 function PlantUmlView({ content, config, appearance }: ViewerProps) {
@@ -14,7 +15,7 @@ function PlantUmlView({ content, config, appearance }: ViewerProps) {
   useEffect(() => {
     if (!base) return;
     let live = true;
-    void track(import('./encode.js')).then(({ encodePlantUml }) => {
+    void track(load(() => import('./encode.js'))).then(({ encodePlantUml }) => {
       if (live) setEncoded(encodePlantUml(preparePlantUml(source, dark)));
     });
     return () => {

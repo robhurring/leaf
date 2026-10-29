@@ -1,6 +1,7 @@
 // Shiki highlighter, created once, languages loaded on demand. Both GitHub
 // themes are emitted; CSS picks one by appearance.
 import { track } from './progress.js';
+import { load } from './connection.js';
 import type { Element } from 'hast';
 import { bundledLanguages, createHighlighter, type Highlighter } from 'shiki';
 import { createOnigurumaEngine } from 'shiki/engine/oniguruma';
@@ -14,8 +15,10 @@ function get(): Promise<Highlighter> {
     langs: [],
     // Oniguruma (WASM, as in VS Code): the JS regex engine takes a second per large
     // grammar on WebKit, which is the app window's engine.
-    engine: createOnigurumaEngine(import('shiki/wasm')),
+    engine: createOnigurumaEngine(load(() => import('shiki/wasm'))),
   });
+  // A failed start (the server was out of reach) is forgotten, so the next block retries.
+  highlighterPromise.catch(() => (highlighterPromise = undefined));
   return highlighterPromise;
 }
 

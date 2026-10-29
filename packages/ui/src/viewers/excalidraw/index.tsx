@@ -1,6 +1,7 @@
 // Excalidraw scenes (.excalidraw files or ```excalidraw fences) exported to a
 // static SVG. The excalidraw package is large and loads on first use.
 import { track } from '../../render/progress.js';
+import { load } from '../../render/connection.js';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import type { Viewer, ViewerProps } from '../types.js';
 import { DiagramError } from '../diagramError.js';
@@ -37,7 +38,7 @@ function ExcalidrawView({ content, appearance }: ViewerProps) {
     let live = true;
     (async () => {
       const scene = parseScene(text);
-      const { exportToSvg } = await track(import('@excalidraw/excalidraw'));
+      const { exportToSvg } = await track(load(() => import('@excalidraw/excalidraw')));
       const svg = await exportToSvg({
         elements: scene.elements as never,
         appState: { ...scene.appState, exportWithDarkMode: dark, exportBackground: false } as never,

@@ -32,3 +32,4 @@ export { LeafMark } from './LeafMark.js';
 export { FilePlus } from './FilePlus.js';
 export { PencilLine } from './PencilLine.js';
 export { Sliders } from './Sliders.js';
+export { Unplugged } from './Unplugged.js';
