@@ -8,6 +8,7 @@ pub mod instances;
 pub mod launch;
 pub mod log;
 pub mod serve;
+pub mod tabs;
 pub mod window;
 pub mod window_state;
 pub mod ws;
