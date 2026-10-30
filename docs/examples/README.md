@@ -53,4 +53,5 @@ The file tree hides what git ignores (`files/build/` here) and reaches as deep a
 | `[` `]`   | the file tree, the outline                  |
 | `n` `t`   | number the headings, switch light and dark  |
 | `⌘[` `⌘]` | back and forward through the files you read |
+| `⌘T` `⌘W` | new tab, close tab                          |
 | `esc`     | close whatever is open                      |

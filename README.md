@@ -123,7 +123,8 @@ Then the parts a static page can't do:
 - **Charts and maps.** A ` ```chart ` block is a Chart.js config as YAML; a ` ```map ` block plots a CSV or a log by latitude and longitude; GeoJSON and TopoJSON draw as maps over a built-in world, with no network. Data can live in a file beside the document, and the chart or map redraws when it changes. `.chart`, `.geojson`, `.topojson`, `.three`, `.sketch`, and `.draw` files open full window.
 - **Animations.** A ` ```three ` or ` ```canvas ` block runs as a live pane, for illustrating an idea while you present: drag a 3D scene around, step through a sort, or play a game. See [Live animation blocks](#live-animation-blocks).
 - **Source, one click away.** Every diagram, chart, map, deck, table, and animation flips to its source and back, with its language shown, and copies it.
-- **Find anything.** `⌘K` searches headings, file names, and the text of every file in the folder from one box; `⌘F` finds in the open document.
+- **Find anything.** `⌘K` searches headings, file names, and the text of every file in the folder from one box (and, with tabs, the window's other tabs); `⌘F` finds in the open document.
+- **Tabs.** A window can hold several tabs, each its own workspace: a file or a folder, with its own tree and history. `⌘-click` a file in the tree (or right-click, Open in New Tab) to open it in a new tab on the same folder, `⌘T` for a new tab. Drag a tab along the row to reorder it, off the window to give it its own, or onto another window's tab row to move it there, live. A window with one tab has no tab row: drag its leaf mark onto another window instead. Settings decides whether `leaf open` opens a new window (the default) or a tab in the front one.
 - **File header.** The path and when the file was created and changed sit above the document, with the last commit beneath it as a `git log` line, linked to your remote along with its pull request. Properties opens the frontmatter and file details in place. Code, CSV, diagram, and image files fill the window, their controls in a toolbar under the header.
 - **Mentions and topics.** `@user` and `#topic` light up and link where you say, or to GitHub when you're inside a GitHub checkout.
 - **Blame.** For a file in git, the blame button in the file header adds a column beside the text: each block of a document (each run of lines in code) shows its commit, author, and age, with the commit and its pull request linked. Newer changes are tinted deeper; changes not yet committed are amber.
@@ -143,7 +144,7 @@ Each pane runs in a sandboxed frame: it can't reach leaf, your files, or the net
 
 ## Settings
 
-⌘, (or Settings… in the appearance menu) opens Settings. **Links to other apps** lists the kinds of link the leaf window hands to your Mac: the web, mail, and editors (`vscode`, `vscode-insiders`, `cursor`, `windsurf`, `zed`) to start. Add a kind such as `obsidian`, remove one, or restore the defaults; it's saved with your other preferences. `javascript:`, `file:`, and `data:` links never open.
+⌘, (or Settings… in the appearance menu) opens Settings. **Windows** chooses where `leaf open`, links, and Open Folder put what they open: a new window (the default), or a new tab of the front window. **Reopen my tabs when leaf starts** (off by default) brings back the windows and tabs open when you quit, less any whose file or folder is gone. **Links to other apps** lists the kinds of link the leaf window hands to your Mac: the web, mail, and editors (`vscode`, `vscode-insiders`, `cursor`, `windsurf`, `zed`) to start. Add a kind such as `obsidian`, remove one, or restore the defaults; it's saved with your other preferences. `javascript:`, `file:`, and `data:` links never open.
 
 ## Keyboard
 
@@ -156,6 +157,8 @@ Each pane runs in a sandboxed frame: it can't reach leaf, your files, or the net
 | `^f` `^b`       | scroll by a page                              |
 | `^n` `^p`       | next and previous heading, or list item       |
 | `[` `]`         | toggle the file tree, the outline             |
+| `⌘T` `⌘W`       | new tab, close tab (`⌘⇧W` closes the window)  |
+| `⌘⇧]` `⌘⇧[`     | next and previous tab; `⌘1`…`⌘9` pick one     |
 | `⌘,`            | Settings                                      |
 | `n` `t`         | number the headings, switch light and dark    |
 | `1` `2` `space` | in a zoom-in: hand, pencil, hold for the hand |
