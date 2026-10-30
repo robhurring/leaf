@@ -3128,3 +3128,105 @@ html[data-resizing] .leaf-blame-resizer::after {
   margin: 0;
   color: var(--leaf-text-2);
 }
+
+/* ---------- Jupyter notebooks ---------- */
+/* Cells down the page like a document: code in a block with its [count] in a narrow
+   column to the left, outputs under it, folded with the arrow in that column. */
+.leaf-nb {
+  --leaf-nb-prompt: 52px;
+}
+.leaf-nb-bar {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+  margin-bottom: 8px;
+  font: 12px/1 var(--leaf-font-ui);
+  color: var(--leaf-text-2);
+}
+.leaf-nb-bar .leaf-tool-text {
+  width: auto;
+  padding: 0 10px;
+  font-size: 12.5px;
+}
+.leaf-nb-lang {
+  margin-right: auto;
+  text-transform: capitalize;
+}
+.leaf-nb-cell {
+  margin: 14px 0;
+}
+.leaf-nb-md .leaf-doc {
+  padding: 0;
+}
+.leaf-nb-row {
+  display: grid;
+  grid-template-columns: var(--leaf-nb-prompt) minmax(0, 1fr);
+  align-items: start;
+  gap: 8px;
+}
+.leaf-nb-row + .leaf-nb-row {
+  margin-top: 6px;
+}
+.leaf-nb-prompt {
+  padding-top: 10px;
+  text-align: right;
+  font: 12px/1.4 var(--leaf-font-mono);
+  color: var(--leaf-text-2);
+}
+.leaf-nb-fold {
+  padding-top: 4px;
+  border: 0;
+  background: none;
+  cursor: pointer;
+}
+.leaf-nb-fold:hover {
+  color: var(--leaf-text);
+}
+.leaf-nb-code {
+  border-radius: var(--leaf-radius);
+  background: var(--leaf-surface-2);
+  overflow: hidden;
+}
+.leaf-nb-code .leaf-block-source {
+  padding: 10px 14px;
+  max-height: none;
+}
+.leaf-nb-outputs {
+  min-width: 0;
+}
+.leaf-nb-outputs > * + * {
+  margin-top: 6px;
+}
+.leaf-nb-stream,
+.leaf-nb-text,
+.leaf-nb-error pre {
+  margin: 0;
+  padding: 6px 2px;
+  overflow: auto;
+  font: 12.5px/1.5 var(--leaf-font-mono);
+  white-space: pre-wrap;
+}
+.leaf-nb-stderr {
+  color: var(--leaf-text-2);
+}
+.leaf-nb-error {
+  border-left: 3px solid #e5484d;
+  padding-left: 10px;
+  background: color-mix(in srgb, #e5484d 8%, transparent);
+}
+.leaf-nb-image {
+  display: block;
+  max-width: 100%;
+  height: auto;
+}
+.leaf-nb-html {
+  display: block;
+  width: 100%;
+  border: 0;
+  color-scheme: normal;
+}
+.leaf-nb-folded {
+  font: 12px/2 var(--leaf-font-ui);
+  color: var(--leaf-text-2);
+}

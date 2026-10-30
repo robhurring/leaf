@@ -55,6 +55,7 @@ test('examples render without console errors', async ({ page }) => {
     'charts.md',
     'maps.md',
     'realtime.md',
+    'notebooks.md',
   ]) {
     await page.goto('/' + f);
     await expect(page.locator('article.leaf-doc')).toBeVisible();

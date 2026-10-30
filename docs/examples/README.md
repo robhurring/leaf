@@ -16,6 +16,7 @@ This folder is leaf's living demo: everything leaf can show is somewhere in here
 - **[Charts](./charts.md)**: ` ```chart ` blocks, a Chart.js config as YAML, with data inline or read from a CSV or JSON Lines file beside the document.
 - **[Maps](./maps.md)**: GeoJSON, TopoJSON, and ` ```map ` blocks that plot a log or a CSV by latitude and longitude, over a built-in world with no network.
 - **[Slides](./slides.md)**: a markdown file with `marp: true` opens as a Marp deck: arrows to move, **Present** to fill the screen, **Speaker** for a window with your notes, the next slide, and a timer. A ` ```marp ` block puts a small deck inside any document.
+- **[Notebooks](./notebooks.md)**: Jupyter notebooks as documents, with their saved outputs (images, tables, markdown, errors), code you can hide, and outputs you can fold. A ` ```ipynb ` block embeds one.
 - **[Realtime](./realtime.md)**: run `bin/demo-live` and watch charts, a map, and a document update on their own as their files change.
 
 ## Files that open full window
@@ -24,6 +25,7 @@ Each of these opens on its own, filling the window:
 
 - [revenue.chart](./charts/revenue.chart), [mix.chart](./charts/mix.chart): charts.
 - [offices.geojson](./maps/offices.geojson), [datacenters.topojson](./maps/datacenters.topojson): maps.
+- [sales.ipynb](./notebooks/sales.ipynb): a Jupyter notebook.
 - [launch.marp](./slides/launch.marp): a deck on its own, with speaker notes.
 - [knot.three](./animations/knot.three): three.js code; [orbits.sketch](./animations/orbits.sketch): canvas code.
 - [flow.mmd](./diagrams/flow.mmd), [sequence.puml](./diagrams/sequence.puml), [sketch.excalidraw](./diagrams/sketch.excalidraw): diagrams.
