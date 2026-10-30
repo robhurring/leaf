@@ -475,12 +475,16 @@ pub fn receive_links() -> i32 {
         handle.exit(0);
     });
     app.run(|app, event| {
+        // Only macOS hands a running app the links it was opened with.
+        #[cfg(target_os = "macos")]
         if let tauri::RunEvent::Opened { urls } = event {
             for url in urls.iter().filter(|u| u.scheme() == "leaf") {
                 relaunch_with(url.as_str());
             }
             app.exit(0);
         }
+        #[cfg(not(target_os = "macos"))]
+        let _ = (app, event);
     });
     0
 }
@@ -556,11 +560,14 @@ pub fn run(config: Config, link: Option<String>) -> i32 {
         .map(|app| {
             // Links clicked elsewhere while this app runs (macOS delivers them here).
             app.run(|app, event| {
+                #[cfg(target_os = "macos")]
                 if let tauri::RunEvent::Opened { urls } = event {
                     for url in urls.iter().filter(|u| u.scheme() == "leaf") {
                         open_link(app, url.as_str());
                     }
                 }
+                #[cfg(not(target_os = "macos"))]
+                let _ = (app, event);
             })
         });
     match result {
