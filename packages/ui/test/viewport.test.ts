@@ -27,6 +27,15 @@ describe('viewport', () => {
     expect(v.get().scale).toBe(MIN_SCALE);
   });
 
+  it('actual size puts the content at 1:1 in the middle of the view', () => {
+    const v = createViewport({ scale: 3, x: 40, y: 9 });
+    v.actualSize(400, 200, 1000, 600);
+    expect(v.get()).toEqual({ scale: 1, x: 300, y: 200 });
+    // Bigger than the view: still 1:1, its middle in the middle.
+    v.actualSize(2000, 1000, 1000, 600);
+    expect(v.get()).toEqual({ scale: 1, x: -500, y: -200 });
+  });
+
   it('fits content into the view with a margin and reset returns to identity', () => {
     const v = createViewport();
     v.fit(2000, 1000, 1000, 1000, 50);

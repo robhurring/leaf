@@ -21,4 +21,5 @@ export const csv: Viewer = {
   },
   Inline: CsvViewer,
   Rich: CsvViewer,
+  source: true,
 };

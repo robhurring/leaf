@@ -33,6 +33,8 @@ export interface Viewer {
   Inline: FC<ViewerProps>;
   Rich: FC<ViewerProps>;
   stage?: { pan?: boolean; zoom?: boolean; draw?: boolean };
+  /** Shows a picture of text it has (a CSV as a table): it can flip to that text. */
+  source?: boolean;
   actions?: Action[];
 }
 

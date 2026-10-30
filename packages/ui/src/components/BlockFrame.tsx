@@ -93,7 +93,7 @@ export function BlockFrame({
   const [view, setView] = useState<View>(HOME);
   const [panning, setPanning] = useState(false);
   const drag = useRef<{ x: number; y: number } | null>(null);
-  const hasSource = visual && viewer.id !== 'image' && source.trim() !== '';
+  const hasSource = ((visual && viewer.id !== 'image') || !!viewer.source) && source.trim() !== '';
   const zoomable = visual && !!viewer.stage?.zoom && !slot && !showSource;
   const moved = view.x !== 0 || view.y !== 0 || view.scale !== 1;
   const zoom = (factor: number) => setView((v) => ({ ...v, scale: clampScale(v.scale * factor) }));

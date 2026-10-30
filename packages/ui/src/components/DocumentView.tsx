@@ -11,7 +11,7 @@ import { DocToolsContext } from './Properties.js';
 import { StageCanvas } from '../stage/Stage.js';
 import { contentHash } from '../viewers/hash.js';
 import { useAnnotations } from '../store/annotations.js';
-import { Code } from '../icons/index.js';
+import { Check, Code, Copy, X } from '../icons/index.js';
 import { SourceView, sourceLang } from './SourceView.js';
 import type { Viewer, ViewerProps } from '../viewers/types.js';
 
@@ -63,6 +63,73 @@ function InlineStage({
         />
       )}
     </div>
+  );
+}
+
+/** A whole file that shows its text as something else (a CSV as a table): Show source
+ *  and Copy source in the file toolbar. */
+function WithSource({
+  viewer,
+  props,
+  slot,
+}: {
+  viewer: Viewer;
+  props: ViewerProps;
+  slot: HTMLElement;
+}) {
+  const Rich = viewer.Rich;
+  const [showSource, setShowSource] = useState(false);
+  const [copied, setCopied] = useState<'ok' | 'failed' | null>(null);
+  const text = props.content ?? '';
+  const copy = () =>
+    navigator.clipboard.writeText(text).then(
+      () => setCopied('ok'),
+      () => setCopied('failed'),
+    );
+  useEffect(() => {
+    if (!copied) return;
+    const t = setTimeout(() => setCopied(null), 1500);
+    return () => clearTimeout(t);
+  }, [copied]);
+  return (
+    <>
+      {createPortal(
+        <>
+          <button
+            type="button"
+            className="leaf-tool"
+            aria-label="Show source"
+            title={showSource ? 'Back to the table' : 'Show the source'}
+            aria-pressed={showSource}
+            onClick={() => setShowSource((v) => !v)}
+          >
+            <Code size={15} />
+          </button>
+          <button
+            type="button"
+            className="leaf-tool"
+            aria-label="Copy source"
+            title="Copy source"
+            data-result={copied ?? undefined}
+            onClick={() => void copy()}
+          >
+            {copied === 'ok' ? (
+              <Check size={15} />
+            ) : copied === 'failed' ? (
+              <X size={15} />
+            ) : (
+              <Copy size={15} />
+            )}
+          </button>
+        </>,
+        slot,
+      )}
+      {showSource ? (
+        <SourceView code={text} lang={sourceLang(viewer.id, props.file.lang)} />
+      ) : (
+        <Rich {...props} />
+      )}
+    </>
   );
 }
 
@@ -128,6 +195,8 @@ export function DocumentView({
     <div className="leaf-main-inner" onClick={onClick} data-viewer={viewer.id}>
       {viewer.stage && slot ? (
         <InlineStage viewer={viewer} props={viewerProps} slot={slot} />
+      ) : viewer.source && slot && file.encoding === 'utf8' ? (
+        <WithSource viewer={viewer} props={viewerProps} slot={slot} />
       ) : viewer.stage ? (
         <BlockFrame viewer={viewer} props={viewerProps} lang={viewer.id}>
           <Rich {...viewerProps} />

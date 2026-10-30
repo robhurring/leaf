@@ -147,7 +147,8 @@ export function StageCanvas({ content, onClose, toolsSlot, inline = false }: Can
     return () => ro.disconnect();
   }, [open, viewport]);
 
-  // Fit once the content has a size (diagrams render asynchronously).
+  // Once the content has a size (diagrams render asynchronously), show it at 1:1 in the
+  // middle; Fit is a button away.
   useEffect(() => {
     const layer = layerRef.current;
     if (!layer || typeof ResizeObserver === 'undefined') return;
@@ -157,7 +158,7 @@ export function StageCanvas({ content, onClose, toolsSlot, inline = false }: Can
       sizeSvgs(layer);
       if (contentSize(layer)) {
         done = true;
-        fit();
+        actualSize();
         ro.disconnect();
       }
     });
@@ -168,7 +169,7 @@ export function StageCanvas({ content, onClose, toolsSlot, inline = false }: Can
       sizeSvgs(layer);
       if (contentSize(layer)) {
         done = true;
-        fit();
+        actualSize();
         ro.disconnect();
         mo.disconnect();
       }
@@ -180,6 +181,15 @@ export function StageCanvas({ content, onClose, toolsSlot, inline = false }: Can
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open]);
+
+  const actualSize = useCallback(() => {
+    const view = viewRef.current;
+    const layer = layerRef.current;
+    if (!view || !layer) return;
+    const size = contentSize(layer);
+    if (size) viewport.actualSize(size.w, size.h, view.clientWidth, view.clientHeight);
+    else viewport.reset();
+  }, [viewport]);
 
   const fit = useCallback(() => {
     const view = viewRef.current;
@@ -234,7 +244,7 @@ export function StageCanvas({ content, onClose, toolsSlot, inline = false }: Can
       canDraw={canDraw}
       onZoom={centerZoom}
       onFit={fit}
-      onReset={() => viewport.reset()}
+      onReset={actualSize}
       onClear={() => useAnnotations.getState().clear(open.docPath, open.blockHash)}
     />
   );
@@ -249,7 +259,7 @@ export function StageCanvas({ content, onClose, toolsSlot, inline = false }: Can
         onPointerMove={onPointerMove}
         onPointerUp={onPointerUp}
         onPointerCancel={onPointerUp}
-        onDoubleClick={() => viewport.reset()}
+        onDoubleClick={actualSize}
       >
         <div
           ref={layerRef}

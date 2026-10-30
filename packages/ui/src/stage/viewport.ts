@@ -13,6 +13,8 @@ export type Viewport = {
   /** Multiplies the scale by `factor`, keeping the content under `point` fixed. */
   zoomAt(point: Point, factor: number): void;
   fit(contentW: number, contentH: number, viewW: number, viewH: number, margin?: number): void;
+  /** The content at 1:1, its middle in the middle of the view. */
+  actualSize(contentW: number, contentH: number, viewW: number, viewH: number): void;
   reset(): void;
   toContent(point: Point): Point;
   subscribe(fn: (t: Transform) => void): () => void;
@@ -49,6 +51,10 @@ export function createViewport(initial: Transform = { scale: 1, x: 0, y: 0 }): V
         Math.min((viewW - margin * 2) / contentW, (viewH - margin * 2) / contentH),
       );
       t = { scale, x: (viewW - contentW * scale) / 2, y: (viewH - contentH * scale) / 2 };
+      emit();
+    },
+    actualSize(contentW, contentH, viewW, viewH) {
+      t = { scale: 1, x: (viewW - contentW) / 2, y: (viewH - contentH) / 2 };
       emit();
     },
     reset() {
