@@ -30,6 +30,9 @@ const IGNORED = [
   /subsetting/,
   /document is not defined/,
   /Can't find variable: document/,
+  // Headless Linux engines in CI have no GPU: three.js can't get a WebGL context there.
+  // The pane shows that in place (checked in the live panes test).
+  /Error creating WebGL context/,
 ];
 function collectErrors(page: Page): string[] {
   const errors: string[] = [];
@@ -238,7 +241,7 @@ test('live panes run, pause, and show their errors', async ({ page }) => {
   const torus = page.locator('.leaf-live[data-kind="three"]').first();
   await expect(async () => torus.scrollIntoViewIfNeeded({ timeout: 1000 })).toPass();
   // three.js needs WebGL; a headless engine without it must say so in the pane.
-  await expect(torus).toHaveAttribute('data-state', /running|error/);
+  await expect(torus).toHaveAttribute('data-state', /running|error/, { timeout: 15000 });
   if ((await torus.getAttribute('data-state')) === 'error')
     await expect(torus.getByRole('alert')).toContainText(/WebGL/i);
   const sine = page.locator('.leaf-live[data-kind="canvas"]').first();
