@@ -105,6 +105,16 @@ function WithSource({
           <button
             type="button"
             className="leaf-tool"
+            aria-label="Show source"
+            title={showSource ? 'Back to the table' : 'Show the source'}
+            aria-pressed={showSource}
+            onClick={() => setShowSource((v) => !v)}
+          >
+            <Code size={15} />
+          </button>
+          <button
+            type="button"
+            className="leaf-tool"
             aria-label="Copy source"
             title="Copy source"
             data-result={copied ?? undefined}
@@ -117,16 +127,6 @@ function WithSource({
             ) : (
               <Copy size={15} />
             )}
-          </button>
-          <button
-            type="button"
-            className="leaf-tool"
-            aria-label="Show source"
-            title={showSource ? 'Back to the table' : 'Show the source'}
-            aria-pressed={showSource}
-            onClick={() => setShowSource((v) => !v)}
-          >
-            <Code size={15} />
           </button>
         </>,
         slot,

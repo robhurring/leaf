@@ -56,12 +56,12 @@ describe('CSV source and copy', () => {
       </DocToolsContext.Provider>,
     );
     expect(screen.getByRole('table')).toBeTruthy();
-    // Copy comes first, as in a block's tools.
+    // Source on the left, copy on its right, as in a block's tools.
     expect(
       within(slot)
         .getAllByRole('button')
         .map((b) => b.getAttribute('aria-label')),
-    ).toEqual(['Copy source', 'Show source']);
+    ).toEqual(['Show source', 'Copy source']);
     fireEvent.click(within(slot).getByRole('button', { name: 'Copy source' }));
     expect(navigator.clipboard.writeText).toHaveBeenCalledWith(CSV);
     fireEvent.click(within(slot).getByRole('button', { name: 'Show source' }));
