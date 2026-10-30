@@ -1,0 +1,18 @@
+// A .three file: three.js code on its own, opened as a live pane that fills the window.
+// THREE, OrbitControls, scene, camera, renderer, and onFrame are ready to use.
+const knot = new THREE.Mesh(
+  new THREE.TorusKnotGeometry(1, 0.3, 260, 36, 3, 5),
+  new THREE.MeshStandardMaterial({ color: 0x30a46c, metalness: 0.4, roughness: 0.25 }),
+);
+scene.add(knot);
+scene.add(new THREE.HemisphereLight(0xffffff, 0x223344, 1.1));
+const key = new THREE.DirectionalLight(0xffffff, 2.4);
+key.position.set(4, 5, 3);
+scene.add(key);
+camera.position.set(0, 0, 6);
+
+const controls = new OrbitControls(camera, renderer.domElement);
+controls.enableDamping = true;
+controls.autoRotate = true;
+
+onFrame(() => controls.update());

@@ -1,0 +1,10 @@
+type: doughnut
+data:
+  labels: [Search, Direct, Social, Email, Referral]
+  datasets:
+    - label: Visits
+      data: [44, 26, 14, 9, 7]
+options:
+  plugins:
+    legend:
+      position: right

@@ -1,0 +1,51 @@
+{
+  "type": "Topology",
+  "objects": {
+    "datacenters": {
+      "type": "GeometryCollection",
+      "geometries": [
+        {
+          "type": "Point",
+          "coordinates": [-77.49, 39.04],
+          "properties": {
+            "name": "us-east",
+            "racks": 420
+          }
+        },
+        {
+          "type": "Point",
+          "coordinates": [-121.89, 37.34],
+          "properties": {
+            "name": "us-west",
+            "racks": 260
+          }
+        },
+        {
+          "type": "Point",
+          "coordinates": [8.68, 50.11],
+          "properties": {
+            "name": "eu-central",
+            "racks": 310
+          }
+        },
+        {
+          "type": "Point",
+          "coordinates": [103.82, 1.35],
+          "properties": {
+            "name": "ap-southeast",
+            "racks": 180
+          }
+        },
+        {
+          "type": "Point",
+          "coordinates": [151.21, -33.87],
+          "properties": {
+            "name": "ap-sydney",
+            "racks": 90
+          }
+        }
+      ]
+    }
+  },
+  "arcs": []
+}

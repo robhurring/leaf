@@ -1,0 +1,51 @@
+#!/usr/bin/env bash
+set -euo pipefail
+cd "$(dirname "$0")/.."
+
+usage() { echo "usage: bin/demo-live    write made-up live traffic into docs/examples/live/ until ctrl-c (open docs/examples/realtime.md to watch)"; }
+[[ "${1:-}" == "--help" || "${1:-}" == "-h" ]] && { usage; exit 0; }
+
+mkdir -p docs/examples/live
+# Keep the demo's output out of git without hiding it from leaf (which reads .gitignore
+# files, not git's local exclude list).
+exclude="$(git rev-parse --git-path info/exclude)"
+grep -qx "docs/examples/live/" "$exclude" 2>/dev/null || {
+  echo "docs/examples/live/" >>"$exclude"
+  echo "added docs/examples/live/ to $exclude"
+}
+echo "writing docs/examples/live/ twice a second; open docs/examples/realtime.md in leaf. ctrl-c to stop."
+exec node --input-type=module -e '
+import { writeFileSync } from "node:fs";
+const dir = "docs/examples/live";
+const cities = [
+  ["New York", 40.71, -74.01], ["London", 51.51, -0.13], ["Tokyo", 35.68, 139.69],
+  ["São Paulo", -23.55, -46.63], ["Sydney", -33.87, 151.21], ["Berlin", 52.52, 13.4],
+  ["Mumbai", 19.08, 72.88], ["Lagos", 6.52, 3.38], ["Toronto", 43.65, -79.38],
+  ["Singapore", 1.35, 103.82], ["Mexico City", 19.43, -99.13], ["Seoul", 37.57, 126.98],
+];
+const pick = (xs) => xs[Math.floor(Math.random() * xs.length)];
+const series = [];
+let traffic = [];
+let tick = 0;
+let load = 40;
+setInterval(() => {
+  tick++;
+  load = Math.max(5, load + (Math.random() - 0.48) * 12 + (tick % 40 === 0 ? 60 : 0));
+  const requests = Math.round(load);
+  const errors = Math.round(requests * (0.02 + Math.random() * 0.06));
+  const p95 = Math.round(80 + load * 1.5 + Math.random() * 40);
+  const at = new Date().toISOString().slice(11, 19);
+  series.push(`${at},${requests},${errors},${p95}`);
+  if (series.length > 60) series.shift();
+  writeFileSync(`${dir}/requests.csv`, "time,requests,errors,p95\n" + series.join("\n") + "\n");
+  for (let i = 0; i < Math.ceil(requests / 10); i++) {
+    const [city, lat, lng] = pick(cities);
+    const status = Math.random() < errors / requests ? pick([500, 502, 404]) : 200;
+    traffic.push(JSON.stringify({ at, city, lat: +(lat + (Math.random() - 0.5) * 3).toFixed(3), lng: +(lng + (Math.random() - 0.5) * 3).toFixed(3), status }));
+  }
+  traffic = traffic.slice(-400);
+  writeFileSync(`${dir}/traffic.jsonl`, traffic.join("\n") + "\n");
+  const errorRate = ((errors / requests) * 100).toFixed(1);
+  writeFileSync(`${dir}/board.md`, `# Live board\n\nUpdated ${at}, twice a second, by \`bin/demo-live\`.\n\n| Requests/s | Errors | Error rate | p95 |\n| ---: | ---: | ---: | ---: |\n| ${requests} | ${errors} | ${errorRate}% | ${p95} ms |\n\n> [!${errors / requests > 0.06 ? "WARNING" : "TIP"}]\n> ${errors / requests > 0.06 ? "Errors are running high." : "All quiet."}\n`);
+}, 500);
+'

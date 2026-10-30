@@ -1,0 +1,33 @@
+// A .sketch file: canvas code on its own, opened as a live pane that fills the window.
+// canvas, ctx, width, height, theme, and onFrame are ready to use.
+const planets = [
+  { r: 0.16, speed: 1.6, size: 5, color: '#d29922' },
+  { r: 0.26, speed: 1.1, size: 8, color: '#3e82f7' },
+  { r: 0.36, speed: 0.75, size: 7, color: '#e5484d' },
+  { r: 0.46, speed: 0.4, size: 14, color: '#8e4ec6' },
+];
+
+onFrame((t) => {
+  const cx = width / 2;
+  const cy = height / 2;
+  const unit = Math.min(width, height);
+  const dark = theme === 'dark';
+  ctx.clearRect(0, 0, width, height);
+  ctx.strokeStyle = dark ? 'rgba(230,237,243,0.12)' : 'rgba(31,35,40,0.1)';
+  for (const p of planets) {
+    ctx.beginPath();
+    ctx.arc(cx, cy, p.r * unit, 0, Math.PI * 2);
+    ctx.stroke();
+  }
+  ctx.fillStyle = '#f5b74e';
+  ctx.beginPath();
+  ctx.arc(cx, cy, unit * 0.05, 0, Math.PI * 2);
+  ctx.fill();
+  for (const p of planets) {
+    const a = (t / 1000) * p.speed;
+    ctx.fillStyle = p.color;
+    ctx.beginPath();
+    ctx.arc(cx + Math.cos(a) * p.r * unit, cy + Math.sin(a) * p.r * unit, p.size, 0, Math.PI * 2);
+    ctx.fill();
+  }
+});

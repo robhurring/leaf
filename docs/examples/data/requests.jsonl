@@ -1,0 +1,240 @@
+{"time": "2026-10-29T14:00:00Z", "city": "Mexico City", "lat": 20.262, "lng": -99.233, "status": 200, "path": "/search", "ms": 60}
+{"time": "2026-10-29T14:00:01Z", "city": "Tokyo", "lat": 34.912, "lng": 139.913, "status": 200, "path": "/login", "ms": 73}
+{"time": "2026-10-29T14:00:02Z", "city": "Lagos", "lat": 7.961, "lng": 2.234, "status": 200, "path": "/search", "ms": 43}
+{"time": "2026-10-29T14:00:03Z", "city": "Lagos", "lat": 7.906, "lng": 2.113, "status": 200, "path": "/login", "ms": 134}
+{"time": "2026-10-29T14:00:04Z", "city": "Berlin", "lat": 52.071, "lng": 13.39, "status": 200, "path": "/search", "ms": 33}
+{"time": "2026-10-29T14:00:05Z", "city": "London", "lat": 52.114, "lng": 0.311, "status": 200, "path": "/api/items", "ms": 117}
+{"time": "2026-10-29T14:00:06Z", "city": "Mumbai", "lat": 18.621, "lng": 74.202, "status": 404, "path": "/checkout", "ms": 50}
+{"time": "2026-10-29T14:00:07Z", "city": "New York", "lat": 40.072, "lng": -73.295, "status": 200, "path": "/search", "ms": 30}
+{"time": "2026-10-29T14:00:08Z", "city": "London", "lat": 51.215, "lng": -0.796, "status": 200, "path": "/orders", "ms": 49}
+{"time": "2026-10-29T14:00:09Z", "city": "Berlin", "lat": 52.161, "lng": 12.592, "status": 200, "path": "/", "ms": 47}
+{"time": "2026-10-29T14:00:10Z", "city": "S\u00e3o Paulo", "lat": -22.557, "lng": -47.583, "status": 200, "path": "/checkout", "ms": 30}
+{"time": "2026-10-29T14:00:11Z", "city": "Berlin", "lat": 51.976, "lng": 12.276, "status": 200, "path": "/login", "ms": 116}
+{"time": "2026-10-29T14:00:12Z", "city": "Mexico City", "lat": 19.107, "lng": -99.433, "status": 200, "path": "/", "ms": 71}
+{"time": "2026-10-29T14:00:13Z", "city": "S\u00e3o Paulo", "lat": -24.424, "lng": -47.643, "status": 200, "path": "/checkout", "ms": 82}
+{"time": "2026-10-29T14:00:14Z", "city": "Singapore", "lat": 0.154, "lng": 103.411, "status": 200, "path": "/", "ms": 42}
+{"time": "2026-10-29T14:00:15Z", "city": "Mumbai", "lat": 18.337, "lng": 72.422, "status": 200, "path": "/checkout", "ms": 71}
+{"time": "2026-10-29T14:00:16Z", "city": "Lagos", "lat": 6.418, "lng": 3.332, "status": 500, "path": "/", "ms": 118}
+{"time": "2026-10-29T14:00:17Z", "city": "Seoul", "lat": 36.139, "lng": 128.333, "status": 200, "path": "/login", "ms": 46}
+{"time": "2026-10-29T14:00:18Z", "city": "New York", "lat": 40.104, "lng": -73.581, "status": 200, "path": "/", "ms": 96}
+{"time": "2026-10-29T14:00:19Z", "city": "Berlin", "lat": 52.087, "lng": 12.568, "status": 404, "path": "/login", "ms": 113}
+{"time": "2026-10-29T14:00:20Z", "city": "S\u00e3o Paulo", "lat": -22.685, "lng": -45.855, "status": 200, "path": "/orders", "ms": 101}
+{"time": "2026-10-29T14:00:21Z", "city": "Toronto", "lat": 44.343, "lng": -77.911, "status": 200, "path": "/checkout", "ms": 71}
+{"time": "2026-10-29T14:00:22Z", "city": "Singapore", "lat": 1.192, "lng": 105.131, "status": 500, "path": "/checkout", "ms": 154}
+{"time": "2026-10-29T14:00:23Z", "city": "S\u00e3o Paulo", "lat": -23.64, "lng": -47.117, "status": 200, "path": "/search", "ms": 265}
+{"time": "2026-10-29T14:00:24Z", "city": "New York", "lat": 41.169, "lng": -73.111, "status": 200, "path": "/", "ms": 109}
+{"time": "2026-10-29T14:00:25Z", "city": "Mumbai", "lat": 19.83, "lng": 72.814, "status": 200, "path": "/orders", "ms": 61}
+{"time": "2026-10-29T14:00:26Z", "city": "London", "lat": 52.925, "lng": -0.442, "status": 301, "path": "/search", "ms": 96}
+{"time": "2026-10-29T14:00:27Z", "city": "Tokyo", "lat": 34.561, "lng": 138.643, "status": 200, "path": "/search", "ms": 106}
+{"time": "2026-10-29T14:00:28Z", "city": "Singapore", "lat": 1.822, "lng": 103.371, "status": 500, "path": "/login", "ms": 77}
+{"time": "2026-10-29T14:00:29Z", "city": "Seoul", "lat": 37.65, "lng": 128.281, "status": 200, "path": "/search", "ms": 40}
+{"time": "2026-10-29T14:00:30Z", "city": "Singapore", "lat": 1.483, "lng": 104.823, "status": 200, "path": "/", "ms": 141}
+{"time": "2026-10-29T14:00:31Z", "city": "Lagos", "lat": 7.465, "lng": 3.43, "status": 200, "path": "/login", "ms": 47}
+{"time": "2026-10-29T14:00:32Z", "city": "Toronto", "lat": 43.47, "lng": -80.331, "status": 200, "path": "/", "ms": 102}
+{"time": "2026-10-29T14:00:33Z", "city": "Tokyo", "lat": 36.356, "lng": 139.859, "status": 200, "path": "/checkout", "ms": 109}
+{"time": "2026-10-29T14:00:34Z", "city": "Lagos", "lat": 5.338, "lng": 3.561, "status": 200, "path": "/orders", "ms": 34}
+{"time": "2026-10-29T14:00:35Z", "city": "New York", "lat": 41.947, "lng": -74.18, "status": 200, "path": "/login", "ms": 48}
+{"time": "2026-10-29T14:00:36Z", "city": "Toronto", "lat": 43.584, "lng": -78.055, "status": 200, "path": "/api/items", "ms": 89}
+{"time": "2026-10-29T14:00:37Z", "city": "Sydney", "lat": -32.692, "lng": 150.318, "status": 404, "path": "/search", "ms": 48}
+{"time": "2026-10-29T14:00:38Z", "city": "Lagos", "lat": 7.033, "lng": 3.165, "status": 200, "path": "/orders", "ms": 165}
+{"time": "2026-10-29T14:00:39Z", "city": "Tokyo", "lat": 36.11, "lng": 139.289, "status": 404, "path": "/checkout", "ms": 60}
+{"time": "2026-10-29T14:00:40Z", "city": "Mexico City", "lat": 18.414, "lng": -99.335, "status": 301, "path": "/login", "ms": 62}
+{"time": "2026-10-29T14:00:41Z", "city": "Berlin", "lat": 53.186, "lng": 11.958, "status": 200, "path": "/login", "ms": 63}
+{"time": "2026-10-29T14:00:42Z", "city": "Mumbai", "lat": 19.452, "lng": 72.917, "status": 200, "path": "/", "ms": 40}
+{"time": "2026-10-29T14:00:43Z", "city": "Tokyo", "lat": 34.569, "lng": 139.457, "status": 200, "path": "/api/items", "ms": 114}
+{"time": "2026-10-29T14:00:44Z", "city": "Tokyo", "lat": 35.724, "lng": 139.674, "status": 200, "path": "/checkout", "ms": 103}
+{"time": "2026-10-29T14:00:45Z", "city": "London", "lat": 50.06, "lng": -1.364, "status": 200, "path": "/checkout", "ms": 68}
+{"time": "2026-10-29T14:00:46Z", "city": "Toronto", "lat": 44.896, "lng": -79.015, "status": 200, "path": "/", "ms": 76}
+{"time": "2026-10-29T14:00:47Z", "city": "London", "lat": 50.796, "lng": -1.087, "status": 500, "path": "/checkout", "ms": 97}
+{"time": "2026-10-29T14:00:48Z", "city": "S\u00e3o Paulo", "lat": -23.55, "lng": -47.596, "status": 200, "path": "/checkout", "ms": 96}
+{"time": "2026-10-29T14:00:49Z", "city": "Toronto", "lat": 44.954, "lng": -80.561, "status": 200, "path": "/api/items", "ms": 64}
+{"time": "2026-10-29T14:00:50Z", "city": "Mumbai", "lat": 18.503, "lng": 72.026, "status": 500, "path": "/orders", "ms": 28}
+{"time": "2026-10-29T14:00:51Z", "city": "Seoul", "lat": 36.489, "lng": 128.448, "status": 200, "path": "/", "ms": 215}
+{"time": "2026-10-29T14:00:52Z", "city": "Mumbai", "lat": 17.833, "lng": 73.904, "status": 200, "path": "/login", "ms": 94}
+{"time": "2026-10-29T14:00:53Z", "city": "S\u00e3o Paulo", "lat": -24.914, "lng": -47.574, "status": 200, "path": "/checkout", "ms": 68}
+{"time": "2026-10-29T14:00:54Z", "city": "Berlin", "lat": 52.661, "lng": 12.633, "status": 500, "path": "/checkout", "ms": 51}
+{"time": "2026-10-29T14:00:55Z", "city": "Berlin", "lat": 52.444, "lng": 13.408, "status": 200, "path": "/orders", "ms": 23}
+{"time": "2026-10-29T14:00:56Z", "city": "London", "lat": 50.279, "lng": -0.431, "status": 200, "path": "/", "ms": 63}
+{"time": "2026-10-29T14:00:57Z", "city": "Mexico City", "lat": 19.687, "lng": -99.042, "status": 200, "path": "/orders", "ms": 130}
+{"time": "2026-10-29T14:00:58Z", "city": "Singapore", "lat": 0.828, "lng": 105.274, "status": 200, "path": "/orders", "ms": 41}
+{"time": "2026-10-29T14:00:59Z", "city": "Tokyo", "lat": 36.686, "lng": 140.866, "status": 200, "path": "/api/items", "ms": 57}
+{"time": "2026-10-29T14:01:00Z", "city": "Toronto", "lat": 43.721, "lng": -79.367, "status": 200, "path": "/", "ms": 165}
+{"time": "2026-10-29T14:01:01Z", "city": "Seoul", "lat": 38.15, "lng": 126.17, "status": 200, "path": "/", "ms": 157}
+{"time": "2026-10-29T14:01:02Z", "city": "Lagos", "lat": 6.903, "lng": 3.759, "status": 200, "path": "/api/items", "ms": 51}
+{"time": "2026-10-29T14:01:03Z", "city": "Lagos", "lat": 7.265, "lng": 3.389, "status": 200, "path": "/login", "ms": 30}
+{"time": "2026-10-29T14:01:04Z", "city": "Seoul", "lat": 36.827, "lng": 125.703, "status": 200, "path": "/checkout", "ms": 24}
+{"time": "2026-10-29T14:01:05Z", "city": "S\u00e3o Paulo", "lat": -22.123, "lng": -46.648, "status": 200, "path": "/search", "ms": 58}
+{"time": "2026-10-29T14:01:06Z", "city": "Mexico City", "lat": 18.162, "lng": -100.188, "status": 200, "path": "/checkout", "ms": 122}
+{"time": "2026-10-29T14:01:07Z", "city": "Singapore", "lat": -0.113, "lng": 102.502, "status": 200, "path": "/checkout", "ms": 41}
+{"time": "2026-10-29T14:01:08Z", "city": "Seoul", "lat": 37.464, "lng": 126.879, "status": 200, "path": "/", "ms": 59}
+{"time": "2026-10-29T14:01:09Z", "city": "Lagos", "lat": 6.397, "lng": 4.34, "status": 200, "path": "/search", "ms": 168}
+{"time": "2026-10-29T14:01:10Z", "city": "S\u00e3o Paulo", "lat": -24.779, "lng": -45.888, "status": 200, "path": "/checkout", "ms": 144}
+{"time": "2026-10-29T14:01:11Z", "city": "London", "lat": 50.704, "lng": 1.063, "status": 200, "path": "/search", "ms": 64}
+{"time": "2026-10-29T14:01:12Z", "city": "Lagos", "lat": 6.236, "lng": 4.062, "status": 200, "path": "/search", "ms": 58}
+{"time": "2026-10-29T14:01:13Z", "city": "Berlin", "lat": 53.272, "lng": 14.417, "status": 200, "path": "/", "ms": 56}
+{"time": "2026-10-29T14:01:14Z", "city": "Mumbai", "lat": 19.348, "lng": 72.462, "status": 500, "path": "/search", "ms": 58}
+{"time": "2026-10-29T14:01:15Z", "city": "Mexico City", "lat": 20.737, "lng": -99.882, "status": 200, "path": "/checkout", "ms": 66}
+{"time": "2026-10-29T14:01:16Z", "city": "Berlin", "lat": 52.303, "lng": 11.987, "status": 200, "path": "/api/items", "ms": 32}
+{"time": "2026-10-29T14:01:17Z", "city": "Toronto", "lat": 44.309, "lng": -80.732, "status": 200, "path": "/api/items", "ms": 58}
+{"time": "2026-10-29T14:01:18Z", "city": "Tokyo", "lat": 35.039, "lng": 138.337, "status": 200, "path": "/login", "ms": 35}
+{"time": "2026-10-29T14:01:19Z", "city": "Berlin", "lat": 51.787, "lng": 14.116, "status": 200, "path": "/api/items", "ms": 35}
+{"time": "2026-10-29T14:01:20Z", "city": "Sydney", "lat": -33.363, "lng": 150.069, "status": 200, "path": "/api/items", "ms": 47}
+{"time": "2026-10-29T14:01:21Z", "city": "Lagos", "lat": 6.379, "lng": 2.879, "status": 200, "path": "/search", "ms": 62}
+{"time": "2026-10-29T14:01:22Z", "city": "S\u00e3o Paulo", "lat": -24.024, "lng": -47.857, "status": 200, "path": "/orders", "ms": 36}
+{"time": "2026-10-29T14:01:23Z", "city": "S\u00e3o Paulo", "lat": -22.801, "lng": -46.892, "status": 404, "path": "/search", "ms": 101}
+{"time": "2026-10-29T14:01:24Z", "city": "Sydney", "lat": -35.184, "lng": 150.543, "status": 200, "path": "/checkout", "ms": 33}
+{"time": "2026-10-29T14:01:25Z", "city": "Mexico City", "lat": 20.476, "lng": -100.352, "status": 200, "path": "/orders", "ms": 52}
+{"time": "2026-10-29T14:01:26Z", "city": "Mumbai", "lat": 20.126, "lng": 73.999, "status": 500, "path": "/", "ms": 37}
+{"time": "2026-10-29T14:01:27Z", "city": "Lagos", "lat": 6.489, "lng": 2.099, "status": 500, "path": "/login", "ms": 55}
+{"time": "2026-10-29T14:01:28Z", "city": "Tokyo", "lat": 37.096, "lng": 138.517, "status": 200, "path": "/api/items", "ms": 283}
+{"time": "2026-10-29T14:01:29Z", "city": "Lagos", "lat": 7.351, "lng": 1.884, "status": 200, "path": "/orders", "ms": 91}
+{"time": "2026-10-29T14:01:30Z", "city": "Tokyo", "lat": 35.765, "lng": 139.502, "status": 200, "path": "/", "ms": 40}
+{"time": "2026-10-29T14:01:31Z", "city": "Singapore", "lat": 0.633, "lng": 104.691, "status": 200, "path": "/", "ms": 27}
+{"time": "2026-10-29T14:01:32Z", "city": "Mexico City", "lat": 18.657, "lng": -99.051, "status": 301, "path": "/login", "ms": 99}
+{"time": "2026-10-29T14:01:33Z", "city": "New York", "lat": 41.865, "lng": -73.568, "status": 200, "path": "/", "ms": 34}
+{"time": "2026-10-29T14:01:34Z", "city": "Berlin", "lat": 51.122, "lng": 12.914, "status": 200, "path": "/search", "ms": 58}
+{"time": "2026-10-29T14:01:35Z", "city": "New York", "lat": 41.427, "lng": -73.995, "status": 200, "path": "/orders", "ms": 73}
+{"time": "2026-10-29T14:01:36Z", "city": "S\u00e3o Paulo", "lat": -24.386, "lng": -45.849, "status": 200, "path": "/checkout", "ms": 25}
+{"time": "2026-10-29T14:01:37Z", "city": "Singapore", "lat": 0.52, "lng": 103.571, "status": 200, "path": "/api/items", "ms": 23}
+{"time": "2026-10-29T14:01:38Z", "city": "Mumbai", "lat": 17.651, "lng": 73.168, "status": 200, "path": "/search", "ms": 25}
+{"time": "2026-10-29T14:01:39Z", "city": "Berlin", "lat": 54.013, "lng": 14.695, "status": 200, "path": "/checkout", "ms": 29}
+{"time": "2026-10-29T14:01:40Z", "city": "Toronto", "lat": 42.246, "lng": -78.887, "status": 200, "path": "/search", "ms": 68}
+{"time": "2026-10-29T14:01:41Z", "city": "London", "lat": 51.064, "lng": 1.237, "status": 200, "path": "/", "ms": 95}
+{"time": "2026-10-29T14:01:42Z", "city": "Mumbai", "lat": 20.045, "lng": 73.846, "status": 200, "path": "/search", "ms": 37}
+{"time": "2026-10-29T14:01:43Z", "city": "Lagos", "lat": 6.113, "lng": 4.571, "status": 200, "path": "/", "ms": 88}
+{"time": "2026-10-29T14:01:44Z", "city": "Mexico City", "lat": 18.052, "lng": -100.525, "status": 200, "path": "/", "ms": 87}
+{"time": "2026-10-29T14:01:45Z", "city": "Berlin", "lat": 52.871, "lng": 12.687, "status": 500, "path": "/api/items", "ms": 34}
+{"time": "2026-10-29T14:01:46Z", "city": "Singapore", "lat": 1.752, "lng": 105.15, "status": 404, "path": "/", "ms": 107}
+{"time": "2026-10-29T14:01:47Z", "city": "Seoul", "lat": 38.932, "lng": 126.64, "status": 500, "path": "/checkout", "ms": 34}
+{"time": "2026-10-29T14:01:48Z", "city": "New York", "lat": 41.425, "lng": -73.042, "status": 301, "path": "/orders", "ms": 86}
+{"time": "2026-10-29T14:01:49Z", "city": "Berlin", "lat": 53.371, "lng": 13.687, "status": 200, "path": "/login", "ms": 20}
+{"time": "2026-10-29T14:01:50Z", "city": "S\u00e3o Paulo", "lat": -23.101, "lng": -46.685, "status": 200, "path": "/login", "ms": 56}
+{"time": "2026-10-29T14:01:51Z", "city": "London", "lat": 52.975, "lng": 1.286, "status": 200, "path": "/orders", "ms": 46}
+{"time": "2026-10-29T14:01:52Z", "city": "Singapore", "lat": 0.555, "lng": 103.936, "status": 404, "path": "/api/items", "ms": 247}
+{"time": "2026-10-29T14:01:53Z", "city": "Sydney", "lat": -33.669, "lng": 150.829, "status": 200, "path": "/api/items", "ms": 47}
+{"time": "2026-10-29T14:01:54Z", "city": "Tokyo", "lat": 34.64, "lng": 140.843, "status": 200, "path": "/login", "ms": 52}
+{"time": "2026-10-29T14:01:55Z", "city": "Toronto", "lat": 44.575, "lng": -78.92, "status": 200, "path": "/", "ms": 33}
+{"time": "2026-10-29T14:01:56Z", "city": "S\u00e3o Paulo", "lat": -22.307, "lng": -48.009, "status": 301, "path": "/checkout", "ms": 134}
+{"time": "2026-10-29T14:01:57Z", "city": "S\u00e3o Paulo", "lat": -23.933, "lng": -45.532, "status": 404, "path": "/search", "ms": 118}
+{"time": "2026-10-29T14:01:58Z", "city": "Mexico City", "lat": 18.247, "lng": -98.842, "status": 404, "path": "/login", "ms": 62}
+{"time": "2026-10-29T14:01:59Z", "city": "Berlin", "lat": 51.632, "lng": 12.665, "status": 200, "path": "/login", "ms": 63}
+{"time": "2026-10-29T14:02:00Z", "city": "Singapore", "lat": 0.46, "lng": 104.706, "status": 200, "path": "/login", "ms": 71}
+{"time": "2026-10-29T14:02:01Z", "city": "Mumbai", "lat": 18.044, "lng": 72.982, "status": 200, "path": "/api/items", "ms": 23}
+{"time": "2026-10-29T14:02:02Z", "city": "Mumbai", "lat": 19.583, "lng": 72.634, "status": 500, "path": "/", "ms": 47}
+{"time": "2026-10-29T14:02:03Z", "city": "Berlin", "lat": 51.075, "lng": 14.2, "status": 200, "path": "/checkout", "ms": 94}
+{"time": "2026-10-29T14:02:04Z", "city": "Mumbai", "lat": 17.598, "lng": 74.085, "status": 200, "path": "/search", "ms": 83}
+{"time": "2026-10-29T14:02:05Z", "city": "Tokyo", "lat": 34.335, "lng": 138.617, "status": 200, "path": "/search", "ms": 24}
+{"time": "2026-10-29T14:02:06Z", "city": "Berlin", "lat": 51.535, "lng": 12.944, "status": 200, "path": "/orders", "ms": 98}
+{"time": "2026-10-29T14:02:07Z", "city": "London", "lat": 52.271, "lng": 0.746, "status": 200, "path": "/orders", "ms": 21}
+{"time": "2026-10-29T14:02:08Z", "city": "New York", "lat": 40.658, "lng": -75.35, "status": 500, "path": "/api/items", "ms": 22}
+{"time": "2026-10-29T14:02:09Z", "city": "Singapore", "lat": 2.523, "lng": 104.241, "status": 200, "path": "/orders", "ms": 101}
+{"time": "2026-10-29T14:02:10Z", "city": "S\u00e3o Paulo", "lat": -24.501, "lng": -47.476, "status": 301, "path": "/search", "ms": 62}
+{"time": "2026-10-29T14:02:11Z", "city": "Seoul", "lat": 36.648, "lng": 128.132, "status": 301, "path": "/api/items", "ms": 27}
+{"time": "2026-10-29T14:02:12Z", "city": "Toronto", "lat": 44.484, "lng": -78.933, "status": 301, "path": "/checkout", "ms": 85}
+{"time": "2026-10-29T14:02:13Z", "city": "Mexico City", "lat": 19.441, "lng": -100.094, "status": 200, "path": "/", "ms": 93}
+{"time": "2026-10-29T14:02:14Z", "city": "S\u00e3o Paulo", "lat": -23.194, "lng": -45.673, "status": 200, "path": "/orders", "ms": 125}
+{"time": "2026-10-29T14:02:15Z", "city": "London", "lat": 51.302, "lng": -1.355, "status": 200, "path": "/search", "ms": 74}
+{"time": "2026-10-29T14:02:16Z", "city": "New York", "lat": 39.457, "lng": -73.31, "status": 200, "path": "/api/items", "ms": 74}
+{"time": "2026-10-29T14:02:17Z", "city": "Toronto", "lat": 44.108, "lng": -78.527, "status": 404, "path": "/", "ms": 268}
+{"time": "2026-10-29T14:02:18Z", "city": "S\u00e3o Paulo", "lat": -22.393, "lng": -47.266, "status": 200, "path": "/orders", "ms": 146}
+{"time": "2026-10-29T14:02:19Z", "city": "S\u00e3o Paulo", "lat": -23.997, "lng": -45.861, "status": 200, "path": "/orders", "ms": 46}
+{"time": "2026-10-29T14:02:20Z", "city": "Lagos", "lat": 6.527, "lng": 4.64, "status": 200, "path": "/orders", "ms": 94}
+{"time": "2026-10-29T14:02:21Z", "city": "S\u00e3o Paulo", "lat": -24.94, "lng": -47.584, "status": 200, "path": "/orders", "ms": 89}
+{"time": "2026-10-29T14:02:22Z", "city": "Berlin", "lat": 51.526, "lng": 14.255, "status": 404, "path": "/", "ms": 66}
+{"time": "2026-10-29T14:02:23Z", "city": "Seoul", "lat": 36.384, "lng": 128.459, "status": 404, "path": "/api/items", "ms": 59}
+{"time": "2026-10-29T14:02:24Z", "city": "Berlin", "lat": 52.101, "lng": 14.194, "status": 200, "path": "/search", "ms": 35}
+{"time": "2026-10-29T14:02:25Z", "city": "New York", "lat": 40.758, "lng": -74.58, "status": 200, "path": "/login", "ms": 190}
+{"time": "2026-10-29T14:02:26Z", "city": "S\u00e3o Paulo", "lat": -23.202, "lng": -46.833, "status": 200, "path": "/login", "ms": 63}
+{"time": "2026-10-29T14:02:27Z", "city": "Lagos", "lat": 6.979, "lng": 1.947, "status": 200, "path": "/", "ms": 81}
+{"time": "2026-10-29T14:02:28Z", "city": "Toronto", "lat": 42.823, "lng": -79.129, "status": 200, "path": "/login", "ms": 40}
+{"time": "2026-10-29T14:02:29Z", "city": "Lagos", "lat": 5.062, "lng": 4.285, "status": 200, "path": "/api/items", "ms": 222}
+{"time": "2026-10-29T14:02:30Z", "city": "Sydney", "lat": -34.577, "lng": 149.744, "status": 200, "path": "/api/items", "ms": 92}
+{"time": "2026-10-29T14:02:31Z", "city": "Singapore", "lat": 2.051, "lng": 103.065, "status": 404, "path": "/", "ms": 27}
+{"time": "2026-10-29T14:02:32Z", "city": "Mumbai", "lat": 18.058, "lng": 74.115, "status": 200, "path": "/", "ms": 33}
+{"time": "2026-10-29T14:02:33Z", "city": "Toronto", "lat": 43.396, "lng": -79.04, "status": 200, "path": "/login", "ms": 55}
+{"time": "2026-10-29T14:02:34Z", "city": "New York", "lat": 41.383, "lng": -74.076, "status": 500, "path": "/login", "ms": 118}
+{"time": "2026-10-29T14:02:35Z", "city": "Seoul", "lat": 36.596, "lng": 128.47, "status": 200, "path": "/checkout", "ms": 37}
+{"time": "2026-10-29T14:02:36Z", "city": "Seoul", "lat": 36.86, "lng": 125.638, "status": 404, "path": "/api/items", "ms": 81}
+{"time": "2026-10-29T14:02:37Z", "city": "Toronto", "lat": 43.037, "lng": -78.094, "status": 500, "path": "/orders", "ms": 30}
+{"time": "2026-10-29T14:02:38Z", "city": "Tokyo", "lat": 34.888, "lng": 140.422, "status": 200, "path": "/orders", "ms": 107}
+{"time": "2026-10-29T14:02:39Z", "city": "Mumbai", "lat": 18.298, "lng": 74.103, "status": 200, "path": "/api/items", "ms": 157}
+{"time": "2026-10-29T14:02:40Z", "city": "Lagos", "lat": 7.113, "lng": 4.453, "status": 301, "path": "/search", "ms": 135}
+{"time": "2026-10-29T14:02:41Z", "city": "Sydney", "lat": -34.195, "lng": 151.466, "status": 200, "path": "/login", "ms": 144}
+{"time": "2026-10-29T14:02:42Z", "city": "Tokyo", "lat": 34.273, "lng": 138.605, "status": 200, "path": "/api/items", "ms": 116}
+{"time": "2026-10-29T14:02:43Z", "city": "Seoul", "lat": 38.639, "lng": 127.765, "status": 200, "path": "/orders", "ms": 52}
+{"time": "2026-10-29T14:02:44Z", "city": "New York", "lat": 41.943, "lng": -73.249, "status": 404, "path": "/", "ms": 182}
+{"time": "2026-10-29T14:02:45Z", "city": "Sydney", "lat": -34.972, "lng": 152.086, "status": 200, "path": "/api/items", "ms": 47}
+{"time": "2026-10-29T14:02:46Z", "city": "Mumbai", "lat": 18.633, "lng": 74.17, "status": 200, "path": "/", "ms": 104}
+{"time": "2026-10-29T14:02:47Z", "city": "Berlin", "lat": 52.826, "lng": 13.328, "status": 200, "path": "/checkout", "ms": 83}
+{"time": "2026-10-29T14:02:48Z", "city": "Mumbai", "lat": 19.136, "lng": 71.675, "status": 200, "path": "/search", "ms": 116}
+{"time": "2026-10-29T14:02:49Z", "city": "S\u00e3o Paulo", "lat": -22.567, "lng": -46.406, "status": 200, "path": "/checkout", "ms": 20}
+{"time": "2026-10-29T14:02:50Z", "city": "New York", "lat": 40.682, "lng": -74.036, "status": 200, "path": "/orders", "ms": 194}
+{"time": "2026-10-29T14:02:51Z", "city": "Singapore", "lat": 0.701, "lng": 102.964, "status": 404, "path": "/api/items", "ms": 52}
+{"time": "2026-10-29T14:02:52Z", "city": "Mexico City", "lat": 19.401, "lng": -97.657, "status": 200, "path": "/login", "ms": 163}
+{"time": "2026-10-29T14:02:53Z", "city": "Berlin", "lat": 53.806, "lng": 14.576, "status": 200, "path": "/api/items", "ms": 73}
+{"time": "2026-10-29T14:02:54Z", "city": "Mexico City", "lat": 19.313, "lng": -99.035, "status": 200, "path": "/api/items", "ms": 153}
+{"time": "2026-10-29T14:02:55Z", "city": "Berlin", "lat": 52.585, "lng": 14.504, "status": 200, "path": "/search", "ms": 140}
+{"time": "2026-10-29T14:02:56Z", "city": "Tokyo", "lat": 36.247, "lng": 138.962, "status": 200, "path": "/orders", "ms": 36}
+{"time": "2026-10-29T14:02:57Z", "city": "Seoul", "lat": 36.645, "lng": 126.385, "status": 200, "path": "/api/items", "ms": 177}
+{"time": "2026-10-29T14:02:58Z", "city": "Seoul", "lat": 36.813, "lng": 126.46, "status": 200, "path": "/login", "ms": 60}
+{"time": "2026-10-29T14:02:59Z", "city": "S\u00e3o Paulo", "lat": -22.185, "lng": -45.145, "status": 200, "path": "/orders", "ms": 229}
+{"time": "2026-10-29T14:03:00Z", "city": "Mumbai", "lat": 17.908, "lng": 74.114, "status": 200, "path": "/checkout", "ms": 44}
+{"time": "2026-10-29T14:03:01Z", "city": "New York", "lat": 41.773, "lng": -74.2, "status": 200, "path": "/orders", "ms": 73}
+{"time": "2026-10-29T14:03:02Z", "city": "Lagos", "lat": 5.792, "lng": 4.095, "status": 200, "path": "/", "ms": 62}
+{"time": "2026-10-29T14:03:03Z", "city": "Seoul", "lat": 38.608, "lng": 127.484, "status": 200, "path": "/api/items", "ms": 297}
+{"time": "2026-10-29T14:03:04Z", "city": "Mexico City", "lat": 18.303, "lng": -99.332, "status": 200, "path": "/checkout", "ms": 85}
+{"time": "2026-10-29T14:03:05Z", "city": "Mumbai", "lat": 18.78, "lng": 73.518, "status": 200, "path": "/orders", "ms": 47}
+{"time": "2026-10-29T14:03:06Z", "city": "Lagos", "lat": 7.596, "lng": 3.435, "status": 200, "path": "/api/items", "ms": 150}
+{"time": "2026-10-29T14:03:07Z", "city": "Mumbai", "lat": 20.305, "lng": 71.699, "status": 301, "path": "/checkout", "ms": 77}
+{"time": "2026-10-29T14:03:08Z", "city": "S\u00e3o Paulo", "lat": -24.747, "lng": -46.406, "status": 200, "path": "/login", "ms": 41}
+{"time": "2026-10-29T14:03:09Z", "city": "New York", "lat": 41.697, "lng": -73.945, "status": 200, "path": "/search", "ms": 116}
+{"time": "2026-10-29T14:03:10Z", "city": "Mexico City", "lat": 19.471, "lng": -97.832, "status": 200, "path": "/api/items", "ms": 159}
+{"time": "2026-10-29T14:03:11Z", "city": "New York", "lat": 40.356, "lng": -75.325, "status": 200, "path": "/", "ms": 63}
+{"time": "2026-10-29T14:03:12Z", "city": "Seoul", "lat": 37.811, "lng": 125.808, "status": 200, "path": "/checkout", "ms": 76}
+{"time": "2026-10-29T14:03:13Z", "city": "Mumbai", "lat": 18.074, "lng": 74.168, "status": 200, "path": "/", "ms": 176}
+{"time": "2026-10-29T14:03:14Z", "city": "Lagos", "lat": 7.182, "lng": 4.324, "status": 200, "path": "/orders", "ms": 48}
+{"time": "2026-10-29T14:03:15Z", "city": "Mumbai", "lat": 18.463, "lng": 73.025, "status": 200, "path": "/orders", "ms": 126}
+{"time": "2026-10-29T14:03:16Z", "city": "S\u00e3o Paulo", "lat": -23.922, "lng": -47.369, "status": 200, "path": "/search", "ms": 105}
+{"time": "2026-10-29T14:03:17Z", "city": "Seoul", "lat": 37.144, "lng": 127.443, "status": 200, "path": "/checkout", "ms": 71}
+{"time": "2026-10-29T14:03:18Z", "city": "Mexico City", "lat": 20.621, "lng": -100.172, "status": 200, "path": "/checkout", "ms": 103}
+{"time": "2026-10-29T14:03:19Z", "city": "Berlin", "lat": 51.065, "lng": 11.934, "status": 200, "path": "/", "ms": 91}
+{"time": "2026-10-29T14:03:20Z", "city": "London", "lat": 52.573, "lng": -1.073, "status": 200, "path": "/search", "ms": 61}
+{"time": "2026-10-29T14:03:21Z", "city": "Mumbai", "lat": 18.084, "lng": 74.053, "status": 200, "path": "/login", "ms": 184}
+{"time": "2026-10-29T14:03:22Z", "city": "Mexico City", "lat": 18.522, "lng": -98.552, "status": 301, "path": "/login", "ms": 89}
+{"time": "2026-10-29T14:03:23Z", "city": "London", "lat": 50.713, "lng": -1.212, "status": 200, "path": "/search", "ms": 82}
+{"time": "2026-10-29T14:03:24Z", "city": "Tokyo", "lat": 34.92, "lng": 138.684, "status": 200, "path": "/login", "ms": 142}
+{"time": "2026-10-29T14:03:25Z", "city": "Singapore", "lat": 0.74, "lng": 103.717, "status": 200, "path": "/search", "ms": 8}
+{"time": "2026-10-29T14:03:26Z", "city": "London", "lat": 51.091, "lng": 0.31, "status": 200, "path": "/", "ms": 105}
+{"time": "2026-10-29T14:03:27Z", "city": "Berlin", "lat": 51.302, "lng": 13.353, "status": 301, "path": "/orders", "ms": 89}
+{"time": "2026-10-29T14:03:28Z", "city": "Mexico City", "lat": 19.354, "lng": -99.053, "status": 200, "path": "/orders", "ms": 52}
+{"time": "2026-10-29T14:03:29Z", "city": "Sydney", "lat": -32.89, "lng": 150.589, "status": 200, "path": "/search", "ms": 60}
+{"time": "2026-10-29T14:03:30Z", "city": "Sydney", "lat": -34.336, "lng": 150.321, "status": 404, "path": "/search", "ms": 115}
+{"time": "2026-10-29T14:03:31Z", "city": "Berlin", "lat": 51.403, "lng": 14.818, "status": 200, "path": "/", "ms": 77}
+{"time": "2026-10-29T14:03:32Z", "city": "Sydney", "lat": -35.231, "lng": 152.176, "status": 200, "path": "/search", "ms": 102}
+{"time": "2026-10-29T14:03:33Z", "city": "Toronto", "lat": 43.985, "lng": -79.03, "status": 404, "path": "/api/items", "ms": 130}
+{"time": "2026-10-29T14:03:34Z", "city": "Mexico City", "lat": 18.048, "lng": -98.729, "status": 200, "path": "/api/items", "ms": 99}
+{"time": "2026-10-29T14:03:35Z", "city": "Tokyo", "lat": 35.445, "lng": 138.492, "status": 404, "path": "/api/items", "ms": 43}
+{"time": "2026-10-29T14:03:36Z", "city": "Seoul", "lat": 36.976, "lng": 126.745, "status": 200, "path": "/checkout", "ms": 187}
+{"time": "2026-10-29T14:03:37Z", "city": "Lagos", "lat": 5.138, "lng": 2.237, "status": 200, "path": "/search", "ms": 191}
+{"time": "2026-10-29T14:03:38Z", "city": "Lagos", "lat": 7.06, "lng": 3.662, "status": 200, "path": "/api/items", "ms": 189}
+{"time": "2026-10-29T14:03:39Z", "city": "Mumbai", "lat": 17.829, "lng": 72.797, "status": 200, "path": "/orders", "ms": 92}
+{"time": "2026-10-29T14:03:40Z", "city": "New York", "lat": 39.575, "lng": -72.611, "status": 200, "path": "/", "ms": 52}
+{"time": "2026-10-29T14:03:41Z", "city": "Lagos", "lat": 7.178, "lng": 2.607, "status": 200, "path": "/api/items", "ms": 42}
+{"time": "2026-10-29T14:03:42Z", "city": "Seoul", "lat": 38.259, "lng": 125.733, "status": 301, "path": "/api/items", "ms": 82}
+{"time": "2026-10-29T14:03:43Z", "city": "Mexico City", "lat": 18.692, "lng": -97.737, "status": 404, "path": "/api/items", "ms": 259}
+{"time": "2026-10-29T14:03:44Z", "city": "Singapore", "lat": 0.783, "lng": 104.508, "status": 200, "path": "/orders", "ms": 86}
+{"time": "2026-10-29T14:03:45Z", "city": "Singapore", "lat": 1.259, "lng": 102.819, "status": 200, "path": "/", "ms": 49}
+{"time": "2026-10-29T14:03:46Z", "city": "Mexico City", "lat": 19.361, "lng": -98.296, "status": 301, "path": "/search", "ms": 81}
+{"time": "2026-10-29T14:03:47Z", "city": "New York", "lat": 41.163, "lng": -73.104, "status": 200, "path": "/login", "ms": 47}
+{"time": "2026-10-29T14:03:48Z", "city": "New York", "lat": 41.013, "lng": -74.584, "status": 301, "path": "/search", "ms": 61}
+{"time": "2026-10-29T14:03:49Z", "city": "S\u00e3o Paulo", "lat": -24.2, "lng": -48.125, "status": 301, "path": "/checkout", "ms": 55}
+{"time": "2026-10-29T14:03:50Z", "city": "New York", "lat": 39.632, "lng": -72.838, "status": 200, "path": "/login", "ms": 144}
+{"time": "2026-10-29T14:03:51Z", "city": "Lagos", "lat": 5.275, "lng": 3.541, "status": 200, "path": "/search", "ms": 21}
+{"time": "2026-10-29T14:03:52Z", "city": "S\u00e3o Paulo", "lat": -24.877, "lng": -46.944, "status": 200, "path": "/api/items", "ms": 49}
+{"time": "2026-10-29T14:03:53Z", "city": "New York", "lat": 40.589, "lng": -75.247, "status": 200, "path": "/checkout", "ms": 106}
+{"time": "2026-10-29T14:03:54Z", "city": "Singapore", "lat": 0.629, "lng": 104.82, "status": 200, "path": "/checkout", "ms": 69}
+{"time": "2026-10-29T14:03:55Z", "city": "S\u00e3o Paulo", "lat": -24.773, "lng": -45.712, "status": 200, "path": "/checkout", "ms": 53}
+{"time": "2026-10-29T14:03:56Z", "city": "Mumbai", "lat": 20.151, "lng": 72.119, "status": 200, "path": "/search", "ms": 63}
+{"time": "2026-10-29T14:03:57Z", "city": "Mexico City", "lat": 18.175, "lng": -99.683, "status": 200, "path": "/", "ms": 52}
+{"time": "2026-10-29T14:03:58Z", "city": "New York", "lat": 39.824, "lng": -72.898, "status": 200, "path": "/login", "ms": 71}
+{"time": "2026-10-29T14:03:59Z", "city": "Sydney", "lat": -34.531, "lng": 150.001, "status": 404, "path": "/search", "ms": 336}

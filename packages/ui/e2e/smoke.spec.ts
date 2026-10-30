@@ -47,7 +47,14 @@ test('examples render without console errors', async ({ page }) => {
   await expect(files).toBeVisible();
   await expect(files).not.toContainText('ignored.md');
   await expect(files).toContainText('README.md');
-  for (const f of ['markdown.md', 'animations.md', 'animations/updraft.md']) {
+  for (const f of [
+    'markdown.md',
+    'animations.md',
+    'animations/updraft.md',
+    'charts.md',
+    'maps.md',
+    'realtime.md',
+  ]) {
     await page.goto('/' + f);
     await expect(page.locator('article.leaf-doc')).toBeVisible();
     await expect(page.locator('article.leaf-doc h1')).toHaveCount(1);
@@ -234,5 +241,29 @@ test('live panes run, pause, and show their errors', async ({ page }) => {
   await expect(broken).toHaveAttribute('data-state', 'error');
   await expect(broken.getByRole('alert')).toContainText('line 3');
   await expect(broken.getByRole('alert')).toContainText('undefinedThing');
+  expect(errors).toEqual([]);
+});
+
+test('charts and maps draw, in documents and as files of their own', async ({ page }) => {
+  const errors = collectErrors(page);
+  await page.goto('/charts.md');
+  await expect(page.locator('.leaf-chart canvas').first()).toBeVisible();
+  // The one that names a missing column says so.
+  await expect(page.getByRole('alert')).toContainText('profit');
+  await page.goto('/maps.md');
+  const logs = page.locator('.leaf-map').first();
+  await expect(logs.locator('.leaf-map-land path').first()).toBeAttached({ timeout: 15000 });
+  await expect(logs.locator('circle.leaf-map-feature')).toHaveCount(240);
+  await expect(logs.getByRole('list', { name: 'Legend' })).toContainText('500');
+  await page.goto('/charts/revenue.chart');
+  const chart = page.locator('.leaf-chart canvas');
+  await expect(chart).toBeVisible();
+  expect((await chart.boundingBox())!.height).toBeGreaterThan(300);
+  await page.goto('/maps/offices.geojson');
+  await expect(page.locator('.leaf-map-feature')).toHaveCount(5, { timeout: 15000 });
+  await page.goto('/animations/knot.three');
+  const pane = page.locator('.leaf-live');
+  await expect(pane).toHaveAttribute('data-state', /running|error/);
+  expect((await pane.boundingBox())!.height).toBeGreaterThan(300);
   expect(errors).toEqual([]);
 });

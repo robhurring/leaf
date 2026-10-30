@@ -1,0 +1,71 @@
+{
+  "type": "FeatureCollection",
+  "features": [
+    {
+      "type": "Feature",
+      "properties": {
+        "name": "Head office",
+        "staff": 120
+      },
+      "geometry": {
+        "type": "Point",
+        "coordinates": [-0.13, 51.51]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "name": "Lisbon studio",
+        "staff": 18
+      },
+      "geometry": {
+        "type": "Point",
+        "coordinates": [-9.14, 38.72]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "name": "Berlin office",
+        "staff": 44
+      },
+      "geometry": {
+        "type": "Point",
+        "coordinates": [13.4, 52.52]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "name": "Train route",
+        "hours": 9
+      },
+      "geometry": {
+        "type": "LineString",
+        "coordinates": [
+          [-0.13, 51.51],
+          [2.35, 48.86],
+          [13.4, 52.52]
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "name": "Sales region: Iberia"
+      },
+      "geometry": {
+        "type": "Polygon",
+        "coordinates": [
+          [
+            [-9.5, 36.0],
+            [3.3, 36.0],
+            [3.3, 43.8],
+            [-9.5, 43.8],
+            [-9.5, 36.0]
+          ]
+        ]
+      }
+    }
+  ]
+}

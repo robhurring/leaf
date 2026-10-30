@@ -1,0 +1,11 @@
+# A chart file: a Chart.js config as YAML, opened on its own in the full window.
+type: line
+data:
+  from: ../data/sales.csv
+  x: month
+  y: [revenue, cost]
+options:
+  plugins:
+    title:
+      display: true
+      text: Revenue and cost, by month

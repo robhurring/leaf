@@ -2266,6 +2266,15 @@ html[data-connection='lost'] .leaf-math-pending {
 .leaf-frame[data-full] > * {
   max-width: 100%;
 }
+/* A chart or a live pane opened as a file stretches to fill the window and draws to fit. */
+.leaf-main-inner[data-viewer='chart'],
+.leaf-main-inner[data-viewer='live'] {
+  height: 100%;
+}
+.leaf-main-inner[data-viewer='chart'] .leaf-stage-inline,
+.leaf-main-inner[data-viewer='live'] .leaf-stage-inline {
+  height: 100%;
+}
 .leaf-frame[data-viewer='csv'] .leaf-datatable {
   padding: 32px 12px 12px;
 }
@@ -2831,6 +2840,12 @@ html[data-resizing] .leaf-blame-resizer::after {
   list-style: none;
   font: 12.5px/1.6 var(--leaf-font-ui);
   color: var(--leaf-text-2);
+}
+/* Not a list in the document's sense: no bullets or indents from the article styles. */
+.leaf-map-legend li {
+  list-style: none;
+  margin: 0;
+  padding: 0;
 }
 .leaf-map-swatch {
   display: inline-block;
