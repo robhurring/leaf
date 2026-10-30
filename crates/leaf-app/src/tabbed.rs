@@ -256,6 +256,8 @@ pub fn new_window(app: &AppHandle, place: Option<Geometry>) -> Option<Window<Wry
         tracing::error!(error = %e, "could not add the window's title row");
     }
     state.tabs.lock().unwrap().add_window(&label);
+    // The drag ghost is made now, not mid-drag, so making it never takes the pointer.
+    ghost(app);
     let shown = window.clone();
     state.runtime.spawn(async move {
         tokio::time::sleep(READY_FALLBACK).await;
@@ -422,6 +424,12 @@ pub fn window_gone(app: &AppHandle, window: &str) {
     if front.as_deref() == Some(window) {
         *front = None;
     }
+    drop(front);
+    // With the last window gone the ghost goes too, or the app would never quit.
+    let others = app.windows().keys().any(|l| l != window && l != "ghost");
+    if !others && let Some(g) = app.get_webview_window("ghost") {
+        let _ = g.destroy();
+    }
 }
 
 /// What a window's place is remembered under: its one tab's root, else the shared key.
@@ -547,4 +555,195 @@ pub fn leaf_reorder(webview: Webview<Wry>, tab: String, index: usize) {
         .move_tab(&tab, &window, Some(index));
     // Dragging a tab picks it, as in browsers.
     select(app, &tab);
+}
+
+/// Where the drag ghost waits between drags. It stays shown and moves on and off
+/// screen: on macOS showing a window makes it key, which ends the drag in progress.
+const PARKED: (f64, f64) = (-20000.0, -20000.0);
+/// How far below a window's top edge a dropped tab still lands in its tab row.
+const DROP_BAND: f64 = TITLE + ROW + 12.0;
+/// A tab's width in the tab row (the chrome's `TAB_WIDTH`).
+const TAB_WIDTH: f64 = 190.0;
+
+/// The drag ghost: a small borderless window shaped like a tab, made with the first
+/// window and parked off screen between drags.
+fn ghost(app: &AppHandle) -> Option<tauri::WebviewWindow<Wry>> {
+    if let Some(g) = app.get_webview_window("ghost") {
+        return Some(g);
+    }
+    let g = tauri::WebviewWindowBuilder::new(
+        app,
+        "ghost",
+        WebviewUrl::App(PathBuf::from("ghost.html")),
+    )
+    .decorations(false)
+    .resizable(false)
+    .always_on_top(true)
+    .skip_taskbar(true)
+    .focused(false)
+    .visible(true)
+    .shadow(true)
+    .position(PARKED.0, PARKED.1)
+    .inner_size(TAB_WIDTH + 30.0, ROW)
+    .build()
+    .ok()?;
+    let _ = g.set_ignore_cursor_events(true);
+    Some(g)
+}
+
+/// The window (other than `except`) whose tab row is under a screen point, and where
+/// in its row a tab dropped there would land.
+fn row_under(app: &AppHandle, except: &str, x: f64, y: f64) -> Option<(Window<Wry>, usize)> {
+    let state = app.state::<AppState>();
+    let ours = state.tabs.lock().unwrap().windows();
+    let windows = app.windows();
+    ours.iter()
+        .filter(|l| l.as_str() != except)
+        .filter_map(|l| windows.get(l))
+        .find_map(|w| {
+            let scale = w.scale_factor().ok()?;
+            let p = w.outer_position().ok()?.to_logical::<f64>(scale);
+            let s = w.outer_size().ok()?.to_logical::<f64>(scale);
+            let inside = x >= p.x && x <= p.x + s.width && y >= p.y && y <= p.y + DROP_BAND;
+            if !inside {
+                return None;
+            }
+            let n = state.tabs.lock().unwrap().tabs_of(w.label()).len();
+            let at = (((x - p.x) + TAB_WIDTH / 2.0) / TAB_WIDTH).floor() as usize;
+            Some((w.clone(), at.min(n)))
+        })
+}
+
+/// Marks the window a dragged tab is over (opening its tab row), and tells the chromes.
+fn hover(app: &AppHandle, over: Option<(String, usize)>) {
+    let before = {
+        let state = app.state::<AppState>();
+        let mut h = state.hovered.lock().unwrap();
+        if *h == over {
+            return;
+        }
+        std::mem::replace(&mut *h, over.clone())
+    };
+    let windows = app.windows();
+    for label in [before.map(|b| b.0), over.as_ref().map(|o| o.0.clone())]
+        .into_iter()
+        .flatten()
+    {
+        if let Some(w) = windows.get(&label) {
+            relayout(app, w);
+        }
+    }
+    let payload =
+        over.map(|(window, index)| serde_json::json!({ "window": window, "index": index }));
+    let _ = app.emit("leaf://hover", payload);
+}
+
+/// A tab is being dragged off its row: the ghost follows the pointer (screen points),
+/// and the window under it opens its tab row.
+#[tauri::command]
+pub fn leaf_drag_move(
+    webview: Webview<Wry>,
+    tab: String,
+    label: String,
+    x: f64,
+    y: f64,
+    first: bool,
+) {
+    let app = webview.app_handle();
+    let Some(g) = ghost(app) else { return };
+    if first {
+        let _ = g.eval(format!(
+            "document.getElementById('t').textContent = {label:?}"
+        ));
+    }
+    let _ = g.set_position(LogicalPosition::new(x - 30.0, y - ROW / 2.0));
+    let from = window_of_webview(&webview);
+    let _ = tab;
+    hover(
+        app,
+        row_under(app, &from, x, y).map(|(w, i)| (w.label().to_string(), i)),
+    );
+}
+
+/// The dragged tab let go at a screen point: into the window whose tab row is there,
+/// else into a new window there (when it leaves others behind in its own).
+#[tauri::command]
+pub fn leaf_drag_end(webview: Webview<Wry>, tab: String, x: f64, y: f64) {
+    let app = webview.app_handle();
+    if let Some(g) = app.get_webview_window("ghost") {
+        let _ = g.set_position(LogicalPosition::new(PARKED.0, PARKED.1));
+    }
+    hover(app, None);
+    let from = webview.window();
+    match row_under(app, from.label(), x, y) {
+        Some((dest, at)) => move_to(app, &tab, &dest, Some(at)),
+        None => {
+            let alone = app
+                .state::<AppState>()
+                .tabs
+                .lock()
+                .unwrap()
+                .tabs_of(from.label())
+                .len()
+                == 1;
+            if !alone {
+                move_to_new_window(app, &tab, Some((x, y)));
+            }
+        }
+    }
+}
+
+/// Moves `tab`, live, into `dest` at `at`. A window it leaves empty closes.
+pub fn move_to(app: &AppHandle, tab: &str, dest: &Window<Wry>, at: Option<usize>) {
+    let state = app.state::<AppState>();
+    let Some(from) = state.tabs.lock().unwrap().window_of(tab) else {
+        return;
+    };
+    let Some(view) = app.get_webview(tab) else {
+        return;
+    };
+    if let Err(e) = view.reparent(dest) {
+        tracing::error!(error = %e, "could not move the tab");
+        return;
+    }
+    let emptied = state.tabs.lock().unwrap().move_tab(tab, dest.label(), at);
+    select(app, tab);
+    relayout(app, dest);
+    let _ = dest.set_focus();
+    let windows = app.windows();
+    match (emptied, windows.get(&from)) {
+        (Some(_), Some(w)) => {
+            let _ = w.destroy();
+        }
+        (None, Some(w)) => {
+            if let Some(active) = active_tab(app, &from) {
+                select(app, &active);
+            }
+            relayout(app, w);
+        }
+        _ => {}
+    }
+    changed(app);
+}
+
+/// Moves `tab` into a window of its own: at a screen point (a drop) with its window's
+/// size, else where tabbed windows go.
+pub fn move_to_new_window(app: &AppHandle, tab: &str, at: Option<(f64, f64)>) {
+    let state = app.state::<AppState>();
+    let Some(from) = state.tabs.lock().unwrap().window_of(tab) else {
+        return;
+    };
+    let place = match (at, app.get_window(&from).and_then(|w| geometry_of(&w))) {
+        (Some((x, y)), Some(g)) => Some(Geometry {
+            x: x - 120.0,
+            y: y - TITLE / 2.0,
+            maximized: false,
+            ..g
+        }),
+        _ => place_for(app, None),
+    };
+    if let Some(dest) = new_window(app, place) {
+        move_to(app, tab, &dest, None);
+        show(&dest);
+    }
 }
