@@ -261,6 +261,11 @@ test('charts and maps draw, in documents and as files of their own', async ({ pa
   expect((await chart.boundingBox())!.height).toBeGreaterThan(300);
   await page.goto('/maps/offices.geojson');
   await expect(page.locator('.leaf-map-feature')).toHaveCount(5, { timeout: 15000 });
+  // Drawn where it can be seen, not just present: the map fills the view.
+  const mapBox = (await page.locator('.leaf-map svg').boundingBox())!;
+  expect(mapBox.height).toBeGreaterThan(300);
+  await page.goto('/maps/datacenters.topojson');
+  await expect(page.locator('circle.leaf-map-feature').first()).toBeVisible({ timeout: 15000 });
   await page.goto('/animations/knot.three');
   const pane = page.locator('.leaf-live');
   await expect(pane).toHaveAttribute('data-state', /running|error/);

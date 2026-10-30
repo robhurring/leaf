@@ -296,6 +296,9 @@ html[data-resizing] .leaf-resizer::after {
 .leaf-main-inner[data-viewer='plantuml'],
 .leaf-main-inner[data-viewer='excalidraw'],
 .leaf-main-inner[data-viewer='image'],
+.leaf-main-inner[data-viewer='map'],
+.leaf-main-inner[data-viewer='chart'],
+.leaf-main-inner[data-viewer='live'],
 .leaf-main-inner[data-viewer='csv'] {
   max-width: none;
   padding: 0;
