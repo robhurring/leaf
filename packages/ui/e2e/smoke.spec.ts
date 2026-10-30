@@ -51,6 +51,7 @@ test('examples render without console errors', async ({ page }) => {
     'markdown.md',
     'animations.md',
     'animations/updraft.md',
+    'animations/seedfall.md',
     'charts.md',
     'maps.md',
     'realtime.md',

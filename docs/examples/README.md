@@ -12,7 +12,7 @@ This folder is leaf's living demo: everything leaf can show is somewhere in here
 ## Beyond Markdown
 
 - **[Diagrams](./diagrams.md)**: Mermaid, PlantUML, and Excalidraw blocks, drawn in place. Hover one to zoom and pan, or open the zoomed view to draw on it. The [diagrams folder](./diagrams/flow.mmd) has the same three as files of their own.
-- **[Animations](./animations.md)**: ` ```three ` and ` ```canvas ` blocks that run, for illustrating ideas: a shape to turn around, a sine wave from a circle, a sort stepping through. [Updraft](./animations/updraft.md) is a whole game in one block.
+- **[Animations](./animations.md)**: ` ```three ` and ` ```canvas ` blocks that run, for illustrating ideas: a shape to turn around, a sine wave from a circle, a sort stepping through. [Updraft](./animations/updraft.md) and [Seedfall](./animations/seedfall.md) are whole games in one block.
 - **[Charts](./charts.md)**: ` ```chart ` blocks, a Chart.js config as YAML, with data inline or read from a CSV or JSON Lines file beside the document.
 - **[Maps](./maps.md)**: GeoJSON, TopoJSON, and ` ```map ` blocks that plot a log or a CSV by latitude and longitude, over a built-in world with no network.
 - **[Slides](./slides.md)**: a markdown file with `marp: true` opens as a Marp deck: arrows to move, **Present** to fill the screen, **Speaker** for a window with your notes, the next slide, and a timer. A ` ```marp ` block puts a small deck inside any document.

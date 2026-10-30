@@ -266,7 +266,7 @@ onFrame((t, dt) => {
 
 ## A whole game
 
-A block can take clicks and keys too: [Updraft](./animations/updraft.md) is a one-button game in a single canvas block.
+A block can take clicks and keys too: [Updraft](./animations/updraft.md) is a one-button game and [Seedfall](./animations/seedfall.md) a pachinko-style one, each in a single canvas block.
 
 ## A deck inside a document
 
