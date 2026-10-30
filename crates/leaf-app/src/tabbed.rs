@@ -999,3 +999,28 @@ pub fn restore_session(app: &AppHandle) {
         }
     }
 }
+
+/// The title row's Appearance button: the app's own menu at the pointer (a dropdown
+/// would be cut off by the title row's height). Its items run like the View menu's.
+#[tauri::command]
+pub fn leaf_appearance_menu(webview: Webview<Wry>) {
+    use tauri::menu::{MenuBuilder, MenuItem};
+    let app = webview.app_handle();
+    let item = |id: &str, text: &str| MenuItem::with_id(app, id, text, true, None::<&str>);
+    let (Ok(light), Ok(dark), Ok(auto), Ok(settings)) = (
+        item("appearance:light", "Light"),
+        item("appearance:dark", "Dark"),
+        item("appearance:auto", "System"),
+        item("cmd:openSettings", "Settings…"),
+    ) else {
+        return;
+    };
+    let menu = MenuBuilder::new(app)
+        .items(&[&light, &dark, &auto])
+        .separator()
+        .item(&settings)
+        .build();
+    if let Ok(menu) = menu {
+        let _ = webview.window().popup_menu(&menu);
+    }
+}

@@ -38,6 +38,8 @@ export type TopBarProps = {
   /** The open Go to field, shown in place of its button. */
   goto?: React.ReactNode;
   onTitle(): void;
+  /** Shows the app's own appearance menu instead of the dropdown. */
+  onAppearanceMenu?(): void;
   /** Extra handlers for the leaf mark: in a one-tab window it drags the tab. */
   brand?: React.HTMLAttributes<HTMLButtonElement>;
   canGoBack?: boolean;
@@ -113,6 +115,7 @@ export function TopBar(p: TopBarProps) {
           onTheme={p.onTheme}
           onAppearance={p.onAppearance}
           onSettings={p.onSettings}
+          onOpenMenu={p.onAppearanceMenu}
         />
         {/* In the app the core is in-process: always connected, so no dot. */}
         {!p.native && <ConnectionDot status={p.status} />}

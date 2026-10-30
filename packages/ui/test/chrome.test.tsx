@@ -33,6 +33,7 @@ function fakeBridge(tabs: TabInfo[]) {
     reorder: vi.fn(),
     dragMove: vi.fn(),
     dragEnd: vi.fn(),
+    appearanceMenu: vi.fn(),
     onTabs: (fn) => (subs.tabs.push(fn), () => {}),
     onHover: (fn) => (subs.hover.push(fn), () => {}),
     onTabState: (fn) => (subs.state.push(fn), () => {}),
@@ -123,5 +124,12 @@ describe('the window chrome', () => {
     expect(bridge.close).toHaveBeenCalledWith('t2');
     fireEvent.click(screen.getByRole('button', { name: 'New tab' }));
     expect(bridge.newTab).toHaveBeenCalled();
+  });
+
+  it('opens the appearance menu as the app’s own, not inside the 44px title row', async () => {
+    const { bridge } = await mount([tab('t1', '~/a', true)]);
+    fireEvent.click(screen.getByRole('button', { name: 'Appearance' }));
+    expect(bridge.appearanceMenu).toHaveBeenCalled();
+    expect(screen.queryByRole('menu')).toBeNull();
   });
 });

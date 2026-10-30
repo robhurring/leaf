@@ -12,6 +12,8 @@ type Props = {
   /** Opens Settings; the menu offers it when given. */
   onSettings?(): void;
   onAppearance(a: Appearance): void;
+  /** Shows the app's own menu in place of the dropdown (the window's title row is too short for one). */
+  onOpenMenu?(): void;
 };
 
 const APPEARANCES: { value: Appearance; label: string }[] = [
@@ -33,6 +35,7 @@ export function ThemeMenu({
   onTheme,
   onAppearance,
   onSettings,
+  onOpenMenu,
 }: Props) {
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
@@ -49,7 +52,7 @@ export function ThemeMenu({
       <IconButton
         label="Appearance"
         pressed={open}
-        onClick={() => setOpen((o) => !o)}
+        onClick={() => (onOpenMenu ? onOpenMenu() : setOpen((o) => !o))}
         aria-haspopup="menu"
         aria-expanded={open}
       >

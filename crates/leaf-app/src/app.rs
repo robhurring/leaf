@@ -476,7 +476,8 @@ pub fn run(config: Config, link: Option<String>) -> i32 {
             tabbed::leaf_drag_end,
             tabbed::leaf_open_in_new_tab,
             tabbed::leaf_tree_menu,
-            tabbed::leaf_window_tabs
+            tabbed::leaf_window_tabs,
+            tabbed::leaf_appearance_menu
         ])
         .menu(build_menu)
         .on_menu_event(|app, event| on_menu(app, event.id().as_ref()))
@@ -487,16 +488,21 @@ pub fn run(config: Config, link: Option<String>) -> i32 {
             if let tauri::WindowEvent::Resized(_) = event {
                 tabbed::relayout(window.app_handle(), window);
             }
-            if let tauri::WindowEvent::Focused(true) = event {
+            // The Window menu lists the front window's tabs: rebuilt as the front changes.
+            if let tauri::WindowEvent::Focused(true) = event
+                && window.label() != "ghost"
+            {
                 *window
                     .app_handle()
                     .state::<AppState>()
                     .front
                     .lock()
                     .unwrap() = Some(window.label().to_string());
+                tabbed::refresh_menu(window.app_handle());
             }
             if let tauri::WindowEvent::Destroyed = event {
                 tabbed::window_gone(window.app_handle(), window.label());
+                tabbed::refresh_menu(window.app_handle());
             }
         })
         .setup(move |app| {

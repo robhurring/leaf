@@ -47,6 +47,8 @@ export type Bridge = {
   /** The pointer, in screen points, while a tab is dragged off its row; `first` starts the drag. */
   dragMove(id: string, label: string, x: number, y: number, first: boolean): void;
   dragEnd(id: string, x: number, y: number): void;
+  /** The app's own Appearance menu (Light, Dark, System, Settings…) under the button. */
+  appearanceMenu(): void;
   onTabs(fn: () => void): () => void;
   onHover(fn: (h: Hover) => void): () => void;
   onTabState(fn: (s: TabState) => void): () => void;
@@ -76,6 +78,7 @@ export const tauriBridge: Bridge = {
   reorder: (id, index) => fire('leaf_reorder', { tab: id, index }),
   dragMove: (id, label, x, y, first) => fire('leaf_drag_move', { tab: id, label, x, y, first }),
   dragEnd: (id, x, y) => fire('leaf_drag_end', { tab: id, x, y }),
+  appearanceMenu: () => fire('leaf_appearance_menu'),
   onTabs: (fn) => on('leaf://tabs', fn),
   onHover: (fn) => on<Hover>('leaf://hover', fn),
   onTabState: (fn) => on<TabState>(`leaf://tab-state/${tauriBridge.windowLabel()}`, fn),
