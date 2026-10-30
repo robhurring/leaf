@@ -3230,3 +3230,45 @@ html[data-resizing] .leaf-blame-resizer::after {
   font: 12px/2 var(--leaf-font-ui);
   color: var(--leaf-text-2);
 }
+/* A notebook in a document: a card of its own, with quieter headings and no anchors,
+   showing its top until opened out. */
+.leaf-frame[data-viewer='notebook']:not([data-full]) {
+  padding: 18px 20px 14px 6px;
+}
+.leaf-nb[data-embedded] {
+  --leaf-nb-prompt: 44px;
+  position: relative;
+  max-height: 560px;
+  overflow: hidden;
+}
+.leaf-nb[data-embedded][data-open] {
+  max-height: none;
+}
+.leaf-nb[data-embedded] .leaf-nb-md {
+  padding-left: calc(var(--leaf-nb-prompt) + 8px);
+}
+.leaf-nb[data-embedded] .leaf-doc h1 {
+  font-size: 1.5em;
+}
+.leaf-nb[data-embedded] .leaf-doc h2 {
+  font-size: 1.2em;
+  border: 0;
+}
+.leaf-nb[data-embedded] .leaf-doc h3 {
+  font-size: 1.05em;
+}
+.leaf-nb[data-embedded] .leaf-anchor {
+  display: none;
+}
+.leaf-nb-more {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  padding: 48px 0 10px;
+  border: 0;
+  background: linear-gradient(transparent, var(--leaf-block-bg) 60%);
+  color: var(--leaf-accent);
+  font: 600 13px/1 var(--leaf-font-ui);
+  cursor: pointer;
+}

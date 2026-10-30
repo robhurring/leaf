@@ -3,7 +3,11 @@
 // hidden to read it as a report; any cell's output collapses. HTML outputs (a pandas
 // table, a widget's markup) run sealed off like a live pane: scripts, no network.
 // There's no kernel: outputs are the ones saved in the notebook.
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useContext, useEffect, useMemo, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
+import { BlockToolsContext } from '../../components/BlockFrame.js';
+import { DocToolsContext } from '../../components/Properties.js';
+import { Code } from '../../icons/index.js';
 import type { ViewerProps } from '../types.js';
 import { DiagramError } from '../diagramError.js';
 import { Markdown } from '../../components/Markdown.js';
@@ -137,23 +141,43 @@ export default function NotebookView(props: ViewerProps) {
     }
   }, [text, from, file.error]);
   const [showCode, setShowCode] = useState(true);
+  const [open, setOpen] = useState(false);
+  const blockTools = useContext(BlockToolsContext);
+  const docTools = useContext(DocToolsContext);
   const docPath = from ? file.path : props.docPath;
 
   if (!parsed) return <div className="leaf-diagram leaf-diagram-pending" aria-busy="true" />;
   if ('error' in parsed) return <DiagramError kind="notebook" message={parsed.error ?? ''} />;
   const { nb } = parsed;
+  // Hide code sits with the other tools: the block's hover toolbar, or the file toolbar.
+  const button = (
+    <button
+      type="button"
+      className="leaf-tool"
+      aria-label={showCode ? 'Hide code' : 'Show code'}
+      title={showCode ? 'Hide the code, read it as a report' : 'Show the code'}
+      aria-pressed={!showCode}
+      onClick={() => setShowCode((v) => !v)}
+    >
+      <Code size={15} />
+    </button>
+  );
+  const target = blockTools ?? docTools;
+  // In a document it's a card that shows its top, until opened out.
+  const embedded = !!blockTools && !docTools;
+  const toggle = target ? (
+    createPortal(button, target)
+  ) : (
+    <div className="leaf-nb-bar">{button}</div>
+  );
   return (
-    <div className="leaf-nb">
-      <div className="leaf-nb-bar" role="group" aria-label="Notebook">
-        <span className="leaf-nb-lang">{nb.language}</span>
-        <button
-          type="button"
-          className="leaf-tool leaf-tool-text"
-          onClick={() => setShowCode((v) => !v)}
-        >
-          {showCode ? 'Hide code' : 'Show code'}
-        </button>
-      </div>
+    <div
+      className="leaf-nb"
+      data-language={nb.language}
+      data-embedded={embedded ? '' : undefined}
+      data-open={embedded && open ? '' : undefined}
+    >
+      {toggle}
       {nb.cells.map((cell, i) => (
         <CellView
           key={i}
@@ -163,6 +187,11 @@ export default function NotebookView(props: ViewerProps) {
           docPath={docPath}
         />
       ))}
+      {embedded && !open && (
+        <button type="button" className="leaf-nb-more" onClick={() => setOpen(true)}>
+          Show the whole notebook
+        </button>
+      )}
     </div>
   );
 }

@@ -3,6 +3,7 @@
 // output) download.
 // It also registers the block as live so sticky ink can be told from stale ink.
 import {
+  createContext,
   useCallback,
   useContext,
   useEffect,
@@ -51,6 +52,10 @@ type Props = {
 };
 
 /** The rendered picture inside the frame: the diagram's svg or img, never a toolbar icon. */
+/** The block's tools (the hover toolbar, or the file toolbar for a whole file), for a
+ *  viewer to add its own controls to. */
+export const BlockToolsContext = createContext<HTMLElement | null>(null);
+
 type Picture = SVGSVGElement | HTMLImageElement | HTMLCanvasElement | HTMLIFrameElement;
 function pictureIn(host: HTMLElement | null): Picture | null {
   if (!host) return null;
@@ -75,6 +80,8 @@ export function BlockFrame({
   const [result, setResult] = useState<'ok' | 'failed' | null>(null);
   const [picture, setPicture] = useState<'svg' | 'img' | 'canvas' | 'iframe' | null>(null);
   const visual = viewer.stage !== undefined;
+  // The tools element, for a viewer to add its own controls to (a notebook's Hide code).
+  const [toolsEl, setToolsEl] = useState<HTMLElement | null>(null);
   // A picture made from text (a diagram, chart, map, or animation) can flip to that text.
   const [showSource, setShowSource] = useState(false);
   // A whole file (not a block in a document): fill the area, tools in the file header.
@@ -161,7 +168,7 @@ export function BlockFrame({
   }-${lang ?? viewer.id}.svg`;
 
   const tools = (
-    <div className="leaf-block-tools" role="group" aria-label="Block tools">
+    <div className="leaf-block-tools" role="group" aria-label="Block tools" ref={setToolsEl}>
       {result && (
         <span className="leaf-tool-note" role="status" data-result={result}>
           {result === 'ok' ? <Check size={15} /> : <X size={15} />}
@@ -300,29 +307,31 @@ export function BlockFrame({
         <span className="leaf-block-lang">{lang}</span>
       )}
       {slot ? createPortal(tools, slot) : tools}
-      {showSource ? (
-        <SourceView code={source} lang={sourceLang(viewer.id, lang)} />
-      ) : zoomable ? (
-        <div
-          ref={viewEl}
-          className="leaf-block-view"
-          data-panning={panning ? '' : undefined}
-          style={
-            moved
-              ? { transform: `translate(${view.x}px, ${view.y}px) scale(${view.scale})` }
-              : undefined
-          }
-          onPointerDown={onPointerDown}
-          onPointerMove={onPointerMove}
-          onPointerUp={onPointerUp}
-          onPointerCancel={onPointerUp}
-          onDoubleClick={() => moved && setView(HOME)}
-        >
-          {children}
-        </div>
-      ) : (
-        children
-      )}
+      <BlockToolsContext.Provider value={toolsEl}>
+        {showSource ? (
+          <SourceView code={source} lang={sourceLang(viewer.id, lang)} />
+        ) : zoomable ? (
+          <div
+            ref={viewEl}
+            className="leaf-block-view"
+            data-panning={panning ? '' : undefined}
+            style={
+              moved
+                ? { transform: `translate(${view.x}px, ${view.y}px) scale(${view.scale})` }
+                : undefined
+            }
+            onPointerDown={onPointerDown}
+            onPointerMove={onPointerMove}
+            onPointerUp={onPointerUp}
+            onPointerCancel={onPointerUp}
+            onDoubleClick={() => moved && setView(HOME)}
+          >
+            {children}
+          </div>
+        ) : (
+          children
+        )}
+      </BlockToolsContext.Provider>
     </div>
   );
 }

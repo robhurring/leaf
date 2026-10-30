@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import type { ReactElement } from 'react';
 import type { FileMessage } from '@leaf/protocol';
 import { viewers } from '../src/viewers/index.js';
@@ -119,6 +119,9 @@ describe('notebooks', () => {
       'allow-scripts',
     );
     await waitFor(() => expect(document.querySelector('.leaf-nb-code')).toBeTruthy());
+    // The toggle sits with the block's other hover tools, not over the notebook.
+    const tools = screen.getByRole('group', { name: 'Block tools' });
+    expect(within(tools).getByRole('button', { name: 'Hide code' })).toBeTruthy();
     fireEvent.click(screen.getByRole('button', { name: 'Hide code' }));
     expect(document.querySelector('.leaf-nb-code')).toBeNull();
     fireEvent.click(screen.getByRole('button', { name: 'Show code' }));

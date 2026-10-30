@@ -58,9 +58,11 @@ test('examples render without console errors', async ({ page }) => {
     'notebooks.md',
   ]) {
     await page.goto('/' + f);
-    await expect(page.locator('article.leaf-doc')).toBeVisible();
-    // The page's own title; a deck's slides (in their shadow root) have headings too.
-    await expect(page.locator('article.leaf-doc > h1')).toHaveCount(1);
+    // The page's own document: a notebook's cells and a deck's slides hold documents
+    // and headings of their own.
+    const doc = page.locator('article.leaf-doc').first();
+    await expect(doc).toBeVisible();
+    await expect(doc.locator(':scope > h1')).toHaveCount(1);
     // Let fonts and lazy chunks finish, so leaving doesn't abort them into console errors.
     await page.waitForLoadState('networkidle');
   }
