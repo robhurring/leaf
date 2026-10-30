@@ -91,10 +91,12 @@ describe('BlockFrame', () => {
         </div>
       </BlockFrame>,
     );
-    fireEvent.click(screen.getByLabelText('Copy as image'));
-    const note = await screen.findByRole('status');
-    expect(note.getAttribute('data-result')).toBe('failed');
-    expect(note.querySelector('svg')).toBeTruthy();
+    const button = screen.getByLabelText('Copy as image');
+    fireEvent.click(button);
+    // The button's own icon turns into the x; nothing is added beside it.
+    await vi.waitFor(() => expect(button.getAttribute('data-result')).toBe('failed'));
+    expect(button.querySelectorAll('svg')).toHaveLength(1);
+    expect(document.querySelector('.leaf-tool-note')).toBeNull();
   });
 
   it('offers zoom, pan, the zoomed view, copy source, copy as image, and download for a visual viewer', () => {
@@ -148,8 +150,11 @@ describe('BlockFrame', () => {
     );
     // No zooming a page of text.
     expect(screen.queryByRole('button', { name: 'Zoom in' })).toBeNull();
+    // Showing source, it carries its language like any code block; the picture doesn't.
+    expect(document.querySelector('.leaf-block-lang')?.textContent).toBe('mermaid');
     fireEvent.click(screen.getByRole('button', { name: 'Show source' }));
     expect(screen.getByTestId('picture')).toBeTruthy();
+    expect(document.querySelector('.leaf-block-lang')).toBeNull();
   });
 
   it('a chart or a live pane copies as an image too', async () => {
@@ -281,18 +286,15 @@ describe('BlockFrame', () => {
         <svg />
       </BlockFrame>,
     );
-    fireEvent.click(screen.getByLabelText('Copy source'));
+    const copy = screen.getByLabelText('Copy source');
+    fireEvent.click(copy);
     expect(navigator.clipboard.writeText).toHaveBeenCalledWith('graph TD; A-->B');
-    const ok = await screen.findByRole('status');
-    expect(ok.getAttribute('data-result')).toBe('ok');
-    expect(ok.querySelector('svg')).toBeTruthy();
-    expect(ok.textContent).toBe('');
+    await vi.waitFor(() => expect(copy.getAttribute('data-result')).toBe('ok'));
+    expect(copy.textContent).toBe('');
     (navigator.clipboard.writeText as ReturnType<typeof vi.fn>).mockRejectedValueOnce(
       new Error('denied'),
     );
-    fireEvent.click(screen.getByLabelText('Copy source'));
-    await vi.waitFor(() =>
-      expect(screen.getByRole('status').getAttribute('data-result')).toBe('failed'),
-    );
+    fireEvent.click(copy);
+    await vi.waitFor(() => expect(copy.getAttribute('data-result')).toBe('failed'));
   });
 });

@@ -52,6 +52,8 @@ describe('plantuml viewer', () => {
     expect(img.getAttribute('src')).toBe(
       `https://puml.example/plantuml/svg/${encodePlantUml(preparePlantUml(src, false))}`,
     );
+    // Loaded with CORS, so the picture can be copied as an image (the server allows it).
+    expect(img.getAttribute('crossorigin')).toBe('anonymous');
   });
   it('shows the source with a hint when no server is configured', () => {
     render(<plantuml.Rich file={file(src)} content={src} docPath="seq.puml" config={{}} />);

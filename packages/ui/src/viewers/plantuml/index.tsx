@@ -36,7 +36,13 @@ function PlantUmlView({ content, config, appearance }: ViewerProps) {
     return <div className="leaf-diagram leaf-diagram-pending" aria-busy="true" />;
   return (
     <div className="leaf-diagram leaf-plantuml-view">
-      <img className="leaf-plantuml" src={`${base}/svg/${encoded}`} alt="PlantUML diagram" />
+      <img
+        className="leaf-plantuml"
+        src={`${base}/svg/${encoded}`}
+        alt="PlantUML diagram"
+        // CORS, so it can be copied as an image: the canvas stays clean when the server allows it.
+        crossOrigin="anonymous"
+      />
     </div>
   );
 }

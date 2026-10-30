@@ -10,7 +10,7 @@ export type Libs = { three: string };
 export type Boot = { kind: LiveKind; code: string; theme: Theme; paused: boolean; libs?: Libs };
 
 export type ToFrame =
-  | { leaf: 'live'; type: 'play' | 'pause' | 'restart' | 'step' | 'back' }
+  | { leaf: 'live'; type: 'play' | 'pause' | 'restart' | 'step' }
   | { leaf: 'live'; type: 'snapshot'; id: number }
   | { leaf: 'live'; type: 'theme'; theme: Theme };
 export type FromFrame =

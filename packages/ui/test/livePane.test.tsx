@@ -144,13 +144,12 @@ describe('live animation blocks', () => {
     expect(screen.getByRole('button', { name: 'Play' })).toBeTruthy();
   });
 
-  it('holding Step keeps stepping until let go; Step back the same, backward', () => {
+  it('holding Step keeps stepping until let go', () => {
     vi.useFakeTimers();
     render(block(SINE));
     intersect(pane());
     watchFrame();
     const steps = () => sent.filter((m) => (m as { type: string }).type === 'step').length;
-    const backs = () => sent.filter((m) => (m as { type: string }).type === 'back').length;
     const step = screen.getByRole('button', { name: 'Step' });
     fireEvent.pointerDown(step, { button: 0 });
     expect(steps()).toBe(1);
@@ -164,11 +163,6 @@ describe('live animation blocks', () => {
     // A click from the keyboard is one step.
     fireEvent.click(step, { detail: 0 });
     expect(steps()).toBe(held + 1);
-    const back = screen.getByRole('button', { name: 'Step back' });
-    fireEvent.pointerDown(back, { button: 0 });
-    act(() => vi.advanceTimersByTime(600));
-    fireEvent.pointerLeave(back);
-    expect(backs()).toBeGreaterThan(3);
     vi.useRealTimers();
   });
 

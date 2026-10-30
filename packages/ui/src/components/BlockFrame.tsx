@@ -77,7 +77,8 @@ export function BlockFrame({
   'data-pos': pos,
 }: Props) {
   const host = useRef<HTMLDivElement>(null);
-  const [result, setResult] = useState<'ok' | 'failed' | null>(null);
+  // Which action just finished, and how: its button shows a check or an x for a moment.
+  const [result, setResult] = useState<{ id: string; r: 'ok' | 'failed' } | null>(null);
   const [picture, setPicture] = useState<'svg' | 'img' | 'canvas' | 'iframe' | null>(null);
   const visual = viewer.stage !== undefined;
   // The tools element, for a viewer to add its own controls to (a notebook's Hide code).
@@ -147,19 +148,22 @@ export function BlockFrame({
     return () => mo.disconnect();
   }, [visual, blockHash]);
 
-  // Each action reports with a brief check or x in the toolbar, never with text.
-  const flash = (r: 'ok' | 'failed') => {
-    setResult(r);
-    setTimeout(() => setResult(null), 1500);
+  // Each action reports by turning its own icon into a check or an x for a moment.
+  const flash = (id: string, r: 'ok' | 'failed') => {
+    setResult({ id, r });
+    setTimeout(() => setResult((cur) => (cur?.id === id ? null : cur)), 1500);
   };
-  const run = async (fn: () => Promise<void> | void) => {
+  const run = async (id: string, fn: () => Promise<void> | void) => {
     try {
       await fn();
-      flash('ok');
+      flash(id, 'ok');
     } catch {
-      flash('failed');
+      flash(id, 'failed');
     }
   };
+  const resultOf = (id: string) => (result?.id === id ? result.r : undefined);
+  const iconOr = (id: string, icon: ReactNode) =>
+    result?.id === id ? result.r === 'ok' ? <Check size={15} /> : <X size={15} /> : icon;
   const name = `${
     props.docPath
       .split('/')
@@ -169,11 +173,6 @@ export function BlockFrame({
 
   const tools = (
     <div className="leaf-block-tools" role="group" aria-label="Block tools" ref={setToolsEl}>
-      {result && (
-        <span className="leaf-tool-note" role="status" data-result={result}>
-          {result === 'ok' ? <Check size={15} /> : <X size={15} />}
-        </span>
-      )}
       {zoomable && (
         <>
           <button
@@ -235,8 +234,9 @@ export function BlockFrame({
           className="leaf-tool"
           aria-label="Copy as image"
           title="Copy as image"
+          data-result={resultOf('image')}
           onClick={() =>
-            run(async () => {
+            run('image', async () => {
               const p = pictureIn(host.current);
               if (!p) throw new Error('nothing to copy');
               if (p instanceof HTMLImageElement) await copyRaster(p);
@@ -246,7 +246,7 @@ export function BlockFrame({
             })
           }
         >
-          <ImageIcon size={15} />
+          {iconOr('image', <ImageIcon size={15} />)}
         </button>
       )}
       <button
@@ -254,9 +254,10 @@ export function BlockFrame({
         className="leaf-tool"
         aria-label="Copy source"
         title="Copy source"
-        onClick={() => run(() => navigator.clipboard.writeText(source))}
+        data-result={resultOf('source')}
+        onClick={() => run('source', () => navigator.clipboard.writeText(source))}
       >
-        <Copy size={15} />
+        {iconOr('source', <Copy size={15} />)}
       </button>
       {visual && picture === 'svg' && !showSource && (
         <button
@@ -264,15 +265,16 @@ export function BlockFrame({
           className="leaf-tool"
           aria-label="Download SVG"
           title="Download SVG"
+          data-result={resultOf('download')}
           onClick={() =>
-            run(() => {
+            run('download', () => {
               const p = pictureIn(host.current);
               if (!(p instanceof SVGSVGElement)) throw new Error('nothing to download');
               downloadText(svgElementToString(p), name);
             })
           }
         >
-          <Download size={15} />
+          {iconOr('download', <Download size={15} />)}
         </button>
       )}
       {visual && !showSource && (
@@ -303,7 +305,7 @@ export function BlockFrame({
       data-full={slot ? '' : undefined}
       data-zoomed={zoomable && moved ? '' : undefined}
     >
-      {lang && lang !== 'text' && !visual && !slot && (
+      {lang && lang !== 'text' && (!visual || showSource) && !slot && (
         <span className="leaf-block-lang">{lang}</span>
       )}
       {slot ? createPortal(tools, slot) : tools}

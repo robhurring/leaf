@@ -144,14 +144,10 @@ export function LivePane(props: ViewerProps & { fill?: boolean }) {
     return () => io.disconnect();
   }, []);
 
-  // Step and Step back pause the pane, and repeat while held.
+  // Step pauses the pane, and repeats while held.
   const holdStep = useHold(() => {
     setUserPaused(true);
     send({ leaf: 'live', type: 'step' });
-  });
-  const holdBack = useHold(() => {
-    setUserPaused(true);
-    send({ leaf: 'live', type: 'back' });
   });
 
   const state = failure ? 'error' : !ready ? 'loading' : running ? 'running' : 'paused';
@@ -189,15 +185,6 @@ export function LivePane(props: ViewerProps & { fill?: boolean }) {
             onClick={() => setUserPaused((p) => !p)}
           >
             {userPaused ? <Play size={15} /> : <Pause size={15} />}
-          </button>
-          <button
-            type="button"
-            className="leaf-tool"
-            aria-label="Step back"
-            title="Step back a frame (hold to keep going)"
-            {...holdBack}
-          >
-            <StepFrame size={15} style={{ transform: 'scaleX(-1)' }} />
           </button>
           <button
             type="button"

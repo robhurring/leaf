@@ -2320,17 +2320,10 @@ html[data-connection='lost'] .leaf-math-pending {
 .leaf-frame[data-full] .leaf-diagram {
   padding: 32px;
 }
-.leaf-tool-note {
-  align-self: center;
-  display: grid;
-  place-items: center;
-  width: 26px;
-  height: 26px;
-}
-.leaf-tool-note[data-result='ok'] {
+.leaf-tool[data-result='ok'] {
   color: #30a46c;
 }
-.leaf-tool-note[data-result='failed'] {
+.leaf-tool[data-result='failed'] {
   color: #e5484d;
 }
 

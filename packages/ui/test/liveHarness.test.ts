@@ -279,34 +279,6 @@ describe('live pane harness', () => {
     expect((window as unknown as { count: number }).count).toBe(2);
   });
 
-  it('step back walks back through the frames stepped since pausing; step goes forward again', async () => {
-    // Tag the canvas with the frame number each time a frame draws.
-    await run('window.n = 0; onFrame(() => { window.n++; canvas.tag = window.n; });');
-    const count = () => (window as unknown as { n: number }).n;
-    frame();
-    send({ leaf: 'live', type: 'pause' });
-    send({ leaf: 'live', type: 'step' });
-    send({ leaf: 'live', type: 'step' });
-    send({ leaf: 'live', type: 'step' });
-    expect(count()).toBe(4);
-    const overlay = () => document.querySelector<HTMLCanvasElement>('canvas[data-leaf-history]');
-    send({ leaf: 'live', type: 'back' });
-    // The frame before shows over the live one; nothing new is computed.
-    expect(count()).toBe(4);
-    expect(overlay()!.hidden).toBe(false);
-    send({ leaf: 'live', type: 'back' });
-    send({ leaf: 'live', type: 'back' });
-    send({ leaf: 'live', type: 'back' });
-    // No further back than the pause.
-    send({ leaf: 'live', type: 'step' });
-    send({ leaf: 'live', type: 'step' });
-    send({ leaf: 'live', type: 'step' });
-    expect(count()).toBe(4);
-    expect(overlay()!.hidden).toBe(true);
-    send({ leaf: 'live', type: 'step' });
-    expect(count()).toBe(5);
-  });
-
   it('a resize while paused redraws once, so the picture never goes blank', async () => {
     await run('window.count = 0; onFrame(() => window.count++);');
     frame();
