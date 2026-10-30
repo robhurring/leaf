@@ -271,6 +271,20 @@ describe('a pane that never starts', () => {
     }
   });
 
+  it('says so too when its frame never even loads', () => {
+    vi.useFakeTimers();
+    try {
+      render(block(SINE));
+      expect(pane().dataset.state).toBe('loading');
+      act(() => {
+        vi.advanceTimersByTime(12_000);
+      });
+      expect(pane().dataset.state).toBe('error');
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it('a pane that answered in time is left alone', () => {
     vi.useFakeTimers();
     try {

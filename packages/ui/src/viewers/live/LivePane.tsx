@@ -116,10 +116,10 @@ export function LivePane(props: ViewerProps & { fill?: boolean }) {
     if (loaded) send({ leaf: 'live', type: running ? 'play' : 'pause' });
   }, [loaded, running]);
 
-  // A frame that loads but never says it's ready (a browser that can't start WebGL
-  // can hang there) shows as an error rather than loading forever.
+  // A pane that isn't running 12 seconds after it starts (a browser that can't start
+  // WebGL can hang before its frame even loads) shows as an error, not loading forever.
   useEffect(() => {
-    if (!loaded || ready || failure) return;
+    if (ready || failure) return;
     const t = setTimeout(
       () =>
         hear({
@@ -133,8 +133,9 @@ export function LivePane(props: ViewerProps & { fill?: boolean }) {
       START_TIMEOUT_MS,
     );
     return () => clearTimeout(t);
+    // Counted from the pane's start, not from three.js arriving.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [loaded, ready, failure, frameKey]);
+  }, [ready, failure, hash, generation]);
 
   useEffect(() => {
     if (loaded) send({ leaf: 'live', type: 'theme', theme });
