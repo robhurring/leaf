@@ -288,7 +288,10 @@ test('charts and maps draw, in documents and as files of their own', async ({ pa
   await page.goto('/charts/revenue.chart');
   const chart = page.locator('.leaf-chart canvas');
   await expect(chart).toBeVisible();
-  expect((await chart.boundingBox())!.height).toBeGreaterThan(300);
+  // It grows to fill the view once laid out; measured as soon as it shows, it may not yet.
+  await expect
+    .poll(async () => (await chart.boundingBox())?.height ?? 0, { timeout: 5000 })
+    .toBeGreaterThan(300);
   await page.goto('/maps/offices.geojson');
   await expect(page.locator('.leaf-map-feature')).toHaveCount(5, { timeout: 15000 });
   // Drawn where it can be seen, not just present: the map fills the view.
