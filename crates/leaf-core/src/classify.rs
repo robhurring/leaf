@@ -59,6 +59,13 @@ const TEXT_LANG: &[(&str, &str)] = &[
     ("puml", "plantuml"),
     ("plantuml", "plantuml"),
     ("geojson", "json"),
+    ("jsonl", "json"),
+    ("ndjson", "json"),
+    // leaf's interactive files: a chart's config, and code for a live pane.
+    ("chart", "yaml"),
+    ("three", "javascript"),
+    ("sketch", "javascript"),
+    ("d3", "javascript"),
     ("topojson", "json"),
     ("ipynb", "json"),
     ("excalidraw", "json"),

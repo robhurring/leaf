@@ -17,6 +17,13 @@ fn kinds_and_languages() {
         ("seq.puml", "text", Some("plantuml")),
         ("data.csv", "text", Some("csv")),
         (".gitignore", "text", Some("gitignore")),
+        ("sales.chart", "text", Some("yaml")),
+        ("knot.three", "text", Some("javascript")),
+        ("waves.sketch", "text", Some("javascript")),
+        ("steps.d3", "text", Some("javascript")),
+        ("world.topojson", "text", Some("json")),
+        ("logs.jsonl", "text", Some("json")),
+        ("logs.ndjson", "text", Some("json")),
     ];
     for (path, kind, lang) in cases {
         let c = classify(Path::new(path));
