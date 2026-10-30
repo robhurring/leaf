@@ -20,6 +20,9 @@ import { harness } from './harness.js';
 import { loadThreeLibs } from './libs.js';
 import { useHold } from './useHold.js';
 
+/** How long a loaded frame has to say it's ready before the pane calls it a failure. */
+const START_TIMEOUT_MS = 12_000;
+
 const HARNESS = harness.toString();
 
 const prefersReducedMotion = () =>
@@ -112,6 +115,26 @@ export function LivePane(props: ViewerProps & { fill?: boolean }) {
   useEffect(() => {
     if (loaded) send({ leaf: 'live', type: running ? 'play' : 'pause' });
   }, [loaded, running]);
+
+  // A frame that loads but never says it's ready (a browser that can't start WebGL
+  // can hang there) shows as an error rather than loading forever.
+  useEffect(() => {
+    if (!loaded || ready || failure) return;
+    const t = setTimeout(
+      () =>
+        hear({
+          failure: {
+            message:
+              kind === 'three'
+                ? "The pane didn't start. 3D panes need WebGL, which this browser may not have."
+                : "The pane didn't start.",
+          },
+        }),
+      START_TIMEOUT_MS,
+    );
+    return () => clearTimeout(t);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [loaded, ready, failure, frameKey]);
 
   useEffect(() => {
     if (loaded) send({ leaf: 'live', type: 'theme', theme });

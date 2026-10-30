@@ -30,9 +30,11 @@ const IGNORED = [
   /subsetting/,
   /document is not defined/,
   /Can't find variable: document/,
-  // Headless Linux engines in CI have no GPU: three.js can't get a WebGL context there.
-  // The pane shows that in place (checked in the live panes test).
+  // Headless Linux engines in CI have no GPU: three.js can't get a WebGL context there,
+  // and each engine words it its own way. The pane shows that in place (checked in the
+  // live panes test).
   /Error creating WebGL context/,
+  /WebGL context could not be created/,
 ];
 function collectErrors(page: Page): string[] {
   const errors: string[] = [];
@@ -241,7 +243,8 @@ test('live panes run, pause, and show their errors', async ({ page }) => {
   const torus = page.locator('.leaf-live[data-kind="three"]').first();
   await expect(async () => torus.scrollIntoViewIfNeeded({ timeout: 1000 })).toPass();
   // three.js needs WebGL; a headless engine without it must say so in the pane.
-  await expect(torus).toHaveAttribute('data-state', /running|error/, { timeout: 15000 });
+  // Without WebGL a pane may never start; it says so after 12 seconds.
+  await expect(torus).toHaveAttribute('data-state', /running|error/, { timeout: 20000 });
   if ((await torus.getAttribute('data-state')) === 'error')
     await expect(torus.getByRole('alert')).toContainText(/WebGL/i);
   const sine = page.locator('.leaf-live[data-kind="canvas"]').first();
@@ -291,7 +294,7 @@ test('charts and maps draw, in documents and as files of their own', async ({ pa
   await expect(page.locator('circle.leaf-map-feature').first()).toBeVisible({ timeout: 15000 });
   await page.goto('/animations/knot.three');
   const pane = page.locator('.leaf-live');
-  await expect(pane).toHaveAttribute('data-state', /running|error/);
+  await expect(pane).toHaveAttribute('data-state', /running|error/, { timeout: 20000 });
   expect((await pane.boundingBox())!.height).toBeGreaterThan(300);
   expect(errors).toEqual([]);
 });

@@ -253,3 +253,36 @@ describe('live animation blocks', () => {
     expect(frame().getAttribute('srcdoc')).toBe(doc);
   });
 });
+
+describe('a pane that never starts', () => {
+  it("says so instead of loading forever when its frame doesn't answer", () => {
+    vi.useFakeTimers();
+    try {
+      render(block(SINE));
+      watchFrame();
+      expect(pane().dataset.state).toBe('loading');
+      act(() => {
+        vi.advanceTimersByTime(12_000);
+      });
+      expect(pane().dataset.state).toBe('error');
+      expect(within(pane()).getByRole('alert').textContent).toMatch(/didn't start/);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('a pane that answered in time is left alone', () => {
+    vi.useFakeTimers();
+    try {
+      render(block(SINE));
+      watchFrame();
+      fromFrame({ leaf: 'live', type: 'ready' }, frame().contentWindow);
+      act(() => {
+        vi.advanceTimersByTime(30_000);
+      });
+      expect(pane().dataset.state).not.toBe('error');
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+});
