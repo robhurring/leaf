@@ -14,6 +14,7 @@ use tauri::{
 
 use crate::app::{AppState, READY_FALLBACK, geometry_of, screens};
 use leaf_app::launch::route_for;
+use leaf_app::session::{self, Saved, SavedTab, SavedWindow};
 use leaf_app::tabs::{Workspace, label};
 use leaf_app::window::Windows;
 use leaf_app::window_state::Geometry;
@@ -881,4 +882,86 @@ pub fn leaf_window_tabs(webview: Webview<Wry>) -> Vec<OtherTab> {
             })
         })
         .collect()
+}
+
+/// Where the open windows and tabs are saved for "Reopen my tabs when leaf starts".
+fn session_file(app: &AppHandle) -> PathBuf {
+    app.state::<AppState>()
+        .places_file
+        .with_file_name("tabs.json")
+}
+
+/// On quit, with "Reopen my tabs" on: the windows and tabs as they are now. Once: the
+/// app may be told it is quitting more than one way (⌘Q, or its last window closing).
+pub fn save_session(app: &AppHandle) {
+    static SAVED: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+    if !prefs(app).reopen_tabs_or_default() || SAVED.swap(true, Ordering::SeqCst) {
+        return;
+    }
+    let state = app.state::<AppState>();
+    let shown = state.tab_state.lock().unwrap().clone();
+    let tabs = state.tabs.lock().unwrap();
+    let all = app.windows();
+    let windows = tabs
+        .windows()
+        .into_iter()
+        .map(|w| {
+            let ids = tabs.tabs_of(&w);
+            let active = tabs.active(&w);
+            SavedWindow {
+                place: all.get(&w).and_then(geometry_of),
+                active: ids
+                    .iter()
+                    .position(|t| Some(t) == active.as_ref())
+                    .unwrap_or(0),
+                tabs: ids
+                    .iter()
+                    .filter_map(|id| {
+                        let ws = tabs.workspace(id)?;
+                        let doc = shown
+                            .get(id)
+                            .and_then(|s| s.get("path"))
+                            .and_then(|p| p.as_str())
+                            .map(str::to_string)
+                            .or_else(|| ws.opened_at.clone());
+                        Some(SavedTab {
+                            roots: ws.roots.clone(),
+                            doc,
+                        })
+                    })
+                    .collect(),
+            }
+        })
+        .collect();
+    drop(tabs);
+    if let Err(e) = session::save(&session_file(app), &Saved { windows }) {
+        tracing::warn!(error = %e, "could not save the open tabs");
+    }
+}
+
+/// On start, with "Reopen my tabs" on: the windows and tabs saved at the last quit,
+/// less any whose file or folder is gone.
+pub fn restore_session(app: &AppHandle) {
+    if !prefs(app).reopen_tabs_or_default() {
+        return;
+    }
+    let saved = session::restorable(session::load(&session_file(app)));
+    for w in saved.windows {
+        let Some(window) = new_window(app, w.place) else {
+            continue;
+        };
+        let mut ids = Vec::new();
+        for t in &w.tabs {
+            let Some(root) = t.roots.first() else {
+                continue;
+            };
+            let route = t.doc.as_deref().map(route_for);
+            if let Some(id) = add_tab(app, &window, root, None, route, None) {
+                ids.push(id);
+            }
+        }
+        if let Some(active) = ids.get(w.active) {
+            select(app, active);
+        }
+    }
 }

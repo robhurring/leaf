@@ -26,7 +26,7 @@ pub(crate) struct AppState {
     pub(crate) next: AtomicU32,
     /// Where each file or folder's window was, kept in `<config-dir>/windows.json`.
     pub(crate) places: std::sync::Mutex<WindowStates>,
-    places_file: PathBuf,
+    pub(crate) places_file: PathBuf,
     /// A save is scheduled; moves and resizes come in bursts.
     save_pending: std::sync::atomic::AtomicBool,
     /// The stored preferences: which kinds of link open, where new things open.
@@ -520,6 +520,9 @@ pub fn run(config: Config, link: Option<String>) -> i32 {
                 hovered: Mutex::new(None),
                 front: Mutex::new(None),
             });
+            // The tabs open at the last quit come back first (when asked for), then
+            // what this launch names opens among them.
+            tabbed::restore_session(&handle);
             match &link {
                 Some(url) => open_link(&handle, url),
                 None => open_window(&handle, &first),
@@ -531,6 +534,10 @@ pub fn run(config: Config, link: Option<String>) -> i32 {
         .map(|app| {
             // Links clicked elsewhere while this app runs (macOS delivers them here).
             app.run(|app, event| {
+                // Quitting keeps the open tabs for next time, when that's asked for.
+                if let tauri::RunEvent::ExitRequested { .. } | tauri::RunEvent::Exit = &event {
+                    tabbed::save_session(app);
+                }
                 #[cfg(target_os = "macos")]
                 if let tauri::RunEvent::Opened { urls } = event {
                     for url in urls.iter().filter(|u| u.scheme() == "leaf") {
