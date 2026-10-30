@@ -502,6 +502,12 @@ pub fn run(config: Config, link: Option<String>) -> i32 {
     let runtime = tokio::runtime::Handle::current();
     tauri::async_runtime::set(runtime.clone());
     let first = config.target.clone();
+    // Two launches in the same moment would both become the app: the second waits here
+    // until the first can take launches (end of setup), then hands its path to it.
+    let starting =
+        leaf_app::launch::startup_lock(&std::env::temp_dir().join("leaf-app-startup.lock"))
+            .map_err(|e| tracing::warn!(error = %e, "no startup lock"))
+            .ok();
     let result = tauri::Builder::default()
         .plugin(tauri_plugin_single_instance::init(|app, argv, cwd| {
             if let Some(i) = link_in_argv(&argv) {
@@ -554,6 +560,7 @@ pub fn run(config: Config, link: Option<String>) -> i32 {
                 Some(url) => open_link(&handle, url),
                 None => open_window(&handle, &first),
             }
+            drop(starting);
             Ok(())
         })
         .build(context())

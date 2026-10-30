@@ -746,3 +746,57 @@ mod deep_link_tests {
         assert_eq!(link_in_argv(&["open".into(), ".".into()]), None);
     }
 }
+
+/// Held while the app starts, until it can take launches handed to it: a second app
+/// started in the same moment waits here, then finds the first and hands over.
+pub struct StartupLock(#[allow(dead_code)] std::fs::File);
+
+/// Takes the startup lock at `path` (made if missing), waiting while another app holds it.
+pub fn startup_lock(path: &Path) -> std::io::Result<StartupLock> {
+    use std::os::fd::AsRawFd;
+    let file = std::fs::OpenOptions::new()
+        .create(true)
+        .truncate(false)
+        .write(true)
+        .open(path)?;
+    // flock belongs to this open file, so it also orders threads of one process; the
+    // kernel drops it when the file closes, even if the app dies while starting.
+    loop {
+        if unsafe { libc::flock(file.as_raw_fd(), libc::LOCK_EX) } == 0 {
+            return Ok(StartupLock(file));
+        }
+        let e = std::io::Error::last_os_error();
+        if e.kind() != std::io::ErrorKind::Interrupted {
+            return Err(e);
+        }
+    }
+}
+
+#[cfg(test)]
+mod startup_lock_tests {
+    use super::*;
+    use std::sync::{Arc, Mutex};
+
+    #[test]
+    fn startup_lock_serializes_launches() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("startup.lock");
+        let order = Arc::new(Mutex::new(Vec::new()));
+        let (p, o) = (path.clone(), order.clone());
+        let a = std::thread::spawn(move || {
+            let held = startup_lock(&p).unwrap();
+            std::thread::sleep(Duration::from_millis(200));
+            o.lock().unwrap().push("a-done");
+            drop(held);
+        });
+        std::thread::sleep(Duration::from_millis(20));
+        let (p, o) = (path.clone(), order.clone());
+        let b = std::thread::spawn(move || {
+            let _held = startup_lock(&p).unwrap();
+            o.lock().unwrap().push("b");
+        });
+        a.join().unwrap();
+        b.join().unwrap();
+        assert_eq!(*order.lock().unwrap(), vec!["a-done", "b"]);
+    }
+}
