@@ -13,7 +13,7 @@ import { X } from '../icons/index.js';
 import { createPortal } from 'react-dom';
 import { useStage, type StageContent, type StageTool } from '../store/stage.js';
 import { strokesFor, useAnnotations } from '../store/annotations.js';
-import { composeSvg, downloadText, placedPicture, svgTextToPng } from './image.js';
+import { composeSvg, downloadText, inkBounds, placedPicture, svgTextToPng } from './image.js';
 import { Draw, useDrawing } from './Draw.js';
 import { Toolbox } from './Toolbox.js';
 import { contentSize, sizeSvgs } from './measure.js';
@@ -238,7 +238,7 @@ export function StageCanvas({
     const size = contentSize(layer);
     if (size) viewport.fit(size.w, size.h, view.clientWidth, view.clientHeight);
   }, [viewport]);
-  const first = () => (open.viewer.stage?.sheet ? fit() : actualSize());
+  const first = () => actualSize();
 
   // The picture with its ink over it, as one svg.
   const composed = async () => {
@@ -246,6 +246,18 @@ export function StageCanvas({
     const size = layer && contentSize(layer);
     if (!layer || !size) throw new Error('nothing to copy');
     const ink = strokesFor(useAnnotations.getState().strokes, open.docPath, open.blockHash);
+    if (open.viewer.stage?.sheet) {
+      // An endless canvas: the picture is what was drawn, on the canvas's color.
+      const box = inkBounds(ink);
+      if (!box) throw new Error('nothing drawn');
+      const background = viewRef.current
+        ? getComputedStyle(viewRef.current).backgroundColor
+        : '#ffffff';
+      return {
+        svg: composeSvg(box, null, ink, { x: box.x, y: box.y, background }),
+        size: box,
+      };
+    }
     return { svg: composeSvg(size, await placedPicture(layer, t.scale), ink), size };
   };
   const copy = () =>

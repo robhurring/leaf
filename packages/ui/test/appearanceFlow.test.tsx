@@ -29,7 +29,9 @@ describe('appearance reaches viewers live', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Appearance' }));
     fireEvent.click(screen.getByRole('menuitemradio', { name: 'Dark' }));
     await waitFor(() =>
-      expect(mocks.initialize).toHaveBeenLastCalledWith(expect.objectContaining({ theme: 'dark' })),
+      expect(mocks.initialize).toHaveBeenLastCalledWith(
+        expect.objectContaining({ themeVariables: expect.objectContaining({ darkMode: true }) }),
+      ),
     );
   });
 });

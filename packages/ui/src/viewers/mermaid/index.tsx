@@ -9,6 +9,48 @@ import { contentHash } from '../hash.js';
 import { useAppearance } from '../appearance.js';
 
 let counter = 0;
+
+const DARK = {
+  darkMode: true,
+  background: '#0d1117',
+  fontFamily: 'system-ui, -apple-system, sans-serif',
+  // Nodes: a blue tint with a clear border; decisions and clusters a step apart.
+  primaryColor: '#1c2b41',
+  primaryBorderColor: '#4f7cbf',
+  primaryTextColor: '#e6edf3',
+  secondaryColor: '#2a2140',
+  secondaryBorderColor: '#8a6fd1',
+  secondaryTextColor: '#e6edf3',
+  tertiaryColor: '#16241c',
+  tertiaryBorderColor: '#3f9e6a',
+  tertiaryTextColor: '#e6edf3',
+  mainBkg: '#1c2b41',
+  nodeBorder: '#4f7cbf',
+  nodeTextColor: '#e6edf3',
+  textColor: '#c9d1d9',
+  lineColor: '#8b949e',
+  clusterBkg: '#141c27',
+  clusterBorder: '#30405a',
+  titleColor: '#e6edf3',
+  // Edge labels on the page's own color instead of gray chips.
+  edgeLabelBackground: '#0d1117',
+  // Sequence diagrams.
+  actorBkg: '#1c2b41',
+  actorBorder: '#4f7cbf',
+  actorTextColor: '#e6edf3',
+  actorLineColor: '#5b6675',
+  signalColor: '#c9d1d9',
+  signalTextColor: '#e6edf3',
+  labelBoxBkgColor: '#1c2b41',
+  labelBoxBorderColor: '#4f7cbf',
+  labelTextColor: '#e6edf3',
+  loopTextColor: '#c9d1d9',
+  noteBkgColor: '#3a3220',
+  noteBorderColor: '#a8873a',
+  noteTextColor: '#f0e6c8',
+  activationBkgColor: '#2a3a55',
+  activationBorderColor: '#4f7cbf',
+};
 const cache = new Map<string, Promise<string>>();
 
 async function renderMermaid(code: string, dark: boolean): Promise<string> {
@@ -19,9 +61,10 @@ async function renderMermaid(code: string, dark: boolean): Promise<string> {
       const mermaid = (await track(load(() => import('mermaid')))).default;
       mermaid.initialize({
         startOnLoad: false,
-        theme: dark ? 'dark' : 'default',
-        // Edge labels on the page's own color instead of gray chips.
-        themeVariables: { edgeLabelBackground: dark ? '#0d1117' : '#ffffff' },
+        // Dark: Mermaid's own dark theme draws every node the same near-black gray; our
+        // palette gives nodes a tint, readable edges, and text with real contrast.
+        theme: dark ? 'base' : 'default',
+        themeVariables: dark ? DARK : { edgeLabelBackground: '#ffffff' },
         securityLevel: 'strict',
         // Labels as SVG text rather than HTML in foreignObject: a canvas drawn from HTML
         // in an SVG is tainted, so Copy as image failed for flowcharts and their kin.

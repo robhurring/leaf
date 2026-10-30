@@ -3281,27 +3281,18 @@ html[data-resizing] .leaf-blame-resizer::after {
   display: none;
 }
 
-/* Freeform drawing: a blank sheet on the Stage, in a .draw file's panel or in a block,
-   on a backdrop so the paper's edges show. */
-.leaf-stage-viewport:has(.leaf-draw-sheet),
-.leaf-stage-inline .leaf-stage-viewport:has(.leaf-draw-sheet) {
-  background: color-mix(in srgb, var(--leaf-doc-text) 6%, var(--leaf-doc-bg));
-}
-.leaf-draw-sheet svg {
-  display: block;
-  box-shadow:
-    0 0 0 1px rgba(0, 0, 0, 0.08),
-    0 6px 20px rgba(0, 0, 0, 0.08);
-}
+/* Freeform drawing: an endless canvas in the page's own color. */
 .leaf-draw-block {
   position: relative;
   display: flex;
   overflow: hidden;
   border-radius: 8px;
-  background: var(--leaf-surface-2, var(--leaf-block-bg));
+  /* In a document, a line marks where the canvas is. */
+  box-shadow: 0 0 0 1px var(--leaf-line);
 }
 .leaf-draw-block .leaf-stage-viewport {
   flex: 1;
+  background: var(--leaf-doc-bg);
 }
 .leaf-draw-block .leaf-toolbox {
   bottom: 10px;

@@ -8,7 +8,7 @@ import { DocumentView } from '../src/components/DocumentView.js';
 import { DocToolsContext } from '../src/components/Properties.js';
 import { useAnnotations, type Stroke } from '../src/store/annotations.js';
 import { useStage } from '../src/store/stage.js';
-import { composeSvg } from '../src/stage/image.js';
+import { composeSvg, inkBounds } from '../src/stage/image.js';
 
 const stroke = (id: string, blockHash: string, createdAt: number): Stroke => ({
   id,
@@ -91,6 +91,43 @@ describe('drawing', () => {
     const ink = root.querySelector(':scope > path')!;
     expect(ink.getAttribute('d')).toBe('M5 6 L50 60');
     expect(ink.getAttribute('stroke')).toBe('#30a46c');
+  });
+
+  it('a drawing crops to its ink, on the canvas color', () => {
+    const svg = composeSvg({ w: 100, h: 50 }, null, [stroke('a', 'h', 1)], {
+      x: -16,
+      y: -16,
+      background: 'rgb(13, 17, 23)',
+    });
+    const root = new DOMParser().parseFromString(svg, 'image/svg+xml').documentElement;
+    expect(root.getAttribute('viewBox')).toBe('-16 -16 100 50');
+    const bg = root.querySelector(':scope > rect')!;
+    expect([bg.getAttribute('x'), bg.getAttribute('fill')]).toEqual(['-16', 'rgb(13, 17, 23)']);
+  });
+
+  it('inkBounds is the box around every stroke, padded', () => {
+    expect(
+      inkBounds(
+        [
+          {
+            ...stroke('a', 'h', 1),
+            points: [
+              [10, 20],
+              [30, 5],
+            ],
+            width: 4,
+          },
+          {
+            ...stroke('b', 'h', 2),
+            points: [
+              [-5, 40],
+              [0, 0],
+            ],
+          },
+        ],
+        10,
+      ),
+    ).toEqual({ x: -16, y: -11, w: 58, h: 62 });
   });
 
   it('a ```draw block has the Stage tools, opens with the pencil, and no source view', async () => {

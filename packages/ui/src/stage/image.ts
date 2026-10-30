@@ -75,8 +75,11 @@ export function composeSvg(
   size: { w: number; h: number },
   picture: PlacedPicture | null,
   strokes: Stroke[],
+  /** Where the view starts (a drawing cropped to its ink) and the color under it. */
+  frame: { x: number; y: number; background?: string } = { x: 0, y: 0 },
 ): string {
   const { w, h } = size;
+  const { x, y, background } = frame;
   let under = '';
   if (picture && 'markup' in picture) {
     // The diagram's own svg, nested and placed: its viewBox keeps its drawing in scale.
@@ -100,7 +103,28 @@ export function composeSvg(
         `<path d="${s.points.map(([x, y], i) => `${i === 0 ? 'M' : 'L'}${x} ${y}`).join(' ')}" fill="none" stroke="${INK_COLORS[s.color]}" stroke-width="${s.width}" stroke-linecap="round" stroke-linejoin="round"/>`,
     )
     .join('');
-  return `<svg xmlns="http://www.w3.org/2000/svg" width="${w}" height="${h}" viewBox="0 0 ${w} ${h}">${under}${ink}</svg>`;
+  const bg = background
+    ? `<rect x="${x}" y="${y}" width="${w}" height="${h}" fill="${esc(background)}"/>`
+    : '';
+  return `<svg xmlns="http://www.w3.org/2000/svg" width="${w}" height="${h}" viewBox="${x} ${y} ${w} ${h}">${bg}${under}${ink}</svg>`;
+}
+
+/** The box around every stroke (each reaching half its width past its points), padded. */
+export function inkBounds(strokes: Stroke[], pad = 16) {
+  let x0 = Infinity;
+  let y0 = Infinity;
+  let x1 = -Infinity;
+  let y1 = -Infinity;
+  for (const s of strokes)
+    for (const [x, y] of s.points) {
+      const r = s.width / 2;
+      x0 = Math.min(x0, x - r);
+      y0 = Math.min(y0, y - r);
+      x1 = Math.max(x1, x + r);
+      y1 = Math.max(y1, y + r);
+    }
+  if (x0 === Infinity) return null;
+  return { x: x0 - pad, y: y0 - pad, w: x1 - x0 + 2 * pad, h: y1 - y0 + 2 * pad };
 }
 
 const dataUrlOf = async (src: string) => {
