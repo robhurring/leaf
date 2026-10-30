@@ -140,6 +140,37 @@ describe('Marp decks', () => {
     expect(counter()).toBe('1 / 2');
   });
 
+  it('All slides and back returns to the slide; Present from All slides presents the slide', async () => {
+    openFile(file('talk.md', DECK));
+    await waitFor(() => expect(counter()).toBe('1 / 3'));
+    fireEvent.keyDown(window, { key: 'ArrowRight' });
+    fireEvent.click(screen.getByRole('button', { name: 'All slides' }));
+    expect(document.querySelector('.leaf-deck-overview')).toBeTruthy();
+    fireEvent.click(screen.getByRole('button', { name: 'All slides' }));
+    expect(document.querySelector('.leaf-deck-overview')).toBeNull();
+    expect(shown()).toBe('Two');
+    // The slide view is the slide view again, not the overview's grid.
+    const slideCss = () =>
+      document.querySelector('.leaf-deck-slides')!.shadowRoot!.querySelector('style')!.textContent!;
+    expect(slideCss()).not.toContain('grid-template-columns');
+    fireEvent.click(screen.getByRole('button', { name: 'All slides' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Present' }));
+    expect(document.querySelector('.leaf-deck-overview')).toBeNull();
+    expect(slideCss()).not.toContain('grid-template-columns');
+    expect(shown()).toBe('Two');
+  });
+
+  it('clicking a slide in All slides goes to it', async () => {
+    openFile(file('talk.md', DECK));
+    await waitFor(() => expect(counter()).toBe('1 / 3'));
+    fireEvent.click(screen.getByRole('button', { name: 'All slides' }));
+    const grid = document.querySelector('.leaf-deck-overview')!.shadowRoot!;
+    fireEvent.click(grid.querySelectorAll('svg[data-marpit-svg]')[2]!);
+    expect(document.querySelector('.leaf-deck-overview')).toBeNull();
+    expect(counter()).toBe('3 / 3');
+    expect(shown()).toBe('Three');
+  });
+
   it('Present fills the window with the slide; Escape comes back', async () => {
     openFile(file('talk.md', DECK));
     await waitFor(() => expect(counter()).toBe('1 / 3'));

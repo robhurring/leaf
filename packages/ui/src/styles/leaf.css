@@ -2939,6 +2939,9 @@ html[data-resizing] .leaf-blame-resizer::after {
   min-height: 0;
   cursor: pointer;
 }
+.leaf-deck-slides[hidden] {
+  display: none;
+}
 .leaf-deck[data-mode='full'] .leaf-deck-slides {
   margin: 24px 24px 0;
 }

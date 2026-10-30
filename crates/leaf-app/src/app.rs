@@ -156,18 +156,9 @@ fn leaf_open_speaker(window: tauri::WebviewWindow, path: String) -> Result<(), S
         .windows
         .opened(window.label())
         .ok_or("this window has nothing open")?;
-    // Only a file inside this window's folder.
-    if Path::new(&path)
-        .components()
-        .any(|c| !matches!(c, std::path::Component::Normal(_)))
-    {
-        return Err(format!("not a path inside the folder: {path}"));
-    }
-    let target = Windows::folder_of(&opened).join(&path);
-    if !target.is_file() {
-        return Err(format!("no such file: {path}"));
-    }
-    open_window_at(&app, &target, Some(leaf_app::launch::speaker_route(&path)));
+    // The same folder as this window, so the deck's path means the same thing there.
+    let (folder, route) = leaf_app::launch::speaker_target(&opened, &path)?;
+    open_window_at(&app, &folder, Some(route));
     Ok(())
 }
 

@@ -143,16 +143,17 @@ export default function DeckView(props: Props) {
       tabIndex={mode === 'mini' ? 0 : undefined}
       onKeyDown={mode === 'mini' && !presenting ? onKey : undefined}
     >
-      {overview ? (
-        <div ref={grid} className="leaf-deck-overview" />
-      ) : (
-        <div
-          ref={slides}
-          className="leaf-deck-slides"
-          data-presenting={presenting ? '' : undefined}
-          onClick={onSlideClick}
-        />
-      )}
+      {/* Two elements, never one reused: the slides keep their own shadow root, hidden
+          while the overview shows. */}
+      {overview && <div key="overview" ref={grid} className="leaf-deck-overview" />}
+      <div
+        key="slides"
+        ref={slides}
+        className="leaf-deck-slides"
+        hidden={overview}
+        data-presenting={presenting ? '' : undefined}
+        onClick={onSlideClick}
+      />
       <div className="leaf-deck-bar" role="group" aria-label="Slides">
         <button
           type="button"

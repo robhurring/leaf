@@ -494,9 +494,51 @@ pub fn speaker_route(path: &str) -> String {
     format!("{}?speaker", route_for(path))
 }
 
+/// Where a deck's speaker window opens: on the same folder as the window showing the
+/// deck (`opened`, a folder or a file in it), at the deck's path flagged for the speaker.
+/// Only a file inside that folder.
+pub fn speaker_target(opened: &Path, path: &str) -> Result<(PathBuf, String), String> {
+    if path.is_empty()
+        || Path::new(path)
+            .components()
+            .any(|c| !matches!(c, std::path::Component::Normal(_)))
+    {
+        return Err(format!("not a path inside the folder: {path}"));
+    }
+    let folder = if opened.is_dir() {
+        opened.to_path_buf()
+    } else {
+        opened.parent().map(Path::to_path_buf).unwrap_or_default()
+    };
+    if !folder.join(path).is_file() {
+        return Err(format!("no such file: {path}"));
+    }
+    Ok((folder, speaker_route(path)))
+}
+
 #[cfg(test)]
 mod speaker_tests {
     use super::{route_for, speaker_route};
+
+    use super::speaker_target;
+    use std::path::Path;
+
+    #[test]
+    fn the_speaker_window_opens_on_the_same_folder_as_its_deck() {
+        let root = std::env::temp_dir().join("leaf-speaker-target");
+        std::fs::create_dir_all(root.join("slides")).unwrap();
+        std::fs::write(root.join("slides/launch.marp"), "# a").unwrap();
+        // A window on the folder, showing a deck in a subfolder.
+        let (open, route) = speaker_target(&root, "slides/launch.marp").unwrap();
+        assert_eq!(open, root);
+        assert_eq!(route, speaker_route("slides/launch.marp"));
+        // A window opened on the deck file itself: its folder.
+        let (open, _) = speaker_target(&root.join("slides/launch.marp"), "launch.marp").unwrap();
+        assert_eq!(open, root.join("slides"));
+        assert!(speaker_target(&root, "../etc/passwd").is_err());
+        assert!(speaker_target(&root, "slides/missing.marp").is_err());
+        assert!(speaker_target(Path::new("/"), "/etc/passwd").is_err());
+    }
 
     #[test]
     fn the_speaker_window_opens_on_the_deck_flagged_for_the_speaker() {
