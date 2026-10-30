@@ -33,6 +33,15 @@ beforeEach(() => {
 });
 
 describe('mermaid viewer', () => {
+  it('draws labels as SVG text, not HTML, so the picture can be copied as an image', async () => {
+    const { render } = await import('@testing-library/react');
+    render(<mermaid.Inline file={file('graph TD; Q-->R')} content="graph TD; Q-->R" {...props} />);
+    await waitFor(() => expect(mocks.initialize).toHaveBeenCalled());
+    const config = mocks.initialize.mock.calls.at(-1)![0];
+    expect(config.htmlLabels).toBe(false);
+    expect(config.flowchart.htmlLabels).toBe(false);
+  });
+
   it('is picked for .mmd files and mermaid fences', () => {
     expect(viewers.forFile(file('graph TD')).id).toBe('mermaid');
     expect(viewers.forLang('mermaid')?.id).toBe('mermaid');

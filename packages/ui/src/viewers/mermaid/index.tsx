@@ -23,6 +23,10 @@ async function renderMermaid(code: string, dark: boolean): Promise<string> {
         // Edge labels on the page's own color instead of gray chips.
         themeVariables: { edgeLabelBackground: dark ? '#0d1117' : '#ffffff' },
         securityLevel: 'strict',
+        // Labels as SVG text rather than HTML in foreignObject: a canvas drawn from HTML
+        // in an SVG is tainted, so Copy as image failed for flowcharts and their kin.
+        htmlLabels: false,
+        flowchart: { htmlLabels: false },
         suppressErrorRendering: true,
       });
       const { svg } = await mermaid.render(`leaf-mermaid-${++counter}`, code);
