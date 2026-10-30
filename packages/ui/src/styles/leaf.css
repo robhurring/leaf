@@ -3104,3 +3104,27 @@ html[data-resizing] .leaf-blame-resizer::after {
   grid-column: 1 / -1;
   padding: 0;
 }
+/* The slide's speaker notes under it, read like a short document. */
+.leaf-deck-notes {
+  flex: 0 0 auto;
+  max-height: 30%;
+  overflow: auto;
+  margin: 14px 24px 0;
+  padding: 12px 18px;
+  border: 1px solid var(--leaf-line);
+  border-radius: var(--leaf-radius);
+  font-size: 15px;
+}
+.leaf-deck-notes .leaf-doc {
+  font-size: 15px;
+}
+.leaf-deck-notes .leaf-doc > :first-child {
+  margin-top: 0;
+}
+.leaf-deck-notes .leaf-doc > :last-child {
+  margin-bottom: 0;
+}
+.leaf-deck-notes-empty {
+  margin: 0;
+  color: var(--leaf-text-2);
+}

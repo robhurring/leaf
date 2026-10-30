@@ -9,7 +9,11 @@ paginate: true
 
 A `.marp` file is a deck on its own: it always opens as slides.
 
-<!-- Open Speaker to see these notes beside the next slide and a timer. -->
+<!--
+Thanks for coming. **Goal of this meeting:** agree on the launch date.
+
+Keep this under ten minutes.
+-->
 
 ---
 
@@ -19,15 +23,28 @@ A `.marp` file is a deck on its own: it always opens as slides.
 - 92% weekly active
 - Two blockers left
 
-<!-- Mention the two blockers by name: sign-in on Safari, and the import timeout. -->
+<!--
+The two blockers, by name:
+
+1. Sign-in on Safari, fixed in review
+2. The import timeout on big repos, needs one more day
+
+Weekly active is up from 85% last month.
+-->
 
 ---
 
 ## The plan
 
-1. Fix the blockers — this week
-2. Open the waitlist — next week
-3. Launch — the week after
+1. Fix the blockers: this week
+2. Open the waitlist: next week
+3. Launch: the week after
+
+<!--
+Ask for a yes or no on the date before moving on.
+
+If it's a no, the fallback is **two weeks later**, same order.
+-->
 
 ---
 
@@ -35,3 +52,9 @@ A `.marp` file is a deck on its own: it always opens as slides.
 
 # Questions?
 
+<!--
+Likely questions:
+
+- *Pricing?* Same as beta for the first three months
+- *Migration?* The import tool covers it
+-->

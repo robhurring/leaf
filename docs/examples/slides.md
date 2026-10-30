@@ -10,7 +10,12 @@ A markdown file with `marp: true` in its frontmatter opens as a deck, drawn by [
 
 Use **→** or **space** to move on.
 
-<!-- Speaker notes live in comments like this one. -->
+<!--
+Welcome everyone. These are the **speaker notes** for this slide: they show under the slide while you rehearse, and in the speaker window while you present.
+
+- Notes are Marp comments, written in markdown
+- Lists, **bold**, and `code` all work
+-->
 
 ---
 
@@ -23,15 +28,25 @@ Use **→** or **space** to move on.
 
 Edit this file while it's open: the deck follows and stays on this slide.
 
+<!--
+Walk through the four bullets quickly. The point to land: **a deck is just markdown**, so it diffs, reviews, and lives next to the code.
+
+Try it now: change a bullet and save.
+-->
+
 ---
 
 <!-- _class: lead -->
 
 # Presenting
 
-**Present** fills the screen with the slide. **Speaker** opens a window with your notes, the next slide, and a timer, and keeps it in step. **All slides** shows every slide at once. **Document** in the file toolbar reads this file as a plain document.
+**Present** fills the screen with the slide. **Speaker** opens a window with these notes, the next slide, and a timer, and keeps it in step. **All slides** shows every slide at once. **Document** in the file toolbar reads this file as a plain document.
 
-<!-- This note shows in the speaker window. Press the arrow keys there and this window follows. -->
+<!--
+Click **Present** and press **Esc** to come back.
+
+Then open **Speaker**: move with the arrow keys in either window and the other follows.
+-->
 
 ---
 
@@ -45,8 +60,18 @@ $$
 e^{i\pi} + 1 = 0
 $$
 
+<!--
+Code is highlighted and math is typeset with KaTeX, offline.
+
+If someone asks: Euler's identity ties together *e*, *i*, *π*, 1, and 0.
+-->
+
 ---
 
 # Thanks
 
 Slides can also sit inside any document as a ` ```marp ` block: see [animations.md](./animations.md) for blocks that move, and the [README](./README.md) for everything else.
+
+<!--
+Wrap up. Point at the README for the rest of what leaf can show, then take questions.
+-->

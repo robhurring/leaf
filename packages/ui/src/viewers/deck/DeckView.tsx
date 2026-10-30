@@ -5,6 +5,7 @@ import { useContext, useEffect, useLayoutEffect, useRef, useState } from 'react'
 import type { ViewerProps } from '../types.js';
 import { DiagramError } from '../diagramError.js';
 import { AssetContext, rawUrl } from '../../render/components/assetContext.js';
+import { Markdown } from '../../components/Markdown.js';
 import { renderDeck, type Deck } from './marp.js';
 import { OVERVIEW_CSS, mountDeck, showSlide } from './slides.js';
 import { deckChannel, openSpeaker } from './sync.js';
@@ -25,6 +26,8 @@ export default function DeckView(props: Props) {
   const [index, setIndex] = useState(0);
   const [overview, setOverview] = useState(false);
   const [presenting, setPresenting] = useState(false);
+  // The slide's speaker notes under it (Marp's comment notes), unless switched off.
+  const [showNotes, setShowNotes] = useState(true);
   const slides = useRef<HTMLDivElement>(null);
   const grid = useRef<HTMLDivElement>(null);
   const box = useRef<HTMLDivElement>(null);
@@ -154,6 +157,15 @@ export default function DeckView(props: Props) {
         data-presenting={presenting ? '' : undefined}
         onClick={onSlideClick}
       />
+      {mode === 'full' && !presenting && showNotes && !overview && (
+        <section className="leaf-deck-notes" aria-label="Speaker notes">
+          {deck?.notes[at] ? (
+            <Markdown source={deck.notes[at]!} docPath={docPath} />
+          ) : (
+            <p className="leaf-deck-notes-empty">No notes for this slide.</p>
+          )}
+        </section>
+      )}
       <div className="leaf-deck-bar" role="group" aria-label="Slides">
         <button
           type="button"
@@ -189,6 +201,16 @@ export default function DeckView(props: Props) {
               onClick={() => setOverview((v) => !v)}
             >
               All slides
+            </button>
+            <button
+              type="button"
+              className="leaf-tool leaf-tool-text"
+              aria-label="Notes"
+              title="Show or hide the speaker notes under the slide"
+              aria-pressed={showNotes}
+              onClick={() => setShowNotes((v) => !v)}
+            >
+              Notes
             </button>
             <button
               type="button"

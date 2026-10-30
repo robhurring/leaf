@@ -16,7 +16,7 @@ marp: true
 
 hello
 
-<!-- Say hello first. -->
+<!-- Say **hello** first. -->
 
 ---
 
@@ -171,6 +171,21 @@ describe('Marp decks', () => {
     expect(shown()).toBe('Three');
   });
 
+  it("the slide's speaker notes show under it, as markdown, and follow the slide", async () => {
+    openFile(file('talk.md', DECK));
+    await waitFor(() => expect(counter()).toBe('1 / 3'));
+    const notes = await screen.findByRole('region', { name: 'Speaker notes' });
+    await waitFor(() => expect(notes.querySelector('strong')?.textContent).toBe('hello'));
+    fireEvent.keyDown(window, { key: 'ArrowRight' });
+    await waitFor(() => expect(notes.textContent).toMatch(/no notes/i));
+    // Hidden with the Notes toggle; and never while presenting.
+    fireEvent.click(screen.getByRole('button', { name: 'Notes' }));
+    expect(screen.queryByRole('region', { name: 'Speaker notes' })).toBeNull();
+    fireEvent.click(screen.getByRole('button', { name: 'Notes' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Present' }));
+    expect(screen.queryByRole('region', { name: 'Speaker notes' })).toBeNull();
+  });
+
   it('Present fills the window with the slide; Escape comes back', async () => {
     openFile(file('talk.md', DECK));
     await waitFor(() => expect(counter()).toBe('1 / 3'));
@@ -186,7 +201,7 @@ describe('Marp decks', () => {
     const { renderDeck } = await import('../src/viewers/deck/marp.js');
     const deck = await renderDeck(DECK);
     expect(deck.count).toBe(3);
-    expect(deck.notes[0]).toBe('Say hello first.');
+    expect(deck.notes[0]).toBe('Say **hello** first.');
     expect(deck.notes[1]).toBe('');
     expect(deck.html).not.toContain('<script');
   });
@@ -200,7 +215,10 @@ describe('speaker view', () => {
     ear.onmessage = (e) => heard.push((e.data as { index: number }).index);
     render(<SpeakerView content={DECK} docPath="talk.md" />);
     await waitFor(() => expect(counter()).toBe('1 / 3'));
-    expect(screen.getByRole('note', { name: 'Notes' }).textContent).toContain('Say hello first.');
+    // Notes are markdown, drawn a moment after the slide.
+    await waitFor(() =>
+      expect(screen.getByRole('note', { name: 'Notes' }).textContent).toContain('Say hello first.'),
+    );
     expect(screen.getByRole('region', { name: 'Next slide' })).toBeTruthy();
     fireEvent.keyDown(window, { key: 'ArrowRight' });
     expect(counter()).toBe('2 / 3');

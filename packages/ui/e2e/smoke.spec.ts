@@ -57,7 +57,8 @@ test('examples render without console errors', async ({ page }) => {
   ]) {
     await page.goto('/' + f);
     await expect(page.locator('article.leaf-doc')).toBeVisible();
-    await expect(page.locator('article.leaf-doc h1')).toHaveCount(1);
+    // The page's own title; a deck's slides (in their shadow root) have headings too.
+    await expect(page.locator('article.leaf-doc > h1')).toHaveCount(1);
     // Let fonts and lazy chunks finish, so leaving doesn't abort them into console errors.
     await page.waitForLoadState('networkidle');
   }

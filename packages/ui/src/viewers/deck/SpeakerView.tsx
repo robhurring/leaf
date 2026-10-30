@@ -3,6 +3,7 @@
 // with it, and follows it.
 import { useContext, useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { DiagramError } from '../diagramError.js';
+import { Markdown } from '../../components/Markdown.js';
 import { AssetContext, rawUrl } from '../../render/components/assetContext.js';
 import { renderDeck, type Deck } from './marp.js';
 import { mountDeck, showSlide } from './slides.js';
@@ -114,7 +115,11 @@ export function SpeakerView({ content, docPath }: { content: string; docPath: st
         </div>
       </aside>
       <div className="leaf-speaker-notes" role="note" aria-label="Notes">
-        {notes || <span className="leaf-speaker-empty">No notes for this slide.</span>}
+        {notes ? (
+          <Markdown source={notes} docPath={docPath} />
+        ) : (
+          <span className="leaf-speaker-empty">No notes for this slide.</span>
+        )}
       </div>
       <div className="leaf-deck-bar leaf-speaker-bar" role="group" aria-label="Slides">
         <button
