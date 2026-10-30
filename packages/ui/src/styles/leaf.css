@@ -2789,3 +2789,18 @@ html[data-resizing] .leaf-blame-resizer::after {
 .leaf-live[data-state='paused'] .leaf-live-controls {
   opacity: 1;
 }
+
+/* ---------- charts ---------- */
+/* A Chart.js canvas at the fence's height, or filling a whole-file view or the Stage. */
+.leaf-chart {
+  position: relative;
+  padding: 12px 16px;
+  box-sizing: border-box;
+}
+.leaf-chart[data-fill],
+.leaf-chart-block:has(.leaf-chart[data-fill]) {
+  height: 100%;
+}
+.leaf-chart canvas {
+  display: block;
+}

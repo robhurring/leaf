@@ -6,6 +6,7 @@ import type { ViewerProps } from './types.js';
 import { binary } from './binary/index.js';
 import { code } from './code/index.js';
 import { live } from './live/index.js';
+import { chart } from './chart/index.js';
 import { csv } from './csv/index.js';
 import { excalidraw } from './excalidraw/index.js';
 import { mermaid } from './mermaid/index.js';
@@ -16,7 +17,19 @@ import { media } from './media/index.js';
 
 /** The app-wide viewer registry with the built-in viewers. */
 export const viewers = createViewerRegistry();
-for (const v of [markdown, mermaid, plantuml, excalidraw, csv, live, code, image, media, binary])
+for (const v of [
+  markdown,
+  mermaid,
+  plantuml,
+  excalidraw,
+  csv,
+  live,
+  chart,
+  code,
+  image,
+  media,
+  binary,
+])
   viewers.register(v);
 
 // A viewer that claims fence languages renders those blocks inline, inside the
@@ -56,4 +69,4 @@ for (const v of viewers.all()) {
 
 export { createViewerRegistry } from './registry.js';
 export type { Viewer, ViewerProps, Action } from './types.js';
-export { markdown, mermaid, plantuml, excalidraw, csv, live, code, image, media, binary };
+export { markdown, mermaid, plantuml, excalidraw, csv, live, chart, code, image, media, binary };
