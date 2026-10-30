@@ -60,7 +60,15 @@ leaf open docs/examples        # the tour: every kind of file leaf reads, one pa
 
 ## Install
 
-Packaged builds are coming. Until then, build from a checkout with Rust and Node 22 or newer:
+**macOS:** download the `.dmg` from [Releases](https://github.com/robhurring/leaf/releases) and drag **leaf reader** to Applications. It runs on Apple Silicon and Intel. To get `leaf` in your terminal, link the binary inside the app:
+
+```sh
+ln -s "/Applications/leaf reader.app/Contents/MacOS/leaf" ~/.local/bin/leaf
+```
+
+Builds that aren't notarized yet need a right-click > **Open** the first time.
+
+**From a checkout** (macOS or Linux), with Rust and Node 22 or newer:
 
 ```sh
 bin/setup                  # dependencies
@@ -177,7 +185,10 @@ bin/setup      # install, .env, Playwright's browsers, checks for cargo
 bin/dev -o     # server plus Vite on docs/examples/, opens the browser
 bin/test       # Rust and UI unit tests, build, browser smoke tests on three engines
 bin/install    # build, then symlink target/release/leaf into ~/.local/bin
+bin/package    # (macOS) the release app as a .dmg and a .zip in dist/release/
 ```
+
+Releases: bump `version` in `Cargo.toml`, merge to main, and push a matching tag (`git tag v0.2.0 && git push origin v0.2.0`). The release workflow builds a universal app, packages it, and publishes a GitHub release. With an Apple Developer ID in the repository secrets (`APPLE_CERTIFICATE`, `APPLE_CERTIFICATE_PASSWORD`, `APPLE_SIGNING_IDENTITY`, `APPLE_ID`, `APPLE_PASSWORD`, `APPLE_TEAM_ID`) it is signed and notarized; without one it is signed ad hoc.
 
 `docs/examples/` is the living demo: [its README](docs/examples/README.md) maps every feature to a page, and `leaf open docs/examples` is how to see it.
 

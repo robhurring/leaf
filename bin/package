@@ -1,0 +1,70 @@
+#!/usr/bin/env bash
+set -euo pipefail
+cd "$(dirname "$0")/.."
+
+usage() {
+  echo "usage: bin/package    (macOS) build leaf reader.app for release, as a .dmg and a .zip in dist/release/"
+  echo "  LEAF_TARGETS: Rust targets to build and join into one binary"
+  echo "    (default: aarch64-apple-darwin x86_64-apple-darwin; empty builds for this Mac only)"
+  echo "  Signing, when set (otherwise the app is signed ad hoc):"
+  echo "    LEAF_SIGN_IDENTITY   a Developer ID Application identity in the keychain"
+  echo "    APPLE_ID, APPLE_PASSWORD (app-specific), APPLE_TEAM_ID   also notarize and staple"
+}
+[[ "${1:-}" == "--help" || "${1:-}" == "-h" ]] && { usage; exit 0; }
+[[ "$(uname)" == "Darwin" ]] || { echo "bin/package: macOS only" >&2; exit 1; }
+
+targets="${LEAF_TARGETS-aarch64-apple-darwin x86_64-apple-darwin}"
+out=dist/release
+app="$out/leaf reader.app"
+rm -rf "$out"
+mkdir -p "$out"
+
+npm run build --if-present -w @leaf/protocol
+npm run build --if-present -w @leaf/ui
+# The binary embeds the UI. With more than one target, the builds are joined into one
+# universal binary at target/release/leaf, where bin/bundle looks for it.
+if [[ -z "$targets" ]]; then
+  cargo build --release -p leaf-app
+else
+  bins=()
+  for t in $targets; do
+    cargo build --release -p leaf-app --target "$t"
+    bins+=("target/$t/release/leaf")
+  done
+  mkdir -p target/release
+  lipo -create -output target/release/leaf "${bins[@]}"
+fi
+version="$(target/release/leaf --version)"
+arch="$(lipo -archs target/release/leaf | tr ' ' '\n' | sort | paste -sd+ -)"
+[[ "$arch" == "arm64+x86_64" ]] && arch=universal
+
+LEAF_APP="$app" bin/bundle --no-register
+
+if [[ -n "${LEAF_SIGN_IDENTITY:-}" ]]; then
+  # Developer ID, hardened runtime, and a timestamp: what notarization asks for.
+  codesign --force --options runtime --timestamp --sign "$LEAF_SIGN_IDENTITY" "$app"
+  codesign --verify --strict --verbose=2 "$app"
+  if [[ -n "${APPLE_ID:-}" && -n "${APPLE_PASSWORD:-}" && -n "${APPLE_TEAM_ID:-}" ]]; then
+    ditto -c -k --keepParent "$app" "$out/notarize.zip"
+    xcrun notarytool submit "$out/notarize.zip" --wait \
+      --apple-id "$APPLE_ID" --password "$APPLE_PASSWORD" --team-id "$APPLE_TEAM_ID"
+    xcrun stapler staple "$app"
+    rm "$out/notarize.zip"
+  fi
+else
+  echo "bin/package: no LEAF_SIGN_IDENTITY; the app is signed ad hoc (first open: right-click > Open)" >&2
+fi
+
+name="leaf-$version-macos-$arch"
+ditto -c -k --keepParent "$app" "$out/$name.zip"
+# The disk image: the app beside a link to Applications, to drag across.
+stage="$(mktemp -d)"
+cp -R "$app" "$stage/"
+ln -s /Applications "$stage/Applications"
+hdiutil create -quiet -volname "leaf reader" -srcfolder "$stage" -ov -format UDZO "$out/$name.dmg"
+rm -rf "$stage"
+if [[ -n "${LEAF_SIGN_IDENTITY:-}" ]]; then
+  codesign --force --timestamp --sign "$LEAF_SIGN_IDENTITY" "$out/$name.dmg"
+fi
+(cd "$out" && shasum -a 256 "$name.dmg" "$name.zip" > "$name.sha256")
+echo "packaged $out/$name.dmg, $out/$name.zip ($version, $arch)"
