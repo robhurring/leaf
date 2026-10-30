@@ -1,18 +1,66 @@
-# leaf
+<p align="center"><img src="docs/screenshots/banner.jpg" alt="leaf: markdown, beautifully. A native reader for docs, diagrams, slides, notebooks, and more" width="100%"></p>
 
-View markdown beautifully.
+leaf is a native reader for the files that live next to your code. Point it at a markdown file or a whole repo and it renders everything the way GitHub does, then goes further: diagrams you can zoom into and draw on, slide decks, Jupyter notebooks, charts, maps, live 3D and canvas animations, and code with blame. Edit the file in your editor, or let an agent write it, and the page follows as you save.
+
+It's one binary for macOS and Linux. `leaf open` puts a window on your dock and hands your terminal straight back.
+
+## Try it
 
 ```sh
-leaf open README.md
+bin/setup && bin/install       # build from a checkout (Rust, Node 22+), link `leaf` into ~/.local/bin
+leaf open docs/examples        # the tour: every kind of file leaf reads, one page each
 ```
 
-That opens the file in a leaf reader window, rendered the way GitHub renders it, and keeps it in sync while the file changes. Point it at a folder and you get a file tree, an outline, and search across every file. Your terminal comes straight back.
+[`docs/examples`](docs/examples/README.md) is the living demo. Start at its README and click through: markdown, diagrams, slides, notebooks, charts, maps, animations, and a couple of small games.
 
-![leaf showing a markdown file with the file tree on the left and the outline on the right](docs/screenshots/reader.jpg)
+<table>
+  <tr>
+    <td><img src="docs/screenshots/reader.jpg" alt="A markdown file with the file tree on the left and the outline on the right"></td>
+    <td><img src="docs/screenshots/dark.jpg" alt="The dark appearance, showing GitHub's five alert styles"></td>
+  </tr>
+  <tr>
+    <td align="center"><sub><b>Markdown.</b> Everything GitHub renders, with a file tree, an outline, and search.</sub></td>
+    <td align="center"><sub><b>Light and dark.</b> Follows the system, or pick one.</sub></td>
+  </tr>
+  <tr>
+    <td><img src="docs/screenshots/diagram.jpg" alt="A Mermaid flowchart with green and red pencil strokes drawn over it"></td>
+    <td><img src="docs/screenshots/dark-diagram.jpg" alt="The same flowchart in dark mode"></td>
+  </tr>
+  <tr>
+    <td align="center"><sub><b>Diagrams.</b> Mermaid, PlantUML, Excalidraw. Zoom, pan, and draw on them.</sub></td>
+    <td align="center"><sub><b>Dark diagrams</b> get their own palette, not a filter.</sub></td>
+  </tr>
+  <tr>
+    <td><img src="docs/screenshots/slides.jpg" alt="A Marp deck with its speaker notes under the slide"></td>
+    <td><img src="docs/screenshots/dark-slides.jpg" alt="A .marp deck with the uncover theme"></td>
+  </tr>
+  <tr>
+    <td align="center"><sub><b>Slides.</b> Marp decks with notes, present mode, and a speaker window.</sub></td>
+    <td align="center"><sub><b>Any Marp theme</b>, drawn by Marp itself.</sub></td>
+  </tr>
+  <tr>
+    <td><img src="docs/screenshots/notebook.jpg" alt="A Jupyter notebook: markdown cells, highlighted code, and a dataframe table"></td>
+    <td><img src="docs/screenshots/charts.jpg" alt="A line chart drawn from a CSV beside the document, above a doughnut chart"></td>
+  </tr>
+  <tr>
+    <td align="center"><sub><b>Notebooks.</b> Read a <code>.ipynb</code> like a report, outputs and all.</sub></td>
+    <td align="center"><sub><b>Charts</b> from a few lines of YAML, or a CSV next to the document.</sub></td>
+  </tr>
+  <tr>
+    <td><img src="docs/screenshots/map.jpg" alt="Web requests from a log file plotted on a world map, colored by status"></td>
+    <td><img src="docs/screenshots/three.jpg" alt="A green torus knot rendered live with three.js"></td>
+  </tr>
+  <tr>
+    <td align="center"><sub><b>Maps</b> of a log or a GeoJSON file, offline.</sub></td>
+    <td align="center"><sub><b>Live 3D and canvas</b> blocks, sandboxed.</sub></td>
+  </tr>
+</table>
+
+<p align="center"><img src="docs/screenshots/seedfall.jpg" alt="Seedfall, a small game written in one canvas block: seeds bouncing down through pebbles into flower pots" width="70%"><br><sub><b>Seedfall</b>, a whole game in one <code>```canvas</code> block.</sub></p>
 
 ## Install
 
-leaf is one native binary with the reader inside it, for macOS and Linux. Until packaged builds exist, build it from a checkout (Rust and Node 22 or newer):
+Packaged builds are coming. Until then, build from a checkout with Rust and Node 22 or newer:
 
 ```sh
 bin/setup                  # dependencies
@@ -59,22 +107,20 @@ Everything GitHub renders, rendered the same way: tables, task lists, footnotes,
 Then the parts a static page can't do:
 
 - **Live.** Edit the file in your editor, or let an agent write it, and the page follows. No reload, no flash, and the scroll position stays put.
-- **Zoom in.** Hover a diagram to zoom it and pan it where it sits, or open the zoomed view to pinch, pan, and draw on it with a pencil. Ink fades on its own unless you pin it. Copy the picture to the clipboard or download the SVG.
-- **More diagrams.** PlantUML and Excalidraw next to Mermaid. A broken diagram shows its error in place instead of a blank box.
-- **Slides.** A markdown file with `marp: true` (or a `.marp` file) opens as a [Marp](https://marp.app) deck, drawn by Marp itself: arrows to move, **Present** to fill the screen, **Speaker** for a second window with the notes, the next slide, a timer, and the clock, kept in step both ways. A ` ```marp ` block is a small deck inside any document.
+- **Zoom in and draw.** Hover a diagram to zoom and pan it where it sits, or open the zoomed view to pinch, pan, and draw on it: ink colors, brush sizes, ink that fades or sticks, undo (`⌘Z`), and clear. **Copy as image** and **Download SVG** include what you drew.
+- **More diagrams.** PlantUML and Excalidraw next to Mermaid. Mermaid has a dark palette of its own. A broken diagram shows its error in place instead of a blank box.
+- **Drawing.** A ` ```draw ` block, or a `.draw` file, is an endless canvas with the same tools. Copy or download crops to what you drew.
+- **Slides.** A markdown file with `marp: true` (or a `.marp` file) opens as a [Marp](https://marp.app) deck, drawn by Marp itself: arrows or a click to move (the cursor shows which way), **All slides**, **Notes**, **Present** to fill the screen, and **Speaker** for a second window with the notes, the next slide, a timer, and the clock, kept in step both ways. A ` ```marp ` block puts a deck with the same tools inside any document.
 - **Notebooks.** `.ipynb` files read like documents: markdown cells, highlighted code with its count, and saved outputs (images, tables, markdown, errors); hide the code to read it as a report, fold any output. A ` ```ipynb ` block embeds one.
-- **Charts and maps.** A ` ```chart ` block is a Chart.js config as YAML; a ` ```map ` block plots a CSV or a log by latitude and longitude; GeoJSON and TopoJSON draw as maps over a built-in world, with no network. Data can live in a file beside the document, and the chart or map redraws when it changes. `.chart`, `.geojson`, `.topojson`, `.three`, and `.sketch` files open full window.
-- **Animations.** A ` ```three ` or ` ```canvas ` block runs as a live pane, for illustrating an idea while you present: drag a 3D scene around, watch a sort step through. See [Live animation blocks](#live-animation-blocks).
+- **Charts and maps.** A ` ```chart ` block is a Chart.js config as YAML; a ` ```map ` block plots a CSV or a log by latitude and longitude; GeoJSON and TopoJSON draw as maps over a built-in world, with no network. Data can live in a file beside the document, and the chart or map redraws when it changes. `.chart`, `.geojson`, `.topojson`, `.three`, `.sketch`, and `.draw` files open full window.
+- **Animations.** A ` ```three ` or ` ```canvas ` block runs as a live pane, for illustrating an idea while you present: drag a 3D scene around, step through a sort, or play a game. See [Live animation blocks](#live-animation-blocks).
+- **Source, one click away.** Every diagram, chart, map, deck, table, and animation flips to its source and back, with its language shown, and copies it.
 - **Find anything.** `⌘K` searches headings, file names, and the text of every file in the folder from one box; `⌘F` finds in the open document.
-- **File header.** The path and when the file was created and changed sit above the document, with the last commit beneath it as a `git log` line, linked to your remote along with its pull request. Properties opens the frontmatter and file details in place. Links to the web open in your browser. Code, CSV, diagram, and image files fill the window, their controls in a toolbar under the header. A diagram file opens ready to pan, zoom, and draw on.
+- **File header.** The path and when the file was created and changed sit above the document, with the last commit beneath it as a `git log` line, linked to your remote along with its pull request. Properties opens the frontmatter and file details in place. Code, CSV, diagram, and image files fill the window, their controls in a toolbar under the header.
 - **Mentions and topics.** `@user` and `#topic` light up and link where you say, or to GitHub when you're inside a GitHub checkout.
-- **Blame.** For a file in git, the blame button in the file header adds a column beside the text: each block of a document (each run of lines in code) shows its commit, author, and age, with the commit and its pull request linked, and the commit message under them. Newer changes are tinted deeper; changes not yet committed are amber. Drag the column's edge to resize it.
-- **Other files too.** Code in a read-only editor with line selection you can link to, CSV as a sortable, filterable table, images on a checkerboard, media, and a card for anything else.
+- **Blame.** For a file in git, the blame button in the file header adds a column beside the text: each block of a document (each run of lines in code) shows its commit, author, and age, with the commit and its pull request linked. Newer changes are tinted deeper; changes not yet committed are amber.
+- **Other files too.** Code in a read-only editor where selecting lines (by number or with the mouse) highlights them and gives you a link, CSV as a sortable, filterable table, images on a checkerboard, media, and a card for anything else. Files over 2 MB show as a card instead of loading.
 - **Native, light and dark.** The window is a Mac app: title bar, menus, system font. Light, dark, or follow the system, remembered across runs along with the sidebars, numbering, and text size. In a browser, GitHub, Glass, Card, and Paper change how the document reads.
-
-![a sequence diagram zoomed in, with a green pencil stroke drawn over it](docs/screenshots/stage.jpg)
-
-![the dark appearance, showing the five alert styles](docs/screenshots/dark.jpg)
 
 ## Live animation blocks
 
@@ -133,6 +179,6 @@ bin/test       # Rust and UI unit tests, build, browser smoke tests on three eng
 bin/install    # build, then symlink target/release/leaf into ~/.local/bin
 ```
 
-`docs/examples/` is the living demo: [its README](docs/examples/README.md) maps every feature to a page, and `leaf docs/examples` is how to see it.
+`docs/examples/` is the living demo: [its README](docs/examples/README.md) maps every feature to a page, and `leaf open docs/examples` is how to see it.
 
-The Rust side is a Cargo workspace in `crates/`: `leaf-protocol` (the message types, tested against the JSON Schema export), `leaf-core` (disk, watcher, preferences, and the transport-free engine), and `leaf-app` (the `leaf` binary: the window, serve mode, the CLI). The web side is in `packages/`: `protocol` (the message schemas, the source of truth both sides are tested against) and `ui` (the React reader that runs in the window and in browsers). Design docs live in `.superpowers/specs/`, plans in `.superpowers/plans/`.
+The Rust side is a Cargo workspace in `crates/`: `leaf-protocol` (the message types, tested against the JSON Schema export), `leaf-core` (disk, watcher, preferences, and the transport-free engine), and `leaf-app` (the `leaf` binary: the window, serve mode, the CLI). The web side is in `packages/`: `protocol` (the message schemas, the source of truth both sides are tested against) and `ui` (the React reader that runs in the window and in browsers).
