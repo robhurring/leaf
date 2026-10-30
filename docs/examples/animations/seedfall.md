@@ -20,15 +20,21 @@ function layout() {
   pebbles = [];
   const rows = 9;
   const top = height * 0.2;
-  const across = width / 11;
+  // At most 60px apart: wider panes get more pebbles, not wider gaps.
+  const across = Math.min(60, width / 11);
   const down = (height * 0.58) / rows;
   for (let r = 0; r < rows; r++) {
-    const n = r % 2 ? 9 : 10;
-    for (let i = 0; i < n; i++) {
-      const x = width / 2 - ((n - 1) * across) / 2 + i * across;
+    // Three row positions, each a third of a gap along: every straight line down meets
+    // a pebble, so no seed falls through untouched. Rows reach both walls.
+    const shift = ((r % 3) * across) / 3;
+    const row = [];
+    for (let x = shift; x < width; x += across) if (x >= 10 && x <= width - 10) row.push(x);
+    // And one by each wall where the row leaves a gap there.
+    if (row[0] > 24) row.unshift(10);
+    if (row.at(-1) < width - 24) row.push(width - 10);
+    for (const x of row)
       // A little jitter, so no two runs fall the same.
-      pebbles.push({ x: x + (Math.random() - 0.5) * across * 0.2, y: top + r * down, r: 7, lit: 0 });
-    }
+      pebbles.push({ x: x + (Math.random() - 0.5) * 4, y: top + r * down, r: 7, lit: 0 });
   }
 }
 
