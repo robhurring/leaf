@@ -3414,3 +3414,17 @@ html[data-resizing] .leaf-blame-resizer::after {
 .leaf-tab-new:hover {
   color: var(--leaf-text);
 }
+
+/* A reader in a tab: the window's chrome holds the title row, so there is no bar here,
+   and Go to opens over the top of the tab. */
+html[data-tab] {
+  --leaf-bar-h: 0px;
+}
+.leaf-tab-goto {
+  position: absolute;
+  top: 8px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 30;
+  width: min(560px, calc(100% - 32px));
+}

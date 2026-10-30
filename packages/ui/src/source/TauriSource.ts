@@ -81,6 +81,16 @@ export function tauriWindowLabel(): string {
   return (window as unknown as { __LEAF_WINDOW__?: string }).__LEAF_WINDOW__ ?? 'main';
 }
 
+/** True in a tab of an app window, under the window's shared title row. */
+export function inTab(): boolean {
+  return inTauri() && (window as { __LEAF_TAB__?: boolean }).__LEAF_TAB__ === true;
+}
+
+/** Tells the window what its title row shows for this tab. */
+export function reportTabState(state: Record<string, unknown>): void {
+  void invoke('leaf_tab_state', { state }).catch(() => {});
+}
+
 let shown = false;
 /** Tells the app this window has painted, so it shows it (windows open hidden). Once per window. */
 export function windowReady(): void {

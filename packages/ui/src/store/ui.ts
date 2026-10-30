@@ -122,3 +122,16 @@ export function applyTheme(
   root.dataset.appearance = dark ? 'dark' : 'light';
   root.style.setProperty('--leaf-text-scale', String(textPct / 100));
 }
+
+/**
+ * Keeps this page's settings in step with other tabs of the app: each tab is its own
+ * page, so when one saves a change (text size, appearance, the sidebars), the others
+ * take it from storage. Returns the unsubscribe.
+ */
+export function followOtherTabs(): () => void {
+  const onStorage = (e: StorageEvent) => {
+    if (e.key === 'leaf.ui') void useUi.persist.rehydrate();
+  };
+  window.addEventListener('storage', onStorage);
+  return () => window.removeEventListener('storage', onStorage);
+}

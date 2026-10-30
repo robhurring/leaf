@@ -7,11 +7,17 @@ import type { Heading } from '../render/headings.js';
 import { createRouter } from '../router.js';
 import { installShortcuts } from '../shortcuts.js';
 import { registerCommands, runCommand } from '../commands.js';
-import { inTauri, tauriWindowLabel, windowReady } from '../source/TauriSource.js';
+import {
+  inTab,
+  inTauri,
+  reportTabState,
+  tauriWindowLabel,
+  windowReady,
+} from '../source/TauriSource.js';
 import { listen } from '@tauri-apps/api/event';
 import type { DocumentSource } from '../source/DocumentSource.js';
 import { useDocuments } from '../store/documents.js';
-import { applyTheme, useUi, type Appearance, type Theme } from '../store/ui.js';
+import { applyTheme, followOtherTabs, useUi, type Appearance, type Theme } from '../store/ui.js';
 import { DocumentView } from './DocumentView.js';
 import { ErrorBoundary } from './ErrorBoundary.js';
 import { Outline } from './Outline.js';
@@ -100,6 +106,8 @@ export function Reader(props: ReaderProps) {
   const outlineOpen = props.outlineOpen ?? ui.outlineOpen;
   const numbering = props.numbering ?? ui.numbering;
   const native = inTauri();
+  // In a tab of an app window the window's chrome holds the title row.
+  const tabbed = inTab();
   const theme = props.theme ?? ui.theme;
   const appearance = props.appearance ?? ui.appearance;
   const resolved = useResolvedAppearance(appearance);
@@ -377,6 +385,47 @@ export function Reader(props: ReaderProps) {
   const treeShown = usePresence(treeAvailable && treeOpen);
   const outlineShown = usePresence(outlineOn);
 
+  // In a tab, the window's title row shows this tab's state, and the tab follows the
+  // settings other tabs change.
+  useEffect(() => {
+    if (!tabbed) return;
+    reportTabState({
+      title,
+      path,
+      canBack: reach.back,
+      canForward: reach.forward,
+      treeAvailable,
+      treeOpen,
+      outlineAvailable,
+      outlineOpen,
+      numbering,
+      textPct: ui.textPct,
+      theme,
+      appearance,
+      status: docs.status,
+    });
+  }, [
+    tabbed,
+    title,
+    path,
+    reach.back,
+    reach.forward,
+    treeAvailable,
+    treeOpen,
+    outlineAvailable,
+    outlineOpen,
+    numbering,
+    ui.textPct,
+    theme,
+    appearance,
+    docs.status,
+  ]);
+  useEffect(() => {
+    if (!tabbed) return;
+    document.documentElement.dataset.tab = '';
+    return followOtherTabs();
+  }, [tabbed]);
+
   // A deck's speaker window (opened from the deck with ?speaker): only the speaker view.
   if (speaker && marp && file)
     return (
@@ -391,6 +440,28 @@ export function Reader(props: ReaderProps) {
       </AppearanceContext.Provider>
     );
 
+  const gotoBox = goto && (
+    <GoTo
+      mode={goto}
+      headings={docs.headings}
+      files={treeAvailable ? allKnownFiles(docs.tree, docs.matches) : []}
+      numbering={numbering}
+      docRoot={findRoot}
+      onSearch={searchFiles}
+      hits={docs.textHits}
+      currentPath={docs.path}
+      onSearchText={searchText}
+      onOpenAt={(p, q) => {
+        navigate(p);
+        runCommand('openFind', { q });
+      }}
+      onJump={jump}
+      onOpen={(p) => navigate(p)}
+      onFind={(q, index) => runCommand('openFind', { q, index })}
+      onClose={() => setGoto(null)}
+    />
+  );
+
   return (
     <AppearanceContext.Provider value={resolved}>
       <AssetContext.Provider value={assetResolver}>
@@ -404,56 +475,38 @@ export function Reader(props: ReaderProps) {
           }
         >
           <ProgressBar />
-          <TopBar
-            canGoBack={reach.back}
-            canGoForward={reach.forward}
-            onBack={() => runCommand('goBack')}
-            onForward={() => runCommand('goForward')}
-            title={title}
-            path={path}
-            treeAvailable={treeAvailable}
-            treeOpen={treeOpen}
-            outlineAvailable={outlineAvailable}
-            outlineOpen={outlineOpen}
-            numbering={numbering}
-            textPct={ui.textPct}
-            theme={theme}
-            appearance={appearance}
-            status={docs.status}
-            onToggleTree={() => setTreeOpen(!treeOpen)}
-            onToggleOutline={() => setOutlineOpen(!outlineOpen)}
-            onToggleNumbering={() => setNumbering(!numbering)}
-            onBumpText={ui.bumpText}
-            native={native}
-            onTheme={ui.setTheme}
-            onAppearance={ui.setAppearance}
-            onSettings={() => runCommand('openSettings')}
-            onSearch={() => setGoto('all')}
-            goto={
-              goto && (
-                <GoTo
-                  mode={goto}
-                  headings={docs.headings}
-                  files={treeAvailable ? allKnownFiles(docs.tree, docs.matches) : []}
-                  numbering={numbering}
-                  docRoot={findRoot}
-                  onSearch={searchFiles}
-                  hits={docs.textHits}
-                  currentPath={docs.path}
-                  onSearchText={searchText}
-                  onOpenAt={(p, q) => {
-                    navigate(p);
-                    runCommand('openFind', { q });
-                  }}
-                  onJump={jump}
-                  onOpen={(p) => navigate(p)}
-                  onFind={(q, index) => runCommand('openFind', { q, index })}
-                  onClose={() => setGoto(null)}
-                />
-              )
-            }
-            onTitle={() => mainRef.current?.scrollTo?.({ top: 0, behavior: 'smooth' })}
-          />
+          {tabbed ? (
+            gotoBox && <div className="leaf-tab-goto">{gotoBox}</div>
+          ) : (
+            <TopBar
+              canGoBack={reach.back}
+              canGoForward={reach.forward}
+              onBack={() => runCommand('goBack')}
+              onForward={() => runCommand('goForward')}
+              title={title}
+              path={path}
+              treeAvailable={treeAvailable}
+              treeOpen={treeOpen}
+              outlineAvailable={outlineAvailable}
+              outlineOpen={outlineOpen}
+              numbering={numbering}
+              textPct={ui.textPct}
+              theme={theme}
+              appearance={appearance}
+              status={docs.status}
+              onToggleTree={() => setTreeOpen(!treeOpen)}
+              onToggleOutline={() => setOutlineOpen(!outlineOpen)}
+              onToggleNumbering={() => setNumbering(!numbering)}
+              onBumpText={ui.bumpText}
+              native={native}
+              onTheme={ui.setTheme}
+              onAppearance={ui.setAppearance}
+              onSettings={() => runCommand('openSettings')}
+              onSearch={() => setGoto('all')}
+              goto={gotoBox}
+              onTitle={() => mainRef.current?.scrollTo?.({ top: 0, behavior: 'smooth' })}
+            />
+          )}
           <div className="leaf-body">
             {treeShown && <Tree state={treeShown} onOpen={(p) => navigate(p)} />}
             {treeAvailable && treeOpen && <Resizer side="tree" />}
