@@ -38,6 +38,8 @@ export type TopBarProps = {
   /** The open Go to field, shown in place of its button. */
   goto?: React.ReactNode;
   onTitle(): void;
+  /** Extra handlers for the leaf mark: in a one-tab window it drags the tab. */
+  brand?: React.HTMLAttributes<HTMLButtonElement>;
   canGoBack?: boolean;
   canGoForward?: boolean;
   onBack?(): void;
@@ -56,7 +58,13 @@ export function TopBar(p: TopBarProps) {
             <Sidebar />
           </IconButton>
         )}
-        <button type="button" className="leaf-brand" onClick={p.onTitle} title="Back to top">
+        <button
+          type="button"
+          className="leaf-brand"
+          onClick={p.onTitle}
+          title="Back to top"
+          {...p.brand}
+        >
           <LeafMark size={20} className="leaf-mark" />
           <span className="leaf-wordmark">leaf</span>
         </button>

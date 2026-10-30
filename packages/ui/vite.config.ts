@@ -10,7 +10,12 @@ const serverPort = process.env.PORT ?? '4321';
 export default defineConfig({
   plugins: [react(), tailwindcss(), threeBundle()],
   appType: 'spa',
-  build: { outDir: 'dist/app', emptyOutDir: true },
+  build: {
+    outDir: 'dist/app',
+    emptyOutDir: true,
+    // The reader, and the app window's chrome over its tabs (title row and tab row).
+    rollupOptions: { input: { index: 'index.html', chrome: 'chrome.html' } },
+  },
   server: {
     port: 5173,
     proxy: {

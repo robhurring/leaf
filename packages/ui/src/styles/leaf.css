@@ -3323,3 +3323,94 @@ html[data-resizing] .leaf-blame-resizer::after {
   max-width: calc(100% - 16px);
   overflow-x: auto;
 }
+
+/* ---------- the app window's chrome: title row over the tab row ---------- */
+.leaf-chrome {
+  display: flex;
+  flex-direction: column;
+  height: 100vh;
+  overflow: hidden;
+  background: var(--leaf-glass);
+  -webkit-user-select: none;
+  user-select: none;
+  cursor: default;
+}
+.leaf-tabs {
+  display: flex;
+  align-items: stretch;
+  height: 32px;
+  flex: none;
+  border-bottom: 1px solid var(--leaf-line);
+  overflow: hidden;
+}
+.leaf-tab-slot {
+  position: relative;
+  display: flex;
+}
+.leaf-tab {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  width: 190px;
+  padding: 0 6px 0 12px;
+  border-right: 1px solid var(--leaf-line);
+  color: var(--leaf-text-2);
+  font:
+    11.5px ui-monospace,
+    Menlo,
+    monospace;
+  white-space: nowrap;
+}
+.leaf-tab-on {
+  background: var(--leaf-surface);
+  color: var(--leaf-text);
+  box-shadow: inset 0 2px 0 var(--leaf-accent);
+  margin-bottom: -1px;
+}
+.leaf-tab-icon {
+  flex: none;
+  opacity: 0.75;
+}
+.leaf-tab-label {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.leaf-tab-close {
+  flex: none;
+  width: 18px;
+  height: 18px;
+  border: 0;
+  background: none;
+  color: var(--leaf-text-2);
+  font-size: 14px;
+  line-height: 1;
+  opacity: 0;
+}
+.leaf-tab:hover .leaf-tab-close,
+.leaf-tab-on .leaf-tab-close {
+  opacity: 1;
+}
+.leaf-tab-close:hover {
+  color: var(--leaf-text);
+}
+.leaf-tab-dragging {
+  opacity: 0.35;
+}
+.leaf-tab-drop {
+  width: 2px;
+  margin: 4px -1px;
+  background: var(--leaf-accent);
+  z-index: 1;
+}
+.leaf-tab-new {
+  border: 0;
+  background: none;
+  padding: 0 12px;
+  color: var(--leaf-text-2);
+  font-size: 16px;
+}
+.leaf-tab-new:hover {
+  color: var(--leaf-text);
+}
