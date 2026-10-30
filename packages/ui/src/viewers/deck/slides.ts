@@ -19,6 +19,9 @@ div.marpit > svg[data-marpit-svg] { display: block; width: 100%; height: auto; c
   border-radius: 6px; box-shadow: 0 0 0 1px rgba(127,127,127,.3); }
 `;
 
+/** Slides are pictures to click through, not text to select. After the theme, so it holds. */
+const NO_SELECT = `div.marpit, div.marpit * { -webkit-user-select: none; user-select: none; }`;
+
 const ratioOf = (html: string) => {
   const m = /viewBox="0 0 (\d+) (\d+)"/.exec(html);
   return m ? Number(m[1]) / Number(m[2]) : 16 / 9;
@@ -34,7 +37,7 @@ export function mountDeck(
   css = slidesCss(ratioOf(deck.html)),
 ) {
   const root = host.shadowRoot ?? host.attachShadow({ mode: 'open' });
-  root.innerHTML = `<style>${css}</style><style>${deck.css}</style><style id="leaf-deck-current"></style>${deck.html}`;
+  root.innerHTML = `<style>${css}</style><style>${deck.css}</style><style>${NO_SELECT}</style><style id="leaf-deck-current"></style>${deck.html}`;
   for (const img of root.querySelectorAll('img')) {
     const src = img.getAttribute('src') ?? '';
     if (!src || isAbsoluteUrl(src) || src.startsWith('/') || src.startsWith('data:')) continue;

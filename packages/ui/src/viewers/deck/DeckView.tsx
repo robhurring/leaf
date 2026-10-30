@@ -131,6 +131,22 @@ export default function DeckView(props: Props) {
   }, []);
 
   // A click on the slide moves on (the left third goes back), unless it's on a link.
+  // The cursor shows which way a click goes; nothing where there's no slide to go to.
+  const hoverBack = useRef<boolean | null>(null);
+  const showDir = () => {
+    const el = slides.current;
+    if (!el || hoverBack.current === null) return;
+    const dir = hoverBack.current ? (at > 0 ? 'back' : '') : at < count - 1 ? 'next' : '';
+    if (dir) el.dataset.dir = dir;
+    else delete el.dataset.dir;
+  };
+  const onSlideHover = (e: React.PointerEvent) => {
+    const r = e.currentTarget.getBoundingClientRect();
+    hoverBack.current = e.clientX - r.left < r.width / 3;
+    showDir();
+  };
+  // A click (or a key) moves to another slide under a still mouse: the arrow follows.
+  useEffect(showDir);
   const onSlideClick = (e: React.MouseEvent) => {
     if ((e.target as Element).closest?.('a')) return;
     const r = e.currentTarget.getBoundingClientRect();
@@ -157,6 +173,8 @@ export default function DeckView(props: Props) {
         hidden={overview}
         data-presenting={presenting ? '' : undefined}
         onClick={onSlideClick}
+        onPointerMove={onSlideHover}
+        onPointerLeave={() => (hoverBack.current = null)}
       />
       {!presenting && showNotes && !overview && (
         <section className="leaf-deck-notes" aria-label="Speaker notes">

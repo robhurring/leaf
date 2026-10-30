@@ -128,7 +128,16 @@ describe('Marp decks', () => {
     fireEvent.click(toggle);
     expect(await screen.findByRole('heading', { name: 'One' })).toBeTruthy();
     expect(screen.queryByRole('status', { name: 'Slide' })).toBeNull();
+    // The source is a click away in either view.
+    fireEvent.click(within(tools).getByRole('button', { name: 'Show source' }));
+    await waitFor(() =>
+      expect(document.querySelector('.leaf-block-source')!.textContent).toContain('marp: true'),
+    );
+    expect(screen.queryByRole('heading', { name: 'One' })).toBeNull();
+    fireEvent.click(within(tools).getByRole('button', { name: 'Show source' }));
+    expect(await screen.findByRole('heading', { name: 'One' })).toBeTruthy();
     fireEvent.click(within(tools).getByRole('button', { name: 'Show as slides' }));
+    await waitFor(() => within(tools).getByRole('button', { name: 'Show source' }));
     await waitFor(() => expect(counter()).toBe('1 / 3'));
   });
 

@@ -2947,7 +2947,19 @@ html[data-resizing] .leaf-blame-resizer::after {
 .leaf-deck-slides {
   flex: 1;
   min-height: 0;
-  cursor: pointer;
+}
+/* Which way a click goes: back on the left third, forward elsewhere. */
+.leaf-deck-slides[data-dir='back'] {
+  cursor:
+    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='28' height='28' viewBox='0 0 28 28'%3E%3Ccircle cx='14' cy='14' r='12' fill='white' fill-opacity='.92' stroke='%231d1d1f' stroke-opacity='.35'/%3E%3Cpath d='M16 9l-5 5 5 5' fill='none' stroke='%231d1d1f' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E")
+      14 14,
+    w-resize;
+}
+.leaf-deck-slides[data-dir='next'] {
+  cursor:
+    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='28' height='28' viewBox='0 0 28 28'%3E%3Ccircle cx='14' cy='14' r='12' fill='white' fill-opacity='.92' stroke='%231d1d1f' stroke-opacity='.35'/%3E%3Cpath d='M12 9l5 5-5 5' fill='none' stroke='%231d1d1f' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E")
+      14 14,
+    e-resize;
 }
 .leaf-deck-slides[hidden] {
   display: none;

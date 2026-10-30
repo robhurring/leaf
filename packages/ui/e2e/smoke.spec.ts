@@ -359,6 +359,30 @@ test('a marp file opens as slides, steps with the keys, and presents', async ({ 
   await expect(count).toHaveText('1 / 5', { timeout: 15000 });
   await page.keyboard.press('ArrowRight');
   await expect(count).toHaveText('2 / 5');
+  // Slide text isn't selectable: a drag or a double-click on a slide selects nothing.
+  const select = await page
+    .locator('.leaf-deck-slides')
+    .evaluate((host) => getComputedStyle(host.shadowRoot!.querySelector('section h1')!).userSelect);
+  const webkitSelect = await page
+    .locator('.leaf-deck-slides')
+    .evaluate(
+      (host) =>
+        (
+          getComputedStyle(host.shadowRoot!.querySelector('section h1')!) as unknown as Record<
+            string,
+            string
+          >
+        ).webkitUserSelect,
+    );
+  expect([select, webkitSelect]).toContain('none');
+  // The cursor says which way a click goes: the left third back, the rest forward.
+  const slides = page.locator('.leaf-deck-slides');
+  const sb = (await slides.boundingBox())!;
+  await page.mouse.move(sb.x + sb.width * 0.1, sb.y + sb.height / 2);
+  await expect(slides).toHaveAttribute('data-dir', 'back');
+  expect(await slides.evaluate((el) => getComputedStyle(el).cursor)).toContain('url(');
+  await page.mouse.move(sb.x + sb.width * 0.8, sb.y + sb.height / 2);
+  await expect(slides).toHaveAttribute('data-dir', 'next');
   await page.getByRole('button', { name: 'Present' }).click();
   await expect(page.locator('.leaf-deck[data-presenting]')).toBeVisible();
   await page.keyboard.press('Escape');

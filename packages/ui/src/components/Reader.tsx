@@ -30,7 +30,8 @@ import { NoticeBar } from './NoticeBar.js';
 import { createPortal } from 'react-dom';
 import { isMarp } from '../viewers/deck/detect.js';
 import { useDeckMode } from '../store/deckMode.js';
-import { File, Slides } from '../icons/index.js';
+import { Code, File, Slides } from '../icons/index.js';
+import { SourceView } from './SourceView.js';
 
 const SpeakerView = lazy(() => import('../viewers/deck/SpeakerView.js'));
 /** A deck's speaker window, opened with ?speaker. Read once, before the router rewrites the address. */
@@ -311,6 +312,9 @@ export function Reader(props: ReaderProps) {
     isMarp(file.content ?? '');
   const speaker = SPEAKER_WINDOW;
   const readAsDocument = useDeckMode((s) => (file ? !!s.documents[file.path] : false));
+  // A deck read as a document can still flip to its source, as the slides can.
+  const [sourceOf, setSourceOf] = useState<string | null>(null);
+  const deckSource = marp && readAsDocument && sourceOf === file?.path;
   const isMarkdown = file
     ? viewers.forFile(file).id === 'markdown' &&
       file.encoding === 'utf8' &&
@@ -489,10 +493,30 @@ export function Reader(props: ReaderProps) {
                       </button>,
                       toolsEl,
                     )}
+                  {marp &&
+                    readAsDocument &&
+                    toolsEl &&
+                    createPortal(
+                      <button
+                        type="button"
+                        className="leaf-tool"
+                        aria-label="Show source"
+                        title={deckSource ? 'Back to the document' : 'Show the source'}
+                        aria-pressed={deckSource}
+                        onClick={() => setSourceOf(deckSource ? null : file!.path)}
+                      >
+                        <Code size={15} />
+                      </button>,
+                      toolsEl,
+                    )}
                   <DocToolsContext.Provider value={file && !isMarkdown ? toolsEl : null}>
                     <main className="leaf-main" ref={mainRef}>
                       <ErrorBoundary label="document" resetKey={`${path}:${file?.mtime ?? ''}`}>
-                        {isMarkdown && file ? (
+                        {deckSource && file ? (
+                          <div className="leaf-main-inner">
+                            <SourceView code={file.content ?? ''} lang="markdown" label="md" />
+                          </div>
+                        ) : isMarkdown && file ? (
                           <div
                             className="leaf-main-inner"
                             ref={setMarkdownHost}
