@@ -18,6 +18,7 @@ import {
 } from './frame.js';
 import { harness } from './harness.js';
 import { loadThreeLibs } from './libs.js';
+import { useHold } from './useHold.js';
 
 const HARNESS = harness.toString();
 
@@ -143,6 +144,16 @@ export function LivePane(props: ViewerProps & { fill?: boolean }) {
     return () => io.disconnect();
   }, []);
 
+  // Step and Step back pause the pane, and repeat while held.
+  const holdStep = useHold(() => {
+    setUserPaused(true);
+    send({ leaf: 'live', type: 'step' });
+  });
+  const holdBack = useHold(() => {
+    setUserPaused(true);
+    send({ leaf: 'live', type: 'back' });
+  });
+
   const state = failure ? 'error' : !ready ? 'loading' : running ? 'running' : 'paused';
   const height = fill ? undefined : paneHeight(props.meta);
 
@@ -182,12 +193,18 @@ export function LivePane(props: ViewerProps & { fill?: boolean }) {
           <button
             type="button"
             className="leaf-tool"
+            aria-label="Step back"
+            title="Step back a frame (hold to keep going)"
+            {...holdBack}
+          >
+            <StepFrame size={15} style={{ transform: 'scaleX(-1)' }} />
+          </button>
+          <button
+            type="button"
+            className="leaf-tool"
             aria-label="Step"
-            title="Step one frame"
-            onClick={() => {
-              setUserPaused(true);
-              send({ leaf: 'live', type: 'step' });
-            }}
+            title="Step one frame (hold to keep going)"
+            {...holdStep}
           >
             <StepFrame size={15} />
           </button>

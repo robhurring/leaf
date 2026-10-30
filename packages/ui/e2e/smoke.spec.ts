@@ -82,7 +82,10 @@ test('examples render without console errors', async ({ page }) => {
 test('outline, numbering, anchors, palette', async ({ page }) => {
   await page.goto('/markdown.md');
   await expect(page.getByRole('heading', { level: 1 })).toBeVisible();
-  await page.getByRole('button', { name: 'Number headings' }).click();
+  // Preferences live on the shared test server, so another browser's run may have left
+  // numbering on: turn it on only if it's off.
+  const numbering = page.getByRole('button', { name: 'Number headings' });
+  if ((await numbering.getAttribute('aria-pressed')) !== 'true') await numbering.click();
   await expect(page.locator('article h2').first()).toContainText('1.');
   const outline = page.getByRole('navigation', { name: 'Outline' });
   await expect(outline).toContainText('3. Tables');

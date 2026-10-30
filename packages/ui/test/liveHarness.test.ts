@@ -86,9 +86,16 @@ beforeEach(() => {
   };
   window.cancelAnimationFrame = (id) => void frames.delete(id);
   vi.spyOn(window.parent, 'postMessage').mockImplementation((m: unknown) => void posted.push(m));
-  HTMLCanvasElement.prototype.getContext = vi.fn(
-    () => ({ setTransform: vi.fn() }) as unknown as CanvasRenderingContext2D,
-  ) as unknown as typeof HTMLCanvasElement.prototype.getContext;
+  // A canvas context that records what's drawn onto it, so a step back can be seen.
+  HTMLCanvasElement.prototype.getContext = vi.fn(function (this: HTMLCanvasElement) {
+    const self = this as HTMLCanvasElement & { drawn?: unknown[] };
+    self.drawn ??= [];
+    return {
+      setTransform: vi.fn(),
+      clearRect: vi.fn(),
+      drawImage: (src: unknown) => self.drawn!.push((src as { tag?: unknown }).tag ?? src),
+    } as unknown as CanvasRenderingContext2D;
+  }) as unknown as typeof HTMLCanvasElement.prototype.getContext;
 });
 
 afterEach(() => {
@@ -270,6 +277,34 @@ describe('live pane harness', () => {
     expect(c).toBe(2);
     frame();
     expect((window as unknown as { count: number }).count).toBe(2);
+  });
+
+  it('step back walks back through the frames stepped since pausing; step goes forward again', async () => {
+    // Tag the canvas with the frame number each time a frame draws.
+    await run('window.n = 0; onFrame(() => { window.n++; canvas.tag = window.n; });');
+    const count = () => (window as unknown as { n: number }).n;
+    frame();
+    send({ leaf: 'live', type: 'pause' });
+    send({ leaf: 'live', type: 'step' });
+    send({ leaf: 'live', type: 'step' });
+    send({ leaf: 'live', type: 'step' });
+    expect(count()).toBe(4);
+    const overlay = () => document.querySelector<HTMLCanvasElement>('canvas[data-leaf-history]');
+    send({ leaf: 'live', type: 'back' });
+    // The frame before shows over the live one; nothing new is computed.
+    expect(count()).toBe(4);
+    expect(overlay()!.hidden).toBe(false);
+    send({ leaf: 'live', type: 'back' });
+    send({ leaf: 'live', type: 'back' });
+    send({ leaf: 'live', type: 'back' });
+    // No further back than the pause.
+    send({ leaf: 'live', type: 'step' });
+    send({ leaf: 'live', type: 'step' });
+    send({ leaf: 'live', type: 'step' });
+    expect(count()).toBe(4);
+    expect(overlay()!.hidden).toBe(true);
+    send({ leaf: 'live', type: 'step' });
+    expect(count()).toBe(5);
   });
 
   it('a resize while paused redraws once, so the picture never goes blank', async () => {

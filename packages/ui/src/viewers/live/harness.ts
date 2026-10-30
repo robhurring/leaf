@@ -133,6 +133,64 @@ export function harness(win: Window): void {
   w.clearTimeout = clear;
   w.clearInterval = clear;
 
+  // ---- stepping back ----
+  // An animation only runs forward, so going back shows frames already drawn: from the
+  // pause on, each frame stepped to is kept (the last KEEP of them), and Step back puts
+  // an earlier one over the live picture. Playing again forgets them.
+  const KEEP = 120;
+  let history: HTMLCanvasElement[] = [];
+  let seen = 0;
+  let overlay: HTMLCanvasElement | null = null;
+  const surface = () => doc.querySelector<HTMLCanvasElement>('canvas:not([data-leaf-history])');
+  const snapshot = () => {
+    const src = surface();
+    const copy = doc.createElement('canvas');
+    if (!src) return copy;
+    copy.width = src.width;
+    copy.height = src.height;
+    try {
+      copy.getContext('2d')?.drawImage(src, 0, 0);
+    } catch {
+      // Nothing to keep.
+    }
+    return copy;
+  };
+  const show = (i: number) => {
+    seen = i;
+    const last = i >= history.length - 1;
+    if (!overlay) {
+      overlay = doc.createElement('canvas');
+      overlay.dataset.leafHistory = '';
+      overlay.style.cssText = 'position:fixed;inset:0;width:100%;height:100%;z-index:10';
+      doc.body.append(overlay);
+    }
+    overlay.hidden = last;
+    if (last) return;
+    const frame = history[i]!;
+    overlay.width = frame.width;
+    overlay.height = frame.height;
+    try {
+      const c = overlay.getContext('2d');
+      c?.clearRect(0, 0, frame.width, frame.height);
+      c?.drawImage(frame, 0, 0);
+    } catch {
+      // Nothing to show.
+    }
+  };
+  /** The frame on screen at the pause is the first one kept. */
+  const remember = () => {
+    if (history.length) return;
+    // A WebGL canvas is cleared once shown; draw the paused frame again to keep it.
+    if (draw && !manual) draw();
+    history = [snapshot()];
+    seen = 0;
+  };
+  const forget = () => {
+    history = [];
+    seen = 0;
+    if (overlay) overlay.hidden = true;
+  };
+
   // ---- pause and play ----
   const heldAnimations = new Set<Animation>();
   const heldMedia = new Set<HTMLMediaElement>();
@@ -189,15 +247,27 @@ export function harness(win: Window): void {
       return;
     }
     if (d.type === 'step') {
-      // One frame, a sixtieth of a second on, then stay paused.
+      // One frame, a sixtieth of a second on, then stay paused. Back from an earlier
+      // frame first walks forward through the ones already seen.
       if (!paused) setPaused(true);
       firstOnly = false;
+      remember();
+      if (seen < history.length - 1) return show(seen + 1);
       clock += 1000 / 60;
       const due = [...queued.values()];
       queued.clear();
       for (const cb of due) cb(clock);
+      history.push(snapshot());
+      if (history.length > KEEP) history.shift();
+      return show(history.length - 1);
+    }
+    if (d.type === 'back') {
+      if (!paused) setPaused(true);
+      remember();
+      if (seen > 0) show(seen - 1);
       return;
     }
+    if (d.type === 'play') forget();
     if (d.type === 'pause') {
       // Before the first frame, let it draw so a resting pane still shows its picture.
       if (running && !drewFirst) firstOnly = true;
