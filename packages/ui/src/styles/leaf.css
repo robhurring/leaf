@@ -2804,3 +2804,47 @@ html[data-resizing] .leaf-blame-resizer::after {
 .leaf-chart canvas {
   display: block;
 }
+
+/* ---------- maps ---------- */
+/* GeoJSON, TopoJSON, and plotted rows over a quiet outline of the world. */
+.leaf-map {
+  display: block;
+  padding: 8px;
+}
+.leaf-map svg {
+  display: block;
+  width: 100%;
+  height: auto;
+}
+.leaf-map-feature {
+  cursor: default;
+}
+.leaf-map-feature:hover {
+  stroke-width: 2.5;
+}
+.leaf-map-legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 16px;
+  margin: 8px 8px 0;
+  padding: 0;
+  list-style: none;
+  font: 12.5px/1.6 var(--leaf-font-ui);
+  color: var(--leaf-text-2);
+}
+.leaf-map-swatch {
+  display: inline-block;
+  width: 10px;
+  height: 10px;
+  margin-right: 6px;
+  border-radius: 50%;
+  vertical-align: -1px;
+}
+.leaf-map-count {
+  opacity: 0.7;
+}
+.leaf-map-note {
+  margin: 6px 8px 0;
+  font: 12.5px/1.5 var(--leaf-font-ui);
+  color: var(--leaf-text-2);
+}

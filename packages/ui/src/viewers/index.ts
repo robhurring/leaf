@@ -7,6 +7,7 @@ import { binary } from './binary/index.js';
 import { code } from './code/index.js';
 import { live } from './live/index.js';
 import { chart } from './chart/index.js';
+import { map } from './map/index.js';
 import { csv } from './csv/index.js';
 import { excalidraw } from './excalidraw/index.js';
 import { mermaid } from './mermaid/index.js';
@@ -25,6 +26,7 @@ for (const v of [
   csv,
   live,
   chart,
+  map,
   code,
   image,
   media,
@@ -69,4 +71,17 @@ for (const v of viewers.all()) {
 
 export { createViewerRegistry } from './registry.js';
 export type { Viewer, ViewerProps, Action } from './types.js';
-export { markdown, mermaid, plantuml, excalidraw, csv, live, chart, code, image, media, binary };
+export {
+  markdown,
+  mermaid,
+  plantuml,
+  excalidraw,
+  csv,
+  live,
+  chart,
+  map,
+  code,
+  image,
+  media,
+  binary,
+};
