@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach } from 'vitest';
+import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { act, fireEvent, render, screen } from '@testing-library/react';
 import { Stage } from '../src/stage/Stage.js';
 import { useStage } from '../src/store/stage.js';
@@ -35,6 +35,40 @@ const props: ViewerProps = {
 beforeEach(() => act(() => useStage.getState().close()));
 
 describe('Stage', () => {
+  it('a picture stays centered when the window is resized', () => {
+    const observers: { cb: () => void; el?: Element }[] = [];
+    vi.stubGlobal(
+      'ResizeObserver',
+      class {
+        constructor(public cb: () => void) {
+          observers.push(this as never);
+        }
+        observe(el: Element) {
+          (this as unknown as { el: Element }).el = el;
+        }
+        disconnect() {}
+      },
+    );
+    render(<Stage />);
+    act(() => useStage.getState().openStage({ docPath: 'a.md', blockHash: 'h1', viewer, props }));
+    const view = screen.getByTestId('stage-viewport');
+    const layer = screen.getByTestId('stage-layer');
+    const size = (w: number, h: number) => {
+      Object.defineProperty(view, 'clientWidth', { value: w, configurable: true });
+      Object.defineProperty(view, 'clientHeight', { value: h, configurable: true });
+      act(() => observers.filter((o) => o.el === view).forEach((o) => o.cb()));
+    };
+    size(800, 600);
+    const before = layer.style.transform;
+    size(1000, 700);
+    const at = (t: string) =>
+      /translate\((-?[\d.]+)px, (-?[\d.]+)px\)/.exec(t)!.slice(1).map(Number);
+    const [x0, y0] = at(before);
+    const [x1, y1] = at(layer.style.transform);
+    expect([x1 - x0, y1 - y0]).toEqual([100, 50]);
+    vi.unstubAllGlobals();
+  });
+
   it('a viewer that does not zoom fills the Stage at its own size, with no zoom tools', () => {
     render(<Stage />);
     const live: Viewer = { ...viewer, id: 'live', stage: {} };

@@ -82,6 +82,13 @@ describe('themes', () => {
     expect(base).toMatch(/\.leaf-diagram \{[^}]*justify-content: center/);
   });
 
+  it("an image moves over a still checkerboard: the grid is the view's, not the image's", () => {
+    expect(base).toMatch(
+      /\.leaf-stage-inline \.leaf-stage-viewport:has\(\.leaf-image-stage\) \{[^}]*--checker/,
+    );
+    expect(block(base, '.leaf-image-stage .leaf-image {')).not.toContain('background');
+  });
+
   it('a CSV in a document is a bare table with its filter above, no box or label', () => {
     expect(base).toMatch(
       /\.leaf-frame\[data-viewer='csv'\]:not\(\[data-full\]\) \{[^}]*background: transparent/,

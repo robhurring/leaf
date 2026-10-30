@@ -44,6 +44,8 @@ const theme = EditorView.theme({
   },
   // Line numbers are click targets (select a line, shift-click a range): show it.
   '.cm-lineNumbers .cm-gutterElement': { cursor: 'pointer', userSelect: 'none' },
+  // At least two digits wide, so a short file's gutter matches a longer one's.
+  '.cm-gutter.cm-lineNumbers': { minWidth: 'calc(2ch + 8px)' },
   '.cm-lineNumbers .cm-gutterElement:hover': { color: 'var(--leaf-text)' },
   '.cm-activeLine': { background: 'transparent' },
   '.cm-gutterElement.cm-selectedLineGutter': {

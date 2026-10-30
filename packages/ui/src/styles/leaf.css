@@ -1456,8 +1456,8 @@ html[data-resizing] .leaf-resizer::after {
 }
 
 /* ---------- image viewer ---------- */
-/* The image on its own, no frame around it. A checkerboard sits behind the image itself,
-   so it shows exactly where the image is transparent and nowhere else. */
+/* The image moves (pan, zoom) over a still checkerboard that fills the view, so what's
+   transparent in the image shows the grid and the grid never slides with it. */
 .leaf-image-stage {
   display: grid;
   place-items: center;
@@ -1466,6 +1466,9 @@ html[data-resizing] .leaf-resizer::after {
   max-width: 100%;
   height: auto;
   border-radius: 0;
+}
+.leaf-stage-viewport:has(.leaf-image-stage),
+.leaf-stage-inline .leaf-stage-viewport:has(.leaf-image-stage) {
   --checker: var(--leaf-surface-2);
   background-color: var(--leaf-surface);
   background-image:

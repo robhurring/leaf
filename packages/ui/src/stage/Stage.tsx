@@ -131,6 +131,22 @@ export function StageCanvas({ content, onClose, toolsSlot, inline = false }: Can
     };
   }, [open, viewport]);
 
+  // The window resizes: move the picture by half the change, so what was centered
+  // stays centered, zoomed or not.
+  useEffect(() => {
+    const view = viewRef.current;
+    if (!view || typeof ResizeObserver === 'undefined') return;
+    let last: { w: number; h: number } | null = null;
+    const ro = new ResizeObserver(() => {
+      const now = { w: view.clientWidth, h: view.clientHeight };
+      if (last && (now.w !== last.w || now.h !== last.h))
+        viewport.panBy((now.w - last.w) / 2, (now.h - last.h) / 2);
+      last = now;
+    });
+    ro.observe(view);
+    return () => ro.disconnect();
+  }, [open, viewport]);
+
   // Fit once the content has a size (diagrams render asynchronously).
   useEffect(() => {
     const layer = layerRef.current;

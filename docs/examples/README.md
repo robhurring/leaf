@@ -24,6 +24,7 @@ Each of these opens on its own, filling the window:
 
 - [revenue.chart](./charts/revenue.chart), [mix.chart](./charts/mix.chart): charts.
 - [offices.geojson](./maps/offices.geojson), [datacenters.topojson](./maps/datacenters.topojson): maps.
+- [launch.marp](./slides/launch.marp): a deck on its own, with speaker notes.
 - [knot.three](./animations/knot.three): three.js code; [orbits.sketch](./animations/orbits.sketch): canvas code.
 - [flow.mmd](./diagrams/flow.mmd), [sequence.puml](./diagrams/sequence.puml), [sketch.excalidraw](./diagrams/sketch.excalidraw): diagrams.
 

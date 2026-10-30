@@ -1,0 +1,37 @@
+---
+marp: true
+theme: uncover
+class: invert
+paginate: true
+---
+
+# Launch plan
+
+A `.marp` file is a deck on its own: it always opens as slides.
+
+<!-- Open Speaker to see these notes beside the next slide and a timer. -->
+
+---
+
+## Where we are
+
+- Beta with **40** teams
+- 92% weekly active
+- Two blockers left
+
+<!-- Mention the two blockers by name: sign-in on Safari, and the import timeout. -->
+
+---
+
+## The plan
+
+1. Fix the blockers — this week
+2. Open the waitlist — next week
+3. Launch — the week after
+
+---
+
+<!-- _class: invert lead -->
+
+# Questions?
+
