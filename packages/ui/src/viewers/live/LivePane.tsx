@@ -107,8 +107,15 @@ export function LivePane(props: ViewerProps & { fill?: boolean }) {
 
   const frameKey = `${hash}:${generation}:${libs ? 1 : 0}`;
   const now = heard.key === frameKey ? heard : { key: frameKey };
+  // What the pane hears belongs to its frame as it is when it hears it, not as it was
+  // when the listener (or a timer) was set up: three.js arriving changes the frame.
+  const currentKey = useRef(frameKey);
+  currentKey.current = frameKey;
   const hear = (what: Partial<typeof heard>) =>
-    setHeard((h) => ({ ...(h.key === frameKey ? h : {}), ...what, key: frameKey }));
+    setHeard((h) => {
+      const key = currentKey.current;
+      return { ...(h.key === key ? h : {}), ...what, key };
+    });
   const { loaded = false, ready = false } = now;
   const failure = now.failure ?? libsFailure;
 

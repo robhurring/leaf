@@ -285,6 +285,23 @@ describe('a pane that never starts', () => {
     }
   });
 
+  it('a three pane whose frame hangs after three.js arrives says so too', async () => {
+    vi.useFakeTimers();
+    try {
+      render(block('scene.add(new THREE.Object3D());', '', 'three'));
+      // three.js arrives, and the frame is made, but never loads or answers.
+      await act(async () => {});
+      expect(frame()).toBeTruthy();
+      act(() => {
+        vi.advanceTimersByTime(12_000);
+      });
+      expect(pane().dataset.state).toBe('error');
+      expect(within(pane()).getByRole('alert').textContent).toMatch(/WebGL/);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it('a pane that answered in time is left alone', () => {
     vi.useFakeTimers();
     try {

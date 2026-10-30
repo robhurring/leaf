@@ -209,6 +209,10 @@ test('themes and text size are sticky', async ({ page }) => {
   await expect(page.getByRole('heading', { level: 1 })).toBeVisible();
   await page.getByRole('button', { name: 'Appearance' }).click();
   await page.getByRole('menuitemradio', { name: 'Card' }).click();
+  // The browsers share one server and its saved settings, and run this at once: start
+  // from 100% so a size another browser left behind doesn't count.
+  await page.getByRole('button', { name: 'Reset text size' }).click();
+  await expect(page.getByRole('button', { name: 'Reset text size' })).toHaveText('100%');
   await page.getByRole('button', { name: 'Larger text' }).click();
   await page.getByRole('button', { name: 'Larger text' }).click();
   await page.reload();
