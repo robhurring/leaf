@@ -597,6 +597,12 @@ const TAB_WIDTH: f64 = 190.0;
 /// The drag ghost: a small borderless window shaped like a tab, made with the first
 /// window and parked off screen between drags.
 fn ghost(app: &AppHandle) -> Option<tauri::WebviewWindow<Wry>> {
+    // Only on macOS: elsewhere a window can't be relied on to stay off screen (Wayland
+    // places windows itself), and a stray always-on-top tab would sit on the desktop.
+    // Dragging works there without it.
+    if !cfg!(target_os = "macos") {
+        return None;
+    }
     if let Some(g) = app.get_webview_window("ghost") {
         return Some(g);
     }
