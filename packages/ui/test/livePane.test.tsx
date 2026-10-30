@@ -71,6 +71,28 @@ describe('live animation blocks', () => {
     expect(viewers.forLang('javascript')?.id).not.toBe('live');
   });
 
+  it('.three and .sketch files open as live panes of their kind, filling the view', async () => {
+    const file = (path: string) => ({
+      type: 'file' as const,
+      path,
+      kind: 'text',
+      lang: 'javascript',
+      mime: 'text/javascript',
+      encoding: 'utf8' as const,
+      url: '',
+      size: 1,
+      mtime: 1,
+    });
+    expect(viewers.forFile(file('knot.three')).id).toBe('live');
+    expect(viewers.forFile(file('waves.sketch')).id).toBe('live');
+    const live = viewers.forFile(file('knot.three'));
+    render(
+      <live.Rich file={file('knot.three')} content="scene;" docPath="knot.three" config={{}} />,
+    );
+    await screen.findByTitle('three animation');
+    expect(pane().dataset.fill).toBe('');
+  });
+
   it('runs in a frame sealed off from leaf, sized by the fence', () => {
     render(block(SINE, 'height=480'));
     expect(frame().getAttribute('sandbox')).toBe('allow-scripts');

@@ -12,7 +12,7 @@ function LiveRich(props: ViewerProps) {
 
 export const live: Viewer = {
   id: 'live',
-  matches: { lang: ['three', 'canvas'] },
+  matches: { lang: ['three', 'canvas'], ext: ['.three', '.sketch'] },
   Inline: LiveInline,
   Rich: LiveRich,
   stage: {},

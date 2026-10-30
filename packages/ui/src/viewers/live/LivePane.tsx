@@ -24,8 +24,9 @@ const HARNESS = harness.toString();
 const prefersReducedMotion = () =>
   typeof matchMedia === 'function' && matchMedia('(prefers-reduced-motion: reduce)').matches;
 
-/** The fence language, which the block bridge puts after the `#` in the file path. */
-const kindOf = (path: string): LiveKind => (path.endsWith('#three') ? 'three' : 'canvas');
+/** A fence's language (the block bridge puts it after the `#` in the path), or a file's extension. */
+const kindOf = (path: string): LiveKind =>
+  path.endsWith('#three') || path.toLowerCase().endsWith('.three') ? 'three' : 'canvas';
 
 type Failure = { message: string; line?: number };
 
