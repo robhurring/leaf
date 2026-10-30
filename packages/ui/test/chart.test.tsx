@@ -89,6 +89,25 @@ describe('chart blocks', () => {
     expect((document.querySelector('.leaf-chart') as HTMLElement).style.height).toBe('400px');
   });
 
+  it('a redraw with nothing changed leaves the chart alone (no restart of its animation)', async () => {
+    const s = scripted({
+      'notes/report.md': '#',
+      'notes/sales.csv': 'month,revenue\nJan,3\nFeb,5\n',
+    });
+    useDocuments.getState().attach(s.source);
+    const spec = 'type: line\ndata:\n  from: ./sales.csv\n  x: month\n  y: [revenue]\n';
+    const { rerender } = render(block(spec));
+    await waitFor(() => expect(charts.made).toHaveLength(1));
+    const before = charts.made[0]!.updates;
+    rerender(block(spec));
+    rerender(block(spec));
+    // Something else in the app changes the store (a folder opens in the tree).
+    act(() => useDocuments.setState({ expanded: new Set(['notes']) }));
+    await new Promise((r) => setTimeout(r, 30));
+    expect(charts.made).toHaveLength(1);
+    expect(charts.made[0]!.updates).toBe(before);
+  });
+
   it('a changed block updates the chart in place instead of making another', async () => {
     const { rerender } = render(block(BAR));
     await waitFor(() => expect(charts.made).toHaveLength(1));

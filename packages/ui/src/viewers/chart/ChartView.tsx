@@ -46,8 +46,13 @@ export default function ChartView(props: ViewerProps & { fill?: boolean }) {
   const canvas = useRef<HTMLCanvasElement>(null);
   const chart = useRef<ChartInstance | null>(null);
 
+  // What the chart last drew, so a redraw that changes nothing leaves it (and its
+  // animation) alone: a folder opening elsewhere re-renders this view too.
+  const applied = useRef('');
   useEffect(() => {
     if (!('config' in built)) return;
+    const key = `${dark}:${JSON.stringify(built.config)}`;
+    if (key === applied.current && chart.current) return;
     let live = true;
     void loadChartJs().then((Chart) => {
       if (!live || !canvas.current) return;
@@ -60,6 +65,7 @@ export default function ChartView(props: ViewerProps & { fill?: boolean }) {
         ?.legend?.labels;
       if (labels)
         Object.assign(labels, { usePointStyle: true, pointStyle: 'rectRounded', boxHeight: 8 });
+      applied.current = key;
       const c = chart.current;
       if (c && c.config.type === built.config.type) {
         // Same kind of chart: change it in place, so it animates to the new data.
