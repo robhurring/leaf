@@ -30,7 +30,7 @@ import { NoticeBar } from './NoticeBar.js';
 import { createPortal } from 'react-dom';
 import { isMarp } from '../viewers/deck/detect.js';
 import { useDeckMode } from '../store/deckMode.js';
-import { Code, File, Slides } from '../icons/index.js';
+import { Check, Code, Copy, File, Slides, X } from '../icons/index.js';
 import { SourceView } from './SourceView.js';
 
 const SpeakerView = lazy(() => import('../viewers/deck/SpeakerView.js'));
@@ -312,14 +312,20 @@ export function Reader(props: ReaderProps) {
     isMarp(file.content ?? '');
   const speaker = SPEAKER_WINDOW;
   const readAsDocument = useDeckMode((s) => (file ? !!s.documents[file.path] : false));
-  // A deck read as a document can still flip to its source, as the slides can.
+  // A markdown page (a deck read as a document too) flips to its source, and copies it.
   const [sourceOf, setSourceOf] = useState<string | null>(null);
-  const deckSource = marp && readAsDocument && sourceOf === file?.path;
+  const [copied, setCopied] = useState<'ok' | 'failed' | null>(null);
+  useEffect(() => {
+    if (!copied) return;
+    const t = setTimeout(() => setCopied(null), 1500);
+    return () => clearTimeout(t);
+  }, [copied]);
   const isMarkdown = file
     ? viewers.forFile(file).id === 'markdown' &&
       file.encoding === 'utf8' &&
       !(marp && !readAsDocument)
     : false;
+  const markdownSource = isMarkdown && sourceOf === file?.path;
 
   const onRendered = useCallback(
     (info: { headings: Heading[]; frontmatter?: Record<string, unknown> }) => {
@@ -493,26 +499,49 @@ export function Reader(props: ReaderProps) {
                       </button>,
                       toolsEl,
                     )}
-                  {marp &&
-                    readAsDocument &&
+                  {isMarkdown &&
+                    file &&
                     toolsEl &&
                     createPortal(
-                      <button
-                        type="button"
-                        className="leaf-tool"
-                        aria-label="Show source"
-                        title={deckSource ? 'Back to the document' : 'Show the source'}
-                        aria-pressed={deckSource}
-                        onClick={() => setSourceOf(deckSource ? null : file!.path)}
-                      >
-                        <Code size={15} />
-                      </button>,
+                      <>
+                        <button
+                          type="button"
+                          className="leaf-tool"
+                          aria-label="Show source"
+                          title={markdownSource ? 'Back to the document' : 'Show the source'}
+                          aria-pressed={markdownSource}
+                          onClick={() => setSourceOf(markdownSource ? null : file.path)}
+                        >
+                          <Code size={15} />
+                        </button>
+                        <button
+                          type="button"
+                          className="leaf-tool"
+                          aria-label="Copy source"
+                          title="Copy source"
+                          data-result={copied ?? undefined}
+                          onClick={() =>
+                            navigator.clipboard.writeText(file.content ?? '').then(
+                              () => setCopied('ok'),
+                              () => setCopied('failed'),
+                            )
+                          }
+                        >
+                          {copied === 'ok' ? (
+                            <Check size={15} />
+                          ) : copied === 'failed' ? (
+                            <X size={15} />
+                          ) : (
+                            <Copy size={15} />
+                          )}
+                        </button>
+                      </>,
                       toolsEl,
                     )}
                   <DocToolsContext.Provider value={file && !isMarkdown ? toolsEl : null}>
                     <main className="leaf-main" ref={mainRef}>
                       <ErrorBoundary label="document" resetKey={`${path}:${file?.mtime ?? ''}`}>
-                        {deckSource && file ? (
+                        {markdownSource && file ? (
                           <div className="leaf-main-inner">
                             <SourceView code={file.content ?? ''} lang="markdown" label="md" />
                           </div>
