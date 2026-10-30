@@ -1,38 +1,51 @@
 //! The leaf reader app: one process, many windows, a native menu. Each window
 //! loads the built UI, which talks to the core through `leaf_send` and listens on
 //! its own event channel. A second `leaf open` hands its path to this process.
+use std::collections::HashMap;
 use std::path::{Path, PathBuf};
-use std::sync::Arc;
 use std::sync::atomic::{AtomicU32, Ordering};
+use std::sync::{Arc, Mutex};
 
 use leaf_core::config::Config;
 use leaf_core::prefs::PreferencesStore;
 use leaf_protocol::{ClientMessage, DEFAULT_LINK_SCHEMES, ServerMessage};
 use tauri::menu::{Menu, MenuBuilder, MenuItemBuilder, SubmenuBuilder};
-use tauri::{AppHandle, Emitter, EventTarget, Manager, WebviewUrl, WebviewWindowBuilder, Wry};
+use tauri::{AppHandle, Emitter, EventTarget, Manager, Webview, Wry};
 
-use leaf_app::launch::{link_in_argv, parse_deep_link, route_for};
+use leaf_app::launch::{link_in_argv, parse_deep_link};
+use leaf_app::tabs::Tabs;
 use leaf_app::window::Windows;
 use leaf_app::window_state::{Geometry, Rect, WindowStates};
 
-struct AppState {
-    windows: Arc<Windows>,
-    runtime: tokio::runtime::Handle,
-    next: AtomicU32,
+use crate::tabbed;
+
+pub(crate) struct AppState {
+    /// One core session per tab, keyed by the tab's id.
+    pub(crate) windows: Arc<Windows>,
+    pub(crate) runtime: tokio::runtime::Handle,
+    pub(crate) next: AtomicU32,
     /// Where each file or folder's window was, kept in `<config-dir>/windows.json`.
-    places: std::sync::Mutex<WindowStates>,
+    pub(crate) places: std::sync::Mutex<WindowStates>,
     places_file: PathBuf,
     /// A save is scheduled; moves and resizes come in bursts.
     save_pending: std::sync::atomic::AtomicBool,
-    /// The stored preferences: which kinds of link open.
-    prefs: PreferencesStore,
+    /// The stored preferences: which kinds of link open, where new things open.
+    pub(crate) prefs: PreferencesStore,
+    /// Which tabs each window holds.
+    pub(crate) tabs: Mutex<Tabs>,
+    /// What each tab last reported for the title row.
+    pub(crate) tab_state: Mutex<HashMap<String, serde_json::Value>>,
+    /// The window a dragged tab is over, and where in its row it would land.
+    pub(crate) hovered: Mutex<Option<(String, usize)>>,
+    /// The window focused last, where new tabs go.
+    pub(crate) front: Mutex<Option<String>>,
 }
 
 /// How long after the last move or resize the window places are written.
 const SAVE_AFTER: std::time::Duration = std::time::Duration::from_millis(500);
 
 /// The screens' usable areas, in logical pixels.
-fn screens(app: &AppHandle) -> Vec<Rect> {
+pub(crate) fn screens(app: &AppHandle) -> Vec<Rect> {
     app.available_monitors()
         .unwrap_or_default()
         .iter()
@@ -50,7 +63,7 @@ fn screens(app: &AppHandle) -> Vec<Rect> {
 }
 
 /// A window's geometry now, in logical pixels.
-fn geometry_of(window: &tauri::Window) -> Option<Geometry> {
+pub(crate) fn geometry_of(window: &tauri::Window) -> Option<Geometry> {
     let scale = window.scale_factor().ok()?;
     let pos = window.outer_position().ok()?.to_logical::<f64>(scale);
     let size = window.inner_size().ok()?.to_logical::<f64>(scale);
@@ -67,7 +80,7 @@ fn geometry_of(window: &tauri::Window) -> Option<Geometry> {
 fn record_place(window: &tauri::Window) {
     let app = window.app_handle();
     let state = app.state::<AppState>();
-    let Some(opened) = state.windows.opened(window.label()) else {
+    let Some(opened) = tabbed::place_key(app, window.label()) else {
         return;
     };
     // Full screen is a mode, not a place; a maximized window keeps its normal size
@@ -110,11 +123,10 @@ fn record_place(window: &tauri::Window) {
 }
 
 fn emit(app: &AppHandle, label: &str, msg: ServerMessage) {
-    if let Err(e) = app.emit_to(
-        EventTarget::webview_window(label),
-        &Windows::event_name(label),
-        msg,
-    ) {
+    let target = EventTarget::AnyLabel {
+        label: label.to_string(),
+    };
+    if let Err(e) = app.emit_to(target, &Windows::event_name(label), msg) {
         tracing::warn!(window = label, error = %e, "could not deliver to window");
     }
 }
@@ -146,117 +158,37 @@ async fn leaf_open_url(url: String, state: tauri::State<'_, AppState>) -> Result
     open::that_detached(&url).map_err(|e| e.to_string())
 }
 
-/// Opens the speaker view for a deck shown in `window`, in a window of its own on the
-/// same file. `path` is the deck's path within the window's folder.
+/// Opens the speaker view for a deck shown in a tab, in a window of its own on the
+/// same file. `path` is the deck's path within the tab's folder.
 #[tauri::command]
-fn leaf_open_speaker(window: tauri::WebviewWindow, path: String) -> Result<(), String> {
-    let app = window.app_handle().clone();
+fn leaf_open_speaker(webview: Webview<Wry>, path: String) -> Result<(), String> {
+    let app = webview.app_handle().clone();
     let state = app.state::<AppState>();
     let opened = state
         .windows
-        .opened(window.label())
-        .ok_or("this window has nothing open")?;
-    // The same folder as this window, so the deck's path means the same thing there.
+        .opened(webview.label())
+        .ok_or("this tab has nothing open")?;
+    // The same folder as this tab, so the deck's path means the same thing there.
     let (folder, route) = leaf_app::launch::speaker_target(&opened, &path)?;
-    open_window_at(&app, &folder, Some(route));
+    if let Some(w) = tabbed::new_window(&app, tabbed::place_for(&app, Some(&folder))) {
+        tabbed::add_tab(&app, &w, &folder, None, Some(route), None);
+    }
     Ok(())
 }
 
-/// The UI has painted: show its window. Windows open hidden so they never flash blank.
+/// A tab's UI has painted: show its window. Windows open hidden so they never flash blank.
 #[tauri::command]
-fn leaf_ready(window: tauri::WebviewWindow) {
-    if !window.is_visible().unwrap_or(true) {
-        let _ = window.show();
-        let _ = window.set_focus();
-    }
+fn leaf_ready(webview: Webview<Wry>) {
+    tabbed::show(&webview.window());
 }
 
 /// How long a window may stay hidden waiting for its UI before it is shown anyway.
-const READY_FALLBACK: std::time::Duration = std::time::Duration::from_millis(1500);
+pub(crate) const READY_FALLBACK: std::time::Duration = std::time::Duration::from_millis(1500);
 
-/// Opens a window on `target`: a folder, or a file shown inside its folder.
+/// Shows `target` (a folder, or a file inside its folder): in the tab already covering
+/// it, else where the person's setting says new things open.
 pub fn open_window(app: &AppHandle, target: &Path) {
-    open_window_at(app, target, None);
-}
-
-/// Opens a window on `target` showing `route` (a UI route such as `/docs/a.md#setup`)
-/// instead of the document the target names.
-fn open_window_at(app: &AppHandle, target: &Path, route: Option<String>) {
-    let state = app.state::<AppState>();
-    let label = format!("w{}", state.next.fetch_add(1, Ordering::Relaxed));
-    let _rt = state.runtime.enter();
-    if let Err(e) = state.windows.open(&label, target) {
-        tracing::error!(target = %target.display(), error = %e, "cannot open");
-        return;
-    }
-    let folder = Windows::folder_of(target);
-    let path = if target.is_file() {
-        target
-            .strip_prefix(&folder)
-            .map(|p| p.to_string_lossy().into_owned())
-            .unwrap_or_default()
-    } else {
-        String::new()
-    };
-    // The window is named for what was opened: the file, or the folder.
-    let title = target
-        .file_name()
-        .map(|n| n.to_string_lossy().into_owned())
-        .unwrap_or_else(|| "leaf".into());
-    // The window learns its label and its first document before the UI runs.
-    let init = format!(
-        "window.__LEAF_WINDOW__ = {label:?}; history.replaceState(null, '', {route:?});",
-        route = route.unwrap_or_else(|| route_for(&path))
-    );
-    // Where this file or folder's window last was, else the last window's size, stepped
-    // aside from the windows already open; the default size otherwise.
-    let open: Vec<Geometry> = app
-        .webview_windows()
-        .values()
-        .filter_map(|w| geometry_of(&w.as_ref().window()))
-        .collect();
-    let place = state
-        .places
-        .lock()
-        .unwrap_or_else(|e| e.into_inner())
-        .place(target, &open, &screens(app));
-    let builder =
-        WebviewWindowBuilder::new(app, &label, WebviewUrl::App(PathBuf::from("index.html")))
-            .title(&title)
-            .min_inner_size(640.0, 420.0)
-            .visible(false)
-            .initialization_script(&init)
-            // Nothing in the window, a live pane's frame included, navigates to the network.
-            .on_navigation(|url| {
-                let ok = leaf_app::launch::navigation_allowed(url.as_str(), cfg!(debug_assertions));
-                if !ok {
-                    tracing::info!(%url, "navigation refused");
-                }
-                ok
-            });
-    let builder = match place {
-        Some(g) => builder.inner_size(g.width, g.height).position(g.x, g.y),
-        None => builder.inner_size(1240.0, 860.0),
-    };
-    #[cfg(target_os = "macos")]
-    let builder = builder
-        .title_bar_style(tauri::TitleBarStyle::Overlay)
-        .hidden_title(true);
-    match builder.build() {
-        Ok(window) => {
-            if place.is_some_and(|g| g.maximized) {
-                let _ = window.maximize();
-            }
-            state.runtime.spawn(async move {
-                tokio::time::sleep(READY_FALLBACK).await;
-                leaf_ready(window);
-            });
-        }
-        Err(e) => {
-            tracing::error!(error = %e, "could not create a window");
-            state.windows.close(&label);
-        }
-    }
+    tabbed::open(app, target, None, None);
 }
 
 fn item(
@@ -375,16 +307,13 @@ fn on_menu(app: &AppHandle, id: &str) {
     } else {
         return;
     };
+    // The focused window's showing tab runs it.
     let focused = app
-        .webview_windows()
-        .into_iter()
-        .find(|(_, w)| w.is_focused().unwrap_or(false));
-    if let Some((label, _)) = focused {
-        let _ = app.emit_to(
-            EventTarget::webview_window(&label),
-            "leaf://command",
-            payload,
-        );
+        .windows()
+        .into_values()
+        .find(|w| w.is_focused().unwrap_or(false));
+    if let Some(tab) = focused.and_then(|w| tabbed::active_tab(app, w.label())) {
+        tabbed::command_to(app, &tab, payload);
     }
 }
 
@@ -400,39 +329,19 @@ fn open_link(app: &AppHandle, url: &str) {
     if link.browser {
         return relaunch_with(url);
     }
-    // Window keys are canonical paths; a link may name /tmp for /private/tmp.
+    // Tab roots are canonical paths; a link may name /tmp for /private/tmp.
     let link = link.canonical();
     let (source, _) = link.opening();
-    let state = app.state::<AppState>();
-    let Some((label, opened)) = state.windows.find_for(&source) else {
-        return open_window_at(app, &source, Some(link.route()));
-    };
-    let Some(window) = app.get_webview_window(&label) else {
-        return open_window_at(app, &source, Some(link.route()));
-    };
-    let _ = window.unminimize();
-    let _ = window.show();
-    let _ = window.set_focus();
-    // The document, relative to what that window opened.
-    let doc = if opened.is_dir() {
-        link.target
-            .strip_prefix(&opened)
-            .map(|p| p.to_string_lossy().into_owned())
-            .unwrap_or_default()
-    } else {
-        opened
-            .file_name()
-            .map(|n| n.to_string_lossy().into_owned())
-            .unwrap_or_default()
-    };
-    if doc.is_empty() && link.heading.is_none() {
-        return;
+    let covering = app
+        .state::<AppState>()
+        .tabs
+        .lock()
+        .unwrap()
+        .covering(&link.target);
+    match covering {
+        Some(tab) => tabbed::show_in(app, &tab, &link.target, link.heading.clone()),
+        None => tabbed::open(app, &source, Some(link.route()), None),
     }
-    let _ = app.emit_to(
-        EventTarget::webview_window(&label),
-        "leaf://command",
-        serde_json::json!({ "name": "openPath", "arg": { "path": doc, "slug": link.heading } }),
-    );
 }
 
 /// Hands a link to a fresh `leaf <link>`, which opens the browser or the app as asked.
@@ -523,7 +432,14 @@ pub fn run(config: Config, link: Option<String>) -> i32 {
             leaf_send,
             leaf_ready,
             leaf_open_url,
-            leaf_open_speaker
+            leaf_open_speaker,
+            tabbed::leaf_tabs,
+            tabbed::leaf_select_tab,
+            tabbed::leaf_close_tab,
+            tabbed::leaf_new_tab,
+            tabbed::leaf_tab_command,
+            tabbed::leaf_tab_state,
+            tabbed::leaf_reorder
         ])
         .menu(build_menu)
         .on_menu_event(|app, event| on_menu(app, event.id().as_ref()))
@@ -531,12 +447,19 @@ pub fn run(config: Config, link: Option<String>) -> i32 {
             if let tauri::WindowEvent::Moved(_) | tauri::WindowEvent::Resized(_) = event {
                 record_place(window);
             }
-            if let tauri::WindowEvent::Destroyed = event {
-                window
+            if let tauri::WindowEvent::Resized(_) = event {
+                tabbed::relayout(window.app_handle(), window);
+            }
+            if let tauri::WindowEvent::Focused(true) = event {
+                *window
                     .app_handle()
                     .state::<AppState>()
-                    .windows
-                    .close(window.label());
+                    .front
+                    .lock()
+                    .unwrap() = Some(window.label().to_string());
+            }
+            if let tauri::WindowEvent::Destroyed = event {
+                tabbed::window_gone(window.app_handle(), window.label());
             }
         })
         .setup(move |app| {
@@ -555,6 +478,10 @@ pub fn run(config: Config, link: Option<String>) -> i32 {
                 places_file,
                 save_pending: std::sync::atomic::AtomicBool::new(false),
                 prefs: PreferencesStore::new(config.config_dir.join("preferences.json")),
+                tabs: Mutex::new(Tabs::new()),
+                tab_state: Mutex::new(HashMap::new()),
+                hovered: Mutex::new(None),
+                front: Mutex::new(None),
             });
             match &link {
                 Some(url) => open_link(&handle, url),

@@ -2,6 +2,7 @@
 //! reuse) a server, print the URL, open the browser, return. `leaf serve <path>`
 //! stays in the foreground with the logs; so does an explicit -l on the command line.
 mod app;
+mod tabbed;
 
 use std::collections::HashMap;
 use std::sync::Arc;
