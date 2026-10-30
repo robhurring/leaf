@@ -7,7 +7,7 @@ import { DiagramError } from '../diagramError.js';
 import { contentHash } from '../hash.js';
 import { useAppearance } from '../appearance.js';
 import { useStage } from '../../store/stage.js';
-import { Code, Pause, Play, Restart } from '../../icons/index.js';
+import { Pause, Play, Restart } from '../../icons/index.js';
 import {
   buildSrcdoc,
   isFromFrame,
@@ -43,7 +43,6 @@ export function LivePane(props: ViewerProps & { fill?: boolean }) {
   const [userPaused, setUserPaused] = useState(prefersReducedMotion);
   const [inView, setInView] = useState(typeof IntersectionObserver === 'undefined');
   const [hidden, setHidden] = useState(() => document.hidden);
-  const [showCode, setShowCode] = useState(false);
   const [generation, setGeneration] = useState(0);
   // What the current frame has said, keyed by which frame it is, so a new frame (new
   // code or a restart) starts fresh without an effect racing its load event.
@@ -61,7 +60,7 @@ export function LivePane(props: ViewerProps & { fill?: boolean }) {
   const inStage = useStage(
     (s) => !fill && !!s.open && s.open.docPath === docPath && s.open.blockHash === hash,
   );
-  const running = inView && !hidden && !userPaused && !inStage && !showCode;
+  const running = inView && !hidden && !userPaused && !inStage;
 
   useEffect(() => {
     if (kind !== 'three') return;
@@ -155,26 +154,19 @@ export function LivePane(props: ViewerProps & { fill?: boolean }) {
       data-fill={fill ? '' : undefined}
     >
       <div className="leaf-live-view" style={height ? { height } : undefined}>
-        {showCode ? (
-          <pre className="leaf-live-source">
-            <code>{code}</code>
-          </pre>
-        ) : (
-          srcdoc !== null &&
-          !now.left && (
-            <iframe
-              key={generation}
-              ref={frame}
-              title={`${kind} animation`}
-              sandbox="allow-scripts"
-              srcDoc={srcdoc}
-              style={height ? { height } : undefined}
-              onLoad={() =>
-                // A second load means the block navigated its frame somewhere else.
-                hear(loaded ? { failure: { message: LEFT }, left: true } : { loaded: true })
-              }
-            />
-          )
+        {srcdoc !== null && !now.left && (
+          <iframe
+            key={generation}
+            ref={frame}
+            title={`${kind} animation`}
+            sandbox="allow-scripts"
+            srcDoc={srcdoc}
+            style={height ? { height } : undefined}
+            onLoad={() =>
+              // A second load means the block navigated its frame somewhere else.
+              hear(loaded ? { failure: { message: LEFT }, left: true } : { loaded: true })
+            }
+          />
         )}
         <div className="leaf-live-controls" role="group" aria-label="Animation">
           <button
@@ -191,26 +183,9 @@ export function LivePane(props: ViewerProps & { fill?: boolean }) {
             className="leaf-tool"
             aria-label="Restart"
             title="Restart"
-            onClick={() => {
-              setShowCode(false);
-              setGeneration((g) => g + 1);
-            }}
+            onClick={() => setGeneration((g) => g + 1)}
           >
             <Restart size={15} />
-          </button>
-          <button
-            type="button"
-            className="leaf-tool"
-            aria-label="View code"
-            title="View code"
-            aria-pressed={showCode}
-            onClick={() => {
-              // Back from the code is a fresh frame: count it as one.
-              if (showCode) setGeneration((g) => g + 1);
-              setShowCode((s) => !s);
-            }}
-          >
-            <Code size={15} />
           </button>
         </div>
       </div>

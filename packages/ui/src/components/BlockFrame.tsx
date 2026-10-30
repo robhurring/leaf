@@ -7,6 +7,7 @@ import { createPortal } from 'react-dom';
 import { DocToolsContext } from './Properties.js';
 import {
   Check,
+  Code,
   Copy,
   Download,
   Hand,
@@ -20,6 +21,7 @@ import { useAnnotations } from '../store/annotations.js';
 import { useStage } from '../store/stage.js';
 import { copyImage, copyRaster, downloadText, svgElementToString } from '../stage/image.js';
 import { contentHash } from '../viewers/hash.js';
+import { SourceView, sourceLang } from './SourceView.js';
 import type { Viewer, ViewerProps } from '../viewers/types.js';
 
 type Props = {
@@ -56,6 +58,8 @@ export function BlockFrame({
   const [result, setResult] = useState<'ok' | 'failed' | null>(null);
   const [picture, setPicture] = useState<'svg' | 'img' | null>(null);
   const visual = viewer.stage !== undefined;
+  // A picture made from text (a diagram, chart, map, or animation) can flip to that text.
+  const [showSource, setShowSource] = useState(false);
   // A whole file (not a block in a document): fill the area, tools in the file header.
   const slot = useContext(DocToolsContext);
   const source = props.content ?? '';
@@ -64,7 +68,8 @@ export function BlockFrame({
   const [view, setView] = useState<View>(HOME);
   const [panning, setPanning] = useState(false);
   const drag = useRef<{ x: number; y: number } | null>(null);
-  const zoomable = visual && !!viewer.stage?.zoom && !slot;
+  const hasSource = visual && viewer.id !== 'image' && source.trim() !== '';
+  const zoomable = visual && !!viewer.stage?.zoom && !slot && !showSource;
   const moved = view.x !== 0 || view.y !== 0 || view.scale !== 1;
   const zoom = (factor: number) => setView((v) => ({ ...v, scale: clampScale(v.scale * factor) }));
   const onPointerDown = (e: PointerEvent) => {
@@ -171,7 +176,19 @@ export function BlockFrame({
           <span className="leaf-tool-sep" />
         </>
       )}
-      {visual && picture && (
+      {hasSource && (
+        <button
+          type="button"
+          className="leaf-tool"
+          aria-label="Show source"
+          title={showSource ? 'Back to the picture' : 'Show the source'}
+          aria-pressed={showSource}
+          onClick={() => setShowSource((v) => !v)}
+        >
+          <Code size={15} />
+        </button>
+      )}
+      {visual && picture && !showSource && (
         <button
           type="button"
           className="leaf-tool"
@@ -198,7 +215,7 @@ export function BlockFrame({
       >
         <Copy size={15} />
       </button>
-      {visual && picture === 'svg' && (
+      {visual && picture === 'svg' && !showSource && (
         <button
           type="button"
           className="leaf-tool"
@@ -215,7 +232,7 @@ export function BlockFrame({
           <Download size={15} />
         </button>
       )}
-      {visual && (
+      {visual && !showSource && (
         <button
           type="button"
           className="leaf-tool"
@@ -247,7 +264,9 @@ export function BlockFrame({
         <span className="leaf-block-lang">{lang}</span>
       )}
       {slot ? createPortal(tools, slot) : tools}
-      {zoomable ? (
+      {showSource ? (
+        <SourceView code={source} lang={sourceLang(viewer.id, lang)} />
+      ) : zoomable ? (
         <div
           className="leaf-block-view"
           data-panning={panning ? '' : undefined}

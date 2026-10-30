@@ -1,5 +1,6 @@
 // Picks the viewer for the open file and intercepts in-document navigation.
-import { useCallback, useContext, useEffect, type MouseEvent } from 'react';
+import { useCallback, useContext, useEffect, useState, type MouseEvent } from 'react';
+import { createPortal } from 'react-dom';
 import type { Config, ErrorMessage, FileMessage } from '@leaf/protocol';
 import type { Handlers } from '../render/handlers.js';
 import { viewers } from '../viewers/index.js';
@@ -9,6 +10,8 @@ import { DocToolsContext } from './Properties.js';
 import { StageCanvas } from '../stage/Stage.js';
 import { contentHash } from '../viewers/hash.js';
 import { useAnnotations } from '../store/annotations.js';
+import { Code } from '../icons/index.js';
+import { SourceView, sourceLang } from './SourceView.js';
 import type { Viewer, ViewerProps } from '../viewers/types.js';
 
 /** A whole diagram or image file: the Stage's pan, zoom, and drawing, in the panel. */
@@ -22,18 +25,40 @@ function InlineStage({
   slot: HTMLElement;
 }) {
   const blockHash = contentHash(props.content ?? props.file.path);
+  // A file made from text (a diagram, chart, map, or animation) flips to that text.
+  const [showSource, setShowSource] = useState(false);
+  const hasSource =
+    viewer.id !== 'image' && props.file.encoding === 'utf8' && !!props.content?.trim();
   useEffect(
     () => useAnnotations.getState().trackBlock(props.docPath, blockHash),
     [props.docPath, blockHash],
   );
   return (
     <div className="leaf-stage-inline">
-      <StageCanvas
-        key={`${props.docPath}:${blockHash}`}
-        content={{ docPath: props.docPath, blockHash, viewer, props }}
-        toolsSlot={slot}
-        inline
-      />
+      {hasSource &&
+        createPortal(
+          <button
+            type="button"
+            className="leaf-tool"
+            aria-label="Show source"
+            title={showSource ? 'Back to the picture' : 'Show the source'}
+            aria-pressed={showSource}
+            onClick={() => setShowSource((v) => !v)}
+          >
+            <Code size={15} />
+          </button>,
+          slot,
+        )}
+      {showSource ? (
+        <SourceView code={props.content ?? ''} lang={sourceLang(viewer.id, props.file.lang)} />
+      ) : (
+        <StageCanvas
+          key={`${props.docPath}:${blockHash}`}
+          content={{ docPath: props.docPath, blockHash, viewer, props }}
+          toolsSlot={slot}
+          inline
+        />
+      )}
     </div>
   );
 }

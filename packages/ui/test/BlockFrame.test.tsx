@@ -130,6 +130,23 @@ describe('BlockFrame', () => {
     expect(tools.querySelector('[aria-label="Pan"]')).toBeNull();
   });
 
+  it('a visual block flips to its source and back', async () => {
+    render(
+      <BlockFrame viewer={mermaid} props={props} lang="mermaid">
+        <div className="leaf-diagram" data-testid="picture" />
+      </BlockFrame>,
+    );
+    const toggle = screen.getByRole('button', { name: 'Show source' });
+    expect(toggle.getAttribute('aria-pressed')).toBe('false');
+    fireEvent.click(toggle);
+    expect(screen.queryByTestId('picture')).toBeNull();
+    expect((await screen.findByText(/graph TD/)).closest('.leaf-block-source')).toBeTruthy();
+    // No zooming a page of text.
+    expect(screen.queryByRole('button', { name: 'Zoom in' })).toBeNull();
+    fireEvent.click(screen.getByRole('button', { name: 'Show source' }));
+    expect(screen.getByTestId('picture')).toBeTruthy();
+  });
+
   it('a code block offers only copy', () => {
     render(
       <BlockFrame viewer={code} props={{ ...props, content: 'x' }} lang="typescript">

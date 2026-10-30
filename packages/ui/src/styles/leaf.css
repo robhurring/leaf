@@ -1260,10 +1260,12 @@ html[data-resizing] .leaf-resizer::after {
   font: 0.84em/1.6 var(--leaf-font-mono);
   background: transparent !important;
 }
-.leaf-codeblock pre.shiki span {
+.leaf-codeblock pre.shiki span,
+.leaf-block-source pre.shiki span {
   color: var(--shiki-light);
 }
-[data-appearance='dark'] .leaf-codeblock pre.shiki span {
+[data-appearance='dark'] .leaf-codeblock pre.shiki span,
+[data-appearance='dark'] .leaf-block-source pre.shiki span {
   color: var(--shiki-dark);
 }
 
@@ -2794,15 +2796,6 @@ html[data-resizing] .leaf-blame-resizer::after {
 .leaf-live[data-fill] iframe {
   height: 100%;
 }
-.leaf-live-source {
-  box-sizing: border-box;
-  height: 100%;
-  margin: 0;
-  padding: 12px 16px;
-  overflow: auto;
-  font: 12.5px/1.55 var(--leaf-font-mono);
-  color: var(--leaf-text);
-}
 .leaf-live-controls {
   position: absolute;
   left: 8px;
@@ -2889,4 +2882,28 @@ html[data-resizing] .leaf-blame-resizer::after {
   margin: 6px 8px 0;
   font: 12.5px/1.5 var(--leaf-font-ui);
   color: var(--leaf-text-2);
+}
+
+/* ---------- a block's source ---------- */
+/* What a diagram, chart, map, or animation is written in, shown in its place. */
+.leaf-block-source {
+  padding: 36px 16px 16px;
+  overflow: auto;
+  max-height: 70vh;
+}
+.leaf-block-source pre {
+  margin: 0;
+  padding: 0;
+  background: transparent !important;
+  font: 13px/1.55 var(--leaf-font-mono);
+}
+.leaf-frame[data-full] > .leaf-block-source {
+  align-self: stretch;
+  max-height: none;
+  flex: 1;
+}
+.leaf-stage-inline > .leaf-block-source {
+  flex: 1;
+  max-height: none;
+  padding: 16px 24px;
 }

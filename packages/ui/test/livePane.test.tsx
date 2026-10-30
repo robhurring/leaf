@@ -175,25 +175,6 @@ describe('live animation blocks', () => {
     expect(screen.queryByRole('alert')).toBeNull();
   });
 
-  it('view code shows the source instead of the frame', () => {
-    render(block(SINE));
-    fireEvent.click(screen.getByRole('button', { name: 'View code' }));
-    expect(document.querySelector('.leaf-live iframe')).toBeNull();
-    expect(document.querySelector('.leaf-live pre')!.textContent).toBe(SINE);
-    fireEvent.click(screen.getByRole('button', { name: 'View code' }));
-    expect(frame()).toBeTruthy();
-  });
-
-  it('back from the code, the new frame is told to play', () => {
-    render(block(SINE));
-    intersect(pane());
-    watchFrame();
-    fireEvent.click(screen.getByRole('button', { name: 'View code' }));
-    fireEvent.click(screen.getByRole('button', { name: 'View code' }));
-    watchFrame();
-    expect(types()).toContain('play');
-  });
-
   it('a frame that navigates away is taken down, with a note why', () => {
     render(block(SINE));
     watchFrame();
