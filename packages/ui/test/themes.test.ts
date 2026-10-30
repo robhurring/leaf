@@ -82,8 +82,17 @@ describe('themes', () => {
     expect(base).toMatch(/\.leaf-diagram \{[^}]*justify-content: center/);
   });
 
-  it('the CSV block leaves room for its language label above the filter', () => {
-    expect(base).toMatch(/\.leaf-frame\[data-viewer='csv'\] \.leaf-datatable \{[^}]*padding/);
+  it('a CSV in a document is a bare table with its filter above, no box or label', () => {
+    expect(base).toMatch(
+      /\.leaf-frame\[data-viewer='csv'\]:not\(\[data-full\]\) \{[^}]*background: transparent/,
+    );
+    expect(base).toMatch(
+      /\.leaf-frame\[data-viewer='csv'\]:not\(\[data-full\]\) > \.leaf-block-lang \{[^}]*display: none/,
+    );
+    // A whole CSV file still leaves room for the file toolbar above its filter.
+    expect(base).toMatch(
+      /\.leaf-frame\[data-viewer='csv'\]\[data-full\] \.leaf-datatable \{[^}]*padding/,
+    );
   });
 
   it('the document fills its column and grows with the window: no measure caps it', () => {

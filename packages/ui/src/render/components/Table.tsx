@@ -1,7 +1,6 @@
 // Markdown tables. One marked with <!--table:filter--> gets a filter bar that hides
 // the rows whose text doesn't match; cells keep their markdown (bold, code, links).
 import { useEffect, useRef, useState, type ComponentProps } from 'react';
-import { Search } from '../../icons/index.js';
 
 type Props = ComponentProps<'table'> & { 'data-filter'?: string };
 
@@ -25,7 +24,19 @@ function FilterTable(props: ComponentProps<'table'>) {
     <div className="leaf-table-filter">
       <div className="leaf-datatable-bar">
         <label className="leaf-filter">
-          <Search size={13} />
+          <svg
+            width={13}
+            height={13}
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth={1.7}
+            strokeLinecap="round"
+            aria-hidden="true"
+          >
+            <circle cx="11" cy="11" r="7" />
+            <path d="m20 20-3.5-3.5" />
+          </svg>
           <input
             type="search"
             aria-label="Filter rows"
