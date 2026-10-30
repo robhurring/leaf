@@ -11,8 +11,9 @@ npm run schema -w @leaf/protocol
 npm run build --if-present -w @leaf/ui
 # Opening leaf stays fast: the page's startup scripts and styles have a size budget.
 node packages/ui/scripts/check-entry-size.mjs
-# The Rust binary embeds the built UI, so it comes last.
-cargo build --release -p leaf-app
+# The Rust binary embeds the built UI, so it comes last. The whole workspace, as bin/test
+# builds it, so both share one set of compiled crates in target/release.
+cargo build --release --workspace
 # If `leaf` on PATH is a link into this checkout (from bin/install, or the old Node link), point it at the new binary.
 if link="$(command -v leaf 2>/dev/null)" && [[ -L "$link" ]]; then
   dest="$(readlink "$link")"
