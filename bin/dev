@@ -5,9 +5,9 @@ cd "$(dirname "$0")/.."
 usage() {
   echo "usage: bin/dev [-o|--open] [path]    run the leaf server (port \${PORT:-4321}) and Vite (port 5173) with live reload"
   echo "  -o, --open    open the reader in a browser once Vite is up"
-  echo "  path          file or folder to serve (default: examples)"
+  echo "  path          file or folder to serve (default: docs/examples)"
 }
-open_browser=false; target="examples"
+open_browser=false; target="docs/examples"
 for arg in "$@"; do
   case "$arg" in
     -h|--help) usage; exit 0 ;;

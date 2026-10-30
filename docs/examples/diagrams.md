@@ -244,4 +244,4 @@ A hand-drawn sketch of the pieces, exported straight from the scene JSON:
 
 ## Standalone files
 
-The same viewers open files on their own: `viewers/flow.mmd`, `viewers/sequence.puml`, `viewers/sketch.excalidraw`.
+The same viewers open files on their own: [flow.mmd](./diagrams/flow.mmd), [sequence.puml](./diagrams/sequence.puml), and [sketch.excalidraw](./diagrams/sketch.excalidraw), each ready to pan, zoom, and draw on.

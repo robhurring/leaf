@@ -3,7 +3,14 @@ import { writeFileSync, appendFileSync, rmSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-const examples = join(dirname(fileURLToPath(import.meta.url)), '..', '..', '..', 'examples');
+const examples = join(
+  dirname(fileURLToPath(import.meta.url)),
+  '..',
+  '..',
+  '..',
+  'docs',
+  'examples',
+);
 
 // Three engines share one server and one preferences file; each test starts from the defaults.
 const PREFS = join(
@@ -40,46 +47,35 @@ test('examples render without console errors', async ({ page }) => {
   await expect(files).toBeVisible();
   await expect(files).not.toContainText('ignored.md');
   await expect(files).toContainText('README.md');
-  for (const f of [
-    'gfm.md',
-    'code.md',
-    'headings.md',
-    'inline-matchers.md',
-    'links-and-images.md',
-    'alerts.md',
-    'math.md',
-    'frontmatter.md',
-    'html.md',
-    'outline-and-numbering.md',
-    'animations.md',
-    'animations/updraft.md',
-  ]) {
+  for (const f of ['markdown.md', 'animations.md', 'animations/updraft.md']) {
     await page.goto('/' + f);
     await expect(page.locator('article.leaf-doc')).toBeVisible();
     await expect(page.locator('article.leaf-doc h1')).toHaveCount(1);
+    // Let fonts and lazy chunks finish, so leaving doesn't abort them into console errors.
+    await page.waitForLoadState('networkidle');
   }
-  await page.goto('/code.md');
+  await page.goto('/markdown.md');
   await expect(page.locator('.leaf-codeblock pre.shiki').first()).toBeVisible();
   await page.goto('/files/script.py');
   await expect(page.locator('.cm-editor')).toBeVisible();
   await page.goto('/files/blob.bin');
   await expect(page.getByRole('link', { name: /download/i })).toBeVisible();
-  await page.goto('/assets/photo.jpg');
+  await page.goto('/files/photo.jpg');
   await expect(page.locator('img.leaf-image')).toBeVisible();
-  await page.goto('/assets/logo.svg');
+  await page.goto('/files/logo.svg');
   await expect(page.locator('img.leaf-image')).toBeVisible();
   expect(errors).toEqual([]);
 });
 
 test('outline, numbering, anchors, palette', async ({ page }) => {
-  await page.goto('/outline-and-numbering.md');
+  await page.goto('/markdown.md');
   await expect(page.getByRole('heading', { level: 1 })).toBeVisible();
   await page.getByRole('button', { name: 'Number headings' }).click();
   await expect(page.locator('article h2').first()).toContainText('1.');
   const outline = page.getByRole('navigation', { name: 'Outline' });
-  await expect(outline).toContainText('3. Third section');
-  await outline.getByRole('link', { name: /Third section/ }).click();
-  await expect(page).toHaveURL(/#third-section$/);
+  await expect(outline).toContainText('3. Tables');
+  await outline.getByRole('link', { name: /Tables/ }).click();
+  await expect(page).toHaveURL(/#tables$/);
   await page.keyboard.press('ControlOrMeta+K');
   await page.getByRole('combobox', { name: 'Go to' }).fill('grand');
   await page.keyboard.press('Enter');
@@ -139,8 +135,8 @@ test('diagrams render, zoom into the Stage, and sticky ink survives navigation',
   await expect(stage).toBeHidden();
   // Navigate within the app (a reload would end the session and its ink on purpose).
   const files = page.getByRole('navigation', { name: 'Files' });
-  await files.getByRole('button', { name: 'gfm.md' }).click();
-  await expect(page).toHaveURL(/gfm\.md$/);
+  await files.getByRole('button', { name: 'markdown.md' }).click();
+  await expect(page).toHaveURL(/markdown\.md$/);
   await files.getByRole('button', { name: 'diagrams.md' }).click();
   await expect(page).toHaveURL(/diagrams\.md$/);
   await expect(frames.first().locator('.leaf-diagram svg')).toBeVisible({ timeout: 15000 });
@@ -152,7 +148,7 @@ test('diagrams render, zoom into the Stage, and sticky ink survives navigation',
 });
 
 test('diagram files open ready to pan, zoom, and draw, inside the window', async ({ page }) => {
-  for (const file of ['/viewers/flow.mmd', '/viewers/sketch.excalidraw']) {
+  for (const file of ['/diagrams/flow.mmd', '/diagrams/sketch.excalidraw']) {
     await page.goto(file);
     const view = page.getByTestId('stage-viewport');
     await expect(view.locator('.leaf-diagram svg')).toBeVisible({ timeout: 15000 });
@@ -192,7 +188,7 @@ test('the document grows with the window', async ({ page }) => {
   // Narrow: the sidebars float over the page and the document takes the whole width.
   // A short document: the column must not shrink to its content.
   await page.setViewportSize({ width: 1000, height: 800 });
-  await page.goto('/nested/deep/deeper/leaf.md');
+  await page.goto('/files/nested/deep/deeper/leaf.md');
   await expect(page.locator('article h1').first()).toBeVisible();
   const narrow = (await page.locator('.leaf-doc-col').boundingBox())!;
   expect(narrow.x).toBeLessThan(1);

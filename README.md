@@ -82,7 +82,7 @@ Two fence languages run their code instead of showing it:
 
 Both get `onFrame(fn)`, which calls `fn(t, dt)` every frame with the milliseconds since the pane started and since the last frame, and `theme` (`'light'` or `'dark'`, with a `themechange` event on `window` when it changes). The code runs as the body of an async function, so `await` works at the top. A pane is 320 pixels tall; set another height in the fence: ` ```three height=480 `.
 
-Each pane runs in a sandboxed frame: it can't reach leaf, your files, or the network, so a document from anyone is safe to open. It plays only while it's on screen, and rests when the window is hidden or you pause it; with reduced motion on, it starts paused on its first frame. An error shows under the pane with its line. See `examples/animations.md`.
+Each pane runs in a sandboxed frame: it can't reach leaf, your files, or the network, so a document from anyone is safe to open. It plays only while it's on screen, and rests when the window is hidden or you pause it; with reduced motion on, it starts paused on its first frame. An error shows under the pane with its line. See [docs/examples/animations.md](docs/examples/animations.md).
 
 ## Settings
 
@@ -125,11 +125,11 @@ Flags, environment variables, or a `.env` next to where you run it, in that orde
 
 ```sh
 bin/setup      # install, .env, Playwright's browsers, checks for cargo
-bin/dev -o     # server plus Vite on examples/, opens the browser
+bin/dev -o     # server plus Vite on docs/examples/, opens the browser
 bin/test       # Rust and UI unit tests, build, browser smoke tests on three engines
 bin/install    # build, then symlink target/release/leaf into ~/.local/bin
 ```
 
-`examples/` is the living demo: every feature has a file there, and `leaf open examples` is how to see it.
+`docs/examples/` is the living demo: [its README](docs/examples/README.md) maps every feature to a page, and `leaf docs/examples` is how to see it.
 
 The Rust side is a Cargo workspace in `crates/`: `leaf-protocol` (the message types, tested against the JSON Schema export), `leaf-core` (disk, watcher, preferences, and the transport-free engine), and `leaf-app` (the `leaf` binary: the window, serve mode, the CLI). The web side is in `packages/`: `protocol` (the message schemas, the source of truth both sides are tested against) and `ui` (the React reader that runs in the window and in browsers). Design docs live in `.superpowers/specs/`, plans in `.superpowers/plans/`.

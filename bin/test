@@ -18,6 +18,6 @@ npm run build --if-present -w @leaf/ui
 cargo test --workspace --release
 npm test
 $unit_only && exit 0
-# The smoke test drives the real server on examples/ with the built UI.
+# The smoke test drives the real server on docs/examples/ with the built UI.
 bin/build
 LEAF_BIN="$(pwd)/target/release/leaf" npm run e2e -w @leaf/ui

@@ -2,7 +2,7 @@
 set -euo pipefail
 cd "$(dirname "$0")/.."
 
-usage() { echo "usage: bin/run [leaf args...]    run the leaf CLI from source, e.g. bin/run open examples -l debug"; }
+usage() { echo "usage: bin/run [leaf args...]    run the leaf CLI from source, e.g. bin/run open docs/examples -l debug"; }
 [[ "${1:-}" == "--help" && $# -eq 1 ]] && { usage; exit 0; }
 
 exec cargo run -q -p leaf-app -- "$@"
