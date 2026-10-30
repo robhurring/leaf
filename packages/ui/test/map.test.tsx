@@ -149,5 +149,6 @@ describe('maps', () => {
     render(block('map', 'from: ./many.csv\n'));
     expect(await screen.findByText(/first 20,000 of 20,001/)).toBeTruthy();
     expect(features()).toHaveLength(20000);
-  });
+    // Twenty thousand elements take happy-dom a few seconds when the suite runs in parallel.
+  }, 20000);
 });
