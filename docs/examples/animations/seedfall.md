@@ -1,6 +1,6 @@
 # Seedfall
 
-A whole game in one ` ```canvas ` block. A cloud drifts along the top: move it with the mouse (or click the pane, then ← and →) and click or press space to drop a seed. The seed bounces down through the pebbles, lighting each one it touches, and lands in a pot. Every pebble lit on the way down adds to that drop's score, and the pots pay more toward the edges. Each pot grows a flower as seeds land in it. Ten seeds a round.
+A whole game in one ` ```canvas ` block. A cloud drifts along the top: move it with the mouse (or click the pane, then ← and →) and click or press space to drop a seed. The seed bounces down through the pebbles, lighting each one it touches, and lands in a pot. Every pebble lit on the way down adds to that drop's score, and the pots pay more toward the edges. Each pot grows a flower as seeds land in it. Ten seeds a round, and you can click as fast as you like: every seed falls on its own.
 
 Open the zoomed view to play it big.
 
@@ -12,9 +12,9 @@ const POTS = [5, 2, 1, 3, 1, 2, 5]; // points per pot, left to right
 const R = 6; // a seed's radius
 
 let cloudX = width / 2;
-let seed = null; // the falling seed: { x, y, vx, vy, lit }
+let seeds = []; // falling seeds: { x, y, vx, vy, hit: Set of pebbles touched }
 let pebbles = [];
-let left, score, best = 0, last = null, grown, sparks = [];
+let left, score, best = 0, popups = [], grown, sparks = [];
 
 function layout() {
   pebbles = [];
@@ -34,7 +34,7 @@ function layout() {
     if (row.at(-1) < width - 24) row.push(width - 10);
     for (const x of row)
       // A little jitter, so no two runs fall the same.
-      pebbles.push({ x: x + (Math.random() - 0.5) * 4, y: top + r * down, r: 7, lit: 0 });
+      pebbles.push({ x: x + (Math.random() - 0.5) * 4, y: top + r * down, r: 7, glow: 0 });
   }
 }
 
@@ -48,14 +48,14 @@ function newRound() {
 const potWidth = () => width / POTS.length;
 const potTop = () => height - 64;
 
+// Drop as fast as you can click: every seed falls on its own.
 function drop() {
-  if (seed || left === 0) {
-    if (left === 0 && !seed) newRound();
+  if (left === 0) {
+    if (seeds.length === 0) newRound();
     return;
   }
   left--;
-  seed = { x: cloudX, y: 52, vx: (Math.random() - 0.5) * 0.05, vy: 0, lit: 0 };
-  for (const p of pebbles) p.lit = 0;
+  seeds.push({ x: cloudX, y: 52, vx: (Math.random() - 0.5) * 0.05, vy: 0, hit: new Set() });
 }
 
 canvas.addEventListener('pointermove', (e) => {
@@ -75,7 +75,12 @@ addEventListener('keydown', (e) => {
 });
 
 function step(dt) {
-  if (!seed) return;
+  for (const p of pebbles) p.glow = Math.max(0, p.glow - dt / 1200);
+  for (const seed of seeds) fall(seed, dt);
+  seeds = seeds.filter((seed) => !seed.landed);
+}
+
+function fall(seed, dt) {
   seed.vy += GRAVITY * dt;
   seed.x += seed.vx * dt;
   seed.y += seed.vy * dt;
@@ -97,21 +102,21 @@ function step(dt) {
       seed.vy -= (1 + BOUNCE) * along * ny;
       seed.vx += (Math.random() - 0.5) * 0.02;
     }
-    if (!p.lit) {
-      p.lit = 1;
-      seed.lit++;
+    p.glow = 1;
+    if (!seed.hit.has(p)) {
+      seed.hit.add(p);
       sparks.push({ x: p.x, y: p.y, age: 0 });
     }
   }
   // Pot walls catch the seed.
   if (seed.y > potTop()) {
     const i = Math.max(0, Math.min(POTS.length - 1, Math.floor(seed.x / potWidth())));
-    const points = POTS[i] * Math.max(1, seed.lit);
+    const points = POTS[i] * Math.max(1, seed.hit.size);
     score += points;
     best = Math.max(best, score);
     grown[i]++;
-    last = { text: `+${points}`, x: (i + 0.5) * potWidth(), y: potTop() - 10, age: 0 };
-    seed = null;
+    popups.push({ text: `+${points}`, x: (i + 0.5) * potWidth(), y: potTop() - 10, age: 0 });
+    seed.landed = true;
   }
 }
 
@@ -159,21 +164,25 @@ onFrame((t, frameDt) => {
   for (const [dx, dy, r] of [[-16, 4, 13], [0, -4, 17], [17, 4, 12], [8, 8, 11], [-6, 8, 11]])
     ctx.moveTo(cloudX + dx + r, 30 + dy), ctx.arc(cloudX + dx, 30 + dy, r, 0, Math.PI * 2);
   ctx.fill();
-  if (!seed && left > 0) {
+  if (left > 0) {
     ctx.fillStyle = '#8b5e34';
     ctx.beginPath();
     ctx.ellipse(cloudX, 52, R, R * 0.75, 0.4, 0, Math.PI * 2);
     ctx.fill();
   }
 
-  // Pebbles, glowing once a seed has touched them on this drop.
+  // Pebbles, glowing where a seed just touched them.
   for (const p of pebbles) {
-    ctx.fillStyle = p.lit ? '#d29922' : dark ? '#3d444d' : '#c7ced6';
+    ctx.fillStyle = dark ? '#3d444d' : '#c7ced6';
     ctx.beginPath();
     ctx.arc(p.x, p.y, p.r, 0, Math.PI * 2);
     ctx.fill();
-    if (p.lit) {
-      ctx.strokeStyle = 'rgba(210,153,34,0.35)';
+    if (p.glow > 0) {
+      ctx.globalAlpha = p.glow;
+      ctx.fillStyle = '#d29922';
+      ctx.fill();
+      ctx.globalAlpha = 1;
+      ctx.strokeStyle = `rgba(210,153,34,${0.35 * p.glow})`;
       ctx.lineWidth = 4;
       ctx.stroke();
     }
@@ -187,8 +196,8 @@ onFrame((t, frameDt) => {
     ctx.stroke();
   }
 
-  // The falling seed.
-  if (seed) {
+  // The falling seeds.
+  for (const seed of seeds) {
     ctx.fillStyle = '#8b5e34';
     ctx.beginPath();
     ctx.ellipse(seed.x, seed.y, R, R * 0.75, Math.atan2(seed.vy, seed.vx), 0, Math.PI * 2);
@@ -214,11 +223,14 @@ onFrame((t, frameDt) => {
     flower(x + w / 2, potTop(), grown[i], dark);
   });
 
-  if (last && (last.age += frameDt) < 900) {
+  popups = popups.filter((u) => (u.age += frameDt) < 900);
+  for (const u of popups) {
     ctx.fillStyle = ink;
+    ctx.globalAlpha = 1 - u.age / 900;
     ctx.font = '700 20px system-ui, sans-serif';
     ctx.textAlign = 'center';
-    ctx.fillText(last.text, last.x, last.y - last.age / 30);
+    ctx.fillText(u.text, u.x, u.y - u.age / 30);
+    ctx.globalAlpha = 1;
   }
 
   // Score and seeds left.
@@ -229,6 +241,10 @@ onFrame((t, frameDt) => {
   ctx.fillStyle = muted;
   ctx.font = '13px system-ui, sans-serif';
   ctx.fillText(`best ${best}`, 14, 44);
-  ctx.fillText(left || seed ? `${left} seeds left` : 'click for a new round', 14, 62);
+  ctx.fillText(
+    left || seeds.length ? `${left} seeds left` : 'click for a new round',
+    14,
+    62,
+  );
 });
 ```
