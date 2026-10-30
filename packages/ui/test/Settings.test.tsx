@@ -54,3 +54,29 @@ describe('Settings', () => {
     expect(onClose).toHaveBeenCalledTimes(2);
   });
 });
+
+describe('Settings: windows', () => {
+  beforeEach(() => useUi.setState({ openIn: 'window', reopenTabs: false }));
+
+  it('opens new things in a new window, and doesn’t reopen tabs, until told otherwise', () => {
+    render(<Settings onClose={() => {}} />);
+    const win = screen.getByRole('radio', { name: 'In a new window' }) as HTMLInputElement;
+    const tab = screen.getByRole('radio', {
+      name: 'In a new tab of the front window',
+    }) as HTMLInputElement;
+    expect(win.checked).toBe(true);
+    expect(tab.checked).toBe(false);
+    const reopen = screen.getByRole('checkbox', {
+      name: 'Reopen my tabs when leaf starts',
+    }) as HTMLInputElement;
+    expect(reopen.checked).toBe(false);
+  });
+
+  it('switches to tabs and to reopening them', () => {
+    render(<Settings onClose={() => {}} />);
+    fireEvent.click(screen.getByRole('radio', { name: 'In a new tab of the front window' }));
+    expect(useUi.getState().openIn).toBe('tab');
+    fireEvent.click(screen.getByRole('checkbox', { name: 'Reopen my tabs when leaf starts' }));
+    expect(useUi.getState().reopenTabs).toBe(true);
+  });
+});

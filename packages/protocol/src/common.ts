@@ -42,6 +42,10 @@ export const Preferences = z.object({
   outlineWidth: z.number().int().min(160).max(480).optional(),
   /** The kinds of link (URL schemes) the app window hands to other apps. */
   linkSchemes: z.array(z.string().regex(/^[a-z][a-z0-9+.-]*$/)).optional(),
+  /** Where the app opens a file or folder: a new window (the default) or a new tab. */
+  openIn: z.enum(['tab', 'window']).optional(),
+  /** Reopen the windows and tabs that were open when the app quit; off by default. */
+  reopenTabs: z.boolean().optional(),
 });
 export type Preferences = z.infer<typeof Preferences>;
 

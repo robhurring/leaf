@@ -2692,6 +2692,30 @@ html[data-resizing] .leaf-blame-resizer::after {
   color: var(--leaf-text-2);
   line-height: 1.45;
 }
+.leaf-settings-choice {
+  margin: 6px 0 10px;
+  padding: 0;
+  border: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.leaf-settings-choice legend {
+  padding: 0;
+  margin-bottom: 6px;
+}
+.leaf-settings-choice label,
+.leaf-settings-check {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.leaf-settings-check + .leaf-settings-hint {
+  margin-top: 4px;
+}
+.leaf-settings-section + .leaf-settings-section {
+  border-top: 1px solid var(--leaf-line);
+}
 .leaf-settings-kinds {
   display: flex;
   flex-wrap: wrap;

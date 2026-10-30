@@ -14,6 +14,8 @@ export const PREFERENCE_KEYS = [
   'treeWidth',
   'outlineWidth',
   'linkSchemes',
+  'openIn',
+  'reopenTabs',
 ] as const satisfies readonly (keyof Preferences)[];
 
 let applying = false;

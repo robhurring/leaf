@@ -58,6 +58,16 @@
                 "type": "string",
                 "pattern": "^[a-z][a-z0-9+.-]*$"
               }
+            },
+            "openIn": {
+              "type": "string",
+              "enum": [
+                "tab",
+                "window"
+              ]
+            },
+            "reopenTabs": {
+              "type": "boolean"
             }
           },
           "additionalProperties": false

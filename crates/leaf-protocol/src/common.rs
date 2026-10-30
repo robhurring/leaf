@@ -141,6 +141,22 @@ pub struct Preferences {
     /// DEFAULT_LINK_SCHEMES when unset.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub link_schemes: Option<Vec<String>>,
+    /// Where the app opens a file or folder: a new window (the default) or a new tab.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub open_in: Option<OpenIn>,
+    /// Reopen the windows and tabs that were open when the app quit; off by default.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub reopen_tabs: Option<bool>,
+}
+
+/// Where the app opens a file or folder it is asked to open.
+#[derive(Serialize, Deserialize, Clone, Copy, Debug, PartialEq, Eq)]
+#[serde(rename_all = "lowercase")]
+pub enum OpenIn {
+    /// A new tab in the front window.
+    Tab,
+    /// A window of its own.
+    Window,
 }
 
 /// The link kinds the app window opens until the person changes the list: the web,
@@ -172,7 +188,17 @@ impl Preferences {
                 .link_schemes
                 .clone()
                 .or_else(|| self.link_schemes.clone()),
+            open_in: patch.open_in.or(self.open_in),
+            reopen_tabs: patch.reopen_tabs.or(self.reopen_tabs),
         }
+    }
+
+    pub fn open_in_or_default(&self) -> OpenIn {
+        self.open_in.unwrap_or(OpenIn::Window)
+    }
+
+    pub fn reopen_tabs_or_default(&self) -> bool {
+        self.reopen_tabs.unwrap_or(false)
     }
 }
 
@@ -191,4 +217,43 @@ pub enum Change {
     Modified,
     Deleted,
     Renamed,
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn merged_keeps_open_in_and_reopen_tabs() {
+        let base = Preferences {
+            open_in: Some(OpenIn::Window),
+            reopen_tabs: Some(true),
+            ..Default::default()
+        };
+        let patch = Preferences {
+            open_in: Some(OpenIn::Tab),
+            ..Default::default()
+        };
+        let m = base.merged(&patch);
+        assert_eq!(m.open_in, Some(OpenIn::Tab));
+        assert_eq!(m.reopen_tabs, Some(true));
+        assert_eq!(base.merged(&Preferences::default()), base);
+    }
+
+    #[test]
+    fn open_in_defaults_to_window_and_tabs_do_not_reopen() {
+        let p = Preferences::default();
+        assert_eq!(p.open_in_or_default(), OpenIn::Window);
+        assert!(!p.reopen_tabs_or_default());
+        let json = serde_json::to_value(Preferences {
+            open_in: Some(OpenIn::Tab),
+            reopen_tabs: Some(false),
+            ..Default::default()
+        })
+        .unwrap();
+        assert_eq!(
+            json,
+            serde_json::json!({ "openIn": "tab", "reopenTabs": false })
+        );
+    }
 }

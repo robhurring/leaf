@@ -41,6 +41,12 @@ export type UiState = {
   /** The kinds of link (URL schemes) the app window hands to other apps. */
   linkSchemes: string[];
   setLinkSchemes(v: string[]): void;
+  /** Where the app opens a file or folder: a new window, or a new tab of the front one. */
+  openIn: 'tab' | 'window';
+  setOpenIn(v: 'tab' | 'window'): void;
+  /** Reopen the windows and tabs that were open when the app quit. */
+  reopenTabs: boolean;
+  setReopenTabs(v: boolean): void;
   setTreeOpen(v: boolean): void;
   setOutlineOpen(v: boolean): void;
   setNumbering(v: boolean): void;
@@ -66,6 +72,8 @@ export const UI_DEFAULTS = {
   blame: false,
   blameWidth: 220,
   linkSchemes: [...DEFAULT_LINK_SCHEMES],
+  openIn: 'window' as 'tab' | 'window',
+  reopenTabs: false,
 };
 
 export const useUi = create<UiState>()(
@@ -74,6 +82,8 @@ export const useUi = create<UiState>()(
       ...UI_DEFAULTS,
       setTreeOpen: (treeOpen) => set({ treeOpen }),
       setLinkSchemes: (linkSchemes) => set({ linkSchemes }),
+      setOpenIn: (openIn) => set({ openIn }),
+      setReopenTabs: (reopenTabs) => set({ reopenTabs }),
       setShowGit: (showGit) => set({ showGit }),
       setBlame: (blame) => set({ blame }),
       setBlameWidth: (px) =>

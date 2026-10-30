@@ -1,4 +1,5 @@
-// Settings: for now, which kinds of link the app window opens in other apps.
+// Settings: where the app opens things (windows or tabs), and which kinds of link the
+// app window opens in other apps.
 import { useEffect, useRef, useState, type FormEvent } from 'react';
 import { DEFAULT_LINK_SCHEMES } from '@leaf/protocol';
 import { useUi } from '../store/ui.js';
@@ -22,6 +23,10 @@ function parseScheme(raw: string): { scheme: string } | { error: string } {
 export function Settings({ onClose }: { onClose(): void }) {
   const schemes = useUi((s) => s.linkSchemes);
   const setSchemes = useUi((s) => s.setLinkSchemes);
+  const openIn = useUi((s) => s.openIn);
+  const setOpenIn = useUi((s) => s.setOpenIn);
+  const reopenTabs = useUi((s) => s.reopenTabs);
+  const setReopenTabs = useUi((s) => s.setReopenTabs);
   const [draft, setDraft] = useState('');
   const [error, setError] = useState<string | null>(null);
   const input = useRef<HTMLInputElement>(null);
@@ -60,6 +65,41 @@ export function Settings({ onClose }: { onClose(): void }) {
             <X size={14} />
           </button>
         </header>
+        <section className="leaf-settings-section" aria-labelledby="leaf-settings-windows">
+          <h3 id="leaf-settings-windows">Windows</h3>
+          <fieldset className="leaf-settings-choice">
+            <legend>When leaf opens a file or folder:</legend>
+            <label>
+              <input
+                type="radio"
+                name="leaf-open-in"
+                checked={openIn === 'tab'}
+                onChange={() => setOpenIn('tab')}
+              />
+              In a new tab of the front window
+            </label>
+            <label>
+              <input
+                type="radio"
+                name="leaf-open-in"
+                checked={openIn === 'window'}
+                onChange={() => setOpenIn('window')}
+              />
+              In a new window
+            </label>
+          </fieldset>
+          <label className="leaf-settings-check">
+            <input
+              type="checkbox"
+              checked={reopenTabs}
+              onChange={(e) => setReopenTabs(e.target.checked)}
+            />
+            Reopen my tabs when leaf starts
+          </label>
+          <p className="leaf-settings-hint">
+            Off: quitting closes your tabs, and leaf starts fresh.
+          </p>
+        </section>
         <section className="leaf-settings-section" aria-labelledby="leaf-settings-links">
           <h3 id="leaf-settings-links">Links to other apps</h3>
           <p className="leaf-settings-hint">
