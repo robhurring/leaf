@@ -225,6 +225,24 @@ describe('live pane harness', () => {
     expect((window as unknown as { count: number }).count).toBe(3);
   });
 
+  it('a pinch zooms a canvas drawing around the fingers; double click goes back', async () => {
+    await run('onFrame(() => {});');
+    // The context the block itself was given.
+    const ctx = (window as unknown as { ctx: { setTransform: ReturnType<typeof vi.fn> } }).ctx;
+    const scaleNow = () => ctx.setTransform.mock.calls.at(-1)![0] as number;
+    frame();
+    const base = scaleNow();
+    const pinch = new WheelEvent('wheel', { deltaY: -50, bubbles: true, cancelable: true });
+    Object.defineProperty(pinch, 'ctrlKey', { value: true });
+    document.dispatchEvent(pinch);
+    expect(pinch.defaultPrevented).toBe(true);
+    frame();
+    expect(scaleNow()).toBeGreaterThan(base);
+    document.dispatchEvent(new MouseEvent('dblclick', { bubbles: true }));
+    frame();
+    expect(scaleNow()).toBe(base);
+  });
+
   it('hands back a snapshot of its picture when asked', async () => {
     HTMLCanvasElement.prototype.toDataURL = () => 'data:image/png;base64,AAAA';
     await run('onFrame(() => {});');

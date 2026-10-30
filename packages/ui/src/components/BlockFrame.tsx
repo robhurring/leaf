@@ -2,7 +2,15 @@
 // zoom and pan in place, the zoomed view (the Stage), copy as image and (for SVG
 // output) download.
 // It also registers the block as live so sticky ink can be told from stale ink.
-import { useContext, useEffect, useRef, useState, type PointerEvent, type ReactNode } from 'react';
+import {
+  useCallback,
+  useContext,
+  useEffect,
+  useRef,
+  useState,
+  type PointerEvent,
+  type ReactNode,
+} from 'react';
 import { createPortal } from 'react-dom';
 import { DocToolsContext } from './Properties.js';
 import {
@@ -19,6 +27,7 @@ import {
 } from '../icons/index.js';
 import { useAnnotations } from '../store/annotations.js';
 import { useStage } from '../store/stage.js';
+import { usePinch } from '../stage/usePinch.js';
 import {
   copyCanvas,
   copyFrame,
@@ -80,8 +89,24 @@ export function BlockFrame({
   const zoomable = visual && !!viewer.stage?.zoom && !slot && !showSource;
   const moved = view.x !== 0 || view.y !== 0 || view.scale !== 1;
   const zoom = (factor: number) => setView((v) => ({ ...v, scale: clampScale(v.scale * factor) }));
+  // A pinch zooms around the fingers. The view scales about its center, so keep the
+  // point under the fingers where it is.
+  const viewEl = useRef<HTMLDivElement>(null);
+  const pinch = useCallback((p: { x: number; y: number }, factor: number) => {
+    const el = viewEl.current;
+    if (!el) return;
+    const cx = el.offsetWidth / 2;
+    const cy = el.offsetHeight / 2;
+    setView((v) => {
+      const scale = clampScale(v.scale * factor);
+      const k = scale / v.scale;
+      return { scale, x: p.x - cx - (p.x - cx - v.x) * k, y: p.y - cy - (p.y - cy - v.y) * k };
+    });
+  }, []);
+  usePinch(viewEl, pinch, zoomable);
   const onPointerDown = (e: PointerEvent) => {
-    if (!panning || e.button !== 0) return;
+    // Zoomed in, a drag pans; otherwise only with the hand chosen.
+    if (!(panning || view.scale > 1) || e.button !== 0) return;
     e.preventDefault();
     drag.current = { x: e.clientX, y: e.clientY };
     (e.currentTarget as Element).setPointerCapture?.(e.pointerId);
@@ -279,6 +304,7 @@ export function BlockFrame({
         <SourceView code={source} lang={sourceLang(viewer.id, lang)} />
       ) : zoomable ? (
         <div
+          ref={viewEl}
           className="leaf-block-view"
           data-panning={panning ? '' : undefined}
           style={
@@ -290,6 +316,7 @@ export function BlockFrame({
           onPointerMove={onPointerMove}
           onPointerUp={onPointerUp}
           onPointerCancel={onPointerUp}
+          onDoubleClick={() => moved && setView(HOME)}
         >
           {children}
         </div>

@@ -142,7 +142,10 @@ describe('BlockFrame', () => {
     expect(toggle.getAttribute('aria-pressed')).toBe('false');
     fireEvent.click(toggle);
     expect(screen.queryByTestId('picture')).toBeNull();
-    expect((await screen.findByText(/graph TD/)).closest('.leaf-block-source')).toBeTruthy();
+    // Highlighting splits the text into spans, so read the whole source view.
+    await waitFor(() =>
+      expect(document.querySelector('.leaf-block-source')?.textContent).toContain('graph TD'),
+    );
     // No zooming a page of text.
     expect(screen.queryByRole('button', { name: 'Zoom in' })).toBeNull();
     fireEvent.click(screen.getByRole('button', { name: 'Show source' }));
@@ -175,6 +178,38 @@ describe('BlockFrame', () => {
     await waitFor(() =>
       expect(imageMocks.copyFrame).toHaveBeenCalledWith(screen.getByTestId('frame')),
     );
+  });
+
+  it('a pinch zooms a diagram in place; a scroll is left to the page', () => {
+    render(
+      <BlockFrame viewer={mermaid} props={props} lang="mermaid">
+        <div className="leaf-diagram">
+          <svg width="10" height="10" />
+        </div>
+      </BlockFrame>,
+    );
+    const view = document.querySelector('.leaf-block-view') as HTMLElement;
+    const scroll = new WheelEvent('wheel', { deltaY: 40, bubbles: true, cancelable: true });
+    act(() => {
+      view.dispatchEvent(scroll);
+    });
+    expect(scroll.defaultPrevented).toBe(false);
+    expect(view.style.transform).toBe('');
+    const pinch = new WheelEvent('wheel', { deltaY: -40, bubbles: true, cancelable: true });
+    // How a trackpad reports a pinch (happy-dom drops ctrlKey from the init).
+    Object.defineProperty(pinch, 'ctrlKey', { value: true });
+    act(() => {
+      view.dispatchEvent(pinch);
+    });
+    expect(pinch.defaultPrevented).toBe(true);
+    expect(view.style.transform).toMatch(/scale\(1\.[0-9]+\)/);
+    // Zoomed in, a drag pans without choosing the hand first.
+    fireEvent.pointerDown(view, { button: 0, clientX: 10, clientY: 10, pointerId: 1 });
+    fireEvent.pointerMove(view, { clientX: 40, clientY: 30, pointerId: 1 });
+    fireEvent.pointerUp(view, { pointerId: 1 });
+    expect(view.style.transform).toMatch(/translate\(.*30.*px, .*20.*px\)/);
+    fireEvent.doubleClick(view);
+    expect(view.style.transform).toBe('');
   });
 
   it('a code block offers only copy', () => {

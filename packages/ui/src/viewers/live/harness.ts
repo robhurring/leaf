@@ -206,6 +206,8 @@ export function harness(win: Window): void {
   let firstOnly = boot.paused;
   let drewFirst = false;
   let draw: (() => void) | null = null;
+  // Runs before each frame's callbacks (a canvas's zoom).
+  let beforeFrame: (() => void) | null = null;
   let manual = false;
   const loop = (ts: number) => {
     if (failed) return;
@@ -213,6 +215,7 @@ export function harness(win: Window): void {
     last = ts;
     elapsed += dt;
     try {
+      if (beforeFrame) beforeFrame();
       for (const cb of callbacks) cb(elapsed, dt);
       if (draw && !manual) draw();
     } catch (e) {
@@ -251,11 +254,72 @@ export function harness(win: Window): void {
     doc.body.append(canvas);
     const ctx = canvas.getContext('2d')!;
     let { width, height } = size();
+    // A pinch zooms the drawing around the fingers; once zoomed a drag pans and a
+    // double click goes back. Scrolling is left alone, and a tap still reaches the block.
+    let zoom = { k: 1, x: 0, y: 0 };
+    const applyView = () =>
+      ctx.setTransform(dpr * zoom.k, 0, 0, dpr * zoom.k, dpr * zoom.x, dpr * zoom.y);
+    const settle = (k: number, x: number, y: number) => {
+      zoom = {
+        k,
+        x: Math.min(0, Math.max(width - width * k, x)),
+        y: Math.min(0, Math.max(height - height * k, y)),
+      };
+    };
+    const zoomAt = (px: number, py: number, factor: number) => {
+      const k = Math.min(8, Math.max(1, zoom.k * factor));
+      const ratio = k / zoom.k;
+      settle(k, px - (px - zoom.x) * ratio, py - (py - zoom.y) * ratio);
+    };
+    doc.addEventListener(
+      'wheel',
+      (e) => {
+        if (!e.ctrlKey) return;
+        e.preventDefault();
+        // A trackpad pinch sends small steps; a mouse's ctrl+wheel big ones. Cap each step.
+        zoomAt(
+          e.clientX || 0,
+          e.clientY || 0,
+          Math.min(1.25, Math.max(0.8, Math.exp(-e.deltaY * 0.01))),
+        );
+      },
+      { passive: false },
+    );
+    let lastScale = 1;
+    const onGesture = (e: Event) => {
+      e.preventDefault();
+      const g = e as Event & { scale: number; clientX: number; clientY: number };
+      if (e.type === 'gesturestart') lastScale = 1;
+      if (e.type !== 'gesturechange' || !(g.scale > 0)) return;
+      zoomAt(g.clientX || 0, g.clientY || 0, g.scale / lastScale);
+      lastScale = g.scale;
+    };
+    for (const t of ['gesturestart', 'gesturechange', 'gestureend'])
+      doc.addEventListener(t, onGesture, { passive: false });
+    let pan: { x: number; y: number; moved: boolean } | null = null;
+    doc.addEventListener('pointerdown', (e) => {
+      if (zoom.k > 1) pan = { x: e.clientX, y: e.clientY, moved: false };
+    });
+    doc.addEventListener('pointermove', (e) => {
+      if (!pan) return;
+      const dx = e.clientX - pan.x;
+      const dy = e.clientY - pan.y;
+      if (!pan.moved && Math.hypot(dx, dy) < 4) return;
+      pan = { x: e.clientX, y: e.clientY, moved: true };
+      settle(zoom.k, zoom.x + dx, zoom.y + dy);
+    });
+    doc.addEventListener('pointerup', () => {
+      pan = null;
+    });
+    doc.addEventListener('dblclick', () => settle(1, 0, 0));
+    beforeFrame = applyView;
+
     const fit = () => {
       ({ width, height } = size());
       canvas.width = Math.round(width * dpr);
       canvas.height = Math.round(height * dpr);
-      ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+      settle(zoom.k, zoom.x, zoom.y);
+      applyView();
     };
     fit();
     win.addEventListener('resize', fit);

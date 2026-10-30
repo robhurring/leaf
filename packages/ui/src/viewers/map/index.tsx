@@ -22,5 +22,6 @@ export const map: Viewer = {
       <MapView {...p} fill />
     </Suspense>
   ),
-  stage: { pan: true, zoom: true, draw: true },
+  // The map zooms itself; the zoomed view gives it the whole area.
+  stage: {},
 };

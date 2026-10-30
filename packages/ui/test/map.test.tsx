@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach } from 'vitest';
-import { render, screen, waitFor } from '@testing-library/react';
+import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import type { ReactElement } from 'react';
 import type { FileMessage } from '@leaf/protocol';
 import { viewers } from '../src/viewers/index.js';
@@ -68,6 +68,32 @@ describe('maps', () => {
       'name: Office',
     );
     expect(document.querySelector('path.leaf-map-feature')).toBeTruthy();
+  });
+
+  it('a pinch zooms the map itself: points keep their size, the view closes in', async () => {
+    render(block('geojson', GEO));
+    await waitFor(() => expect(features()).toHaveLength(2));
+    const svg = document.querySelector('.leaf-map svg') as SVGSVGElement;
+    const layer = svg.querySelector('.leaf-map-view') as SVGGElement;
+    const point = svg.querySelector('circle.leaf-map-feature') as SVGCircleElement;
+    const r0 = Number(point.getAttribute('r'));
+    const scroll = new WheelEvent('wheel', { deltaY: 40, bubbles: true, cancelable: true });
+    act(() => {
+      svg.dispatchEvent(scroll);
+    });
+    expect(scroll.defaultPrevented).toBe(false);
+    const pinch = new WheelEvent('wheel', { deltaY: -60, bubbles: true, cancelable: true });
+    Object.defineProperty(pinch, 'ctrlKey', { value: true });
+    act(() => {
+      svg.dispatchEvent(pinch);
+    });
+    expect(pinch.defaultPrevented).toBe(true);
+    const k = Number(/scale\(([\d.]+)\)/.exec(layer.getAttribute('transform')!)![1]);
+    expect(k).toBeGreaterThan(1);
+    // Drawn at the same size on screen: the radius shrinks by the zoom.
+    expect(Number(point.getAttribute('r'))).toBeCloseTo(r0 / k, 3);
+    fireEvent.doubleClick(svg);
+    expect(layer.getAttribute('transform')).toBe('translate(0,0) scale(1)');
   });
 
   it('reads TopoJSON', async () => {

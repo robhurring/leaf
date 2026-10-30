@@ -2907,3 +2907,11 @@ html[data-resizing] .leaf-blame-resizer::after {
   max-height: none;
   padding: 16px 24px;
 }
+/* Zoomed in, a map pans with a drag. */
+.leaf-map svg[data-zoomed] {
+  cursor: grab;
+  touch-action: none;
+}
+.leaf-map svg[data-zoomed]:active {
+  cursor: grabbing;
+}
