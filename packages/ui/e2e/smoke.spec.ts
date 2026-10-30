@@ -146,9 +146,9 @@ test('diagrams render, zoom into the Stage, and sticky ink survives navigation',
   await page.getByRole('button', { name: 'Zoom in' }).last().click();
   await expect(layer).not.toHaveCSS('transform', 'none');
 
-  await page.getByRole('button', { name: 'Pencil' }).click();
-  await page.getByRole('button', { name: 'Green' }).click();
-  await page.getByRole('button', { name: 'Sticky ink' }).click();
+  await stage.getByRole('button', { name: 'Pencil' }).click();
+  await stage.getByRole('button', { name: 'Green' }).click();
+  await stage.getByRole('button', { name: 'Sticky ink' }).click();
   const box = (await page.getByTestId('stage-viewport').boundingBox())!;
   await page.mouse.move(box.x + 200, box.y + 200);
   await page.mouse.down();
@@ -291,6 +291,53 @@ test('charts and maps draw, in documents and as files of their own', async ({ pa
   await expect(pane).toHaveAttribute('data-state', /running|error/);
   expect((await pane.boundingBox())!.height).toBeGreaterThan(300);
   expect(errors).toEqual([]);
+});
+
+test('draw blocks and .draw files take strokes, undo them, and copy the picture', async ({
+  page,
+}) => {
+  const scribble = async (x: number, y: number) => {
+    await page.mouse.move(x, y);
+    await page.mouse.down();
+    await page.mouse.move(x + 60, y + 30, { steps: 6 });
+    await page.mouse.move(x + 120, y, { steps: 6 });
+    await page.mouse.up();
+  };
+  await page.goto('/diagrams.md');
+  const sheet = page.locator('.leaf-drawing').first();
+  // The diagrams above it change the page's height as they finish drawing: measure the
+  // sheet once it is on screen and holding still.
+  let box = { x: 0, y: 0, width: 0, height: 0 };
+  await expect(async () => {
+    await sheet.scrollIntoViewIfNeeded();
+    const before = (await sheet.boundingBox())!;
+    await page.waitForTimeout(300);
+    box = (await sheet.boundingBox())!;
+    expect(box.y).toBe(before.y);
+    expect(box.y).toBeGreaterThanOrEqual(0);
+    expect(box.y + box.height).toBeLessThanOrEqual(page.viewportSize()!.height);
+  }).toPass({ timeout: 15000 });
+  await scribble(box.x + 40, box.y + 60);
+  await scribble(box.x + 40, box.y + 160);
+  const inks = sheet.locator('path.leaf-ink');
+  await expect(inks).toHaveCount(2);
+  await page.keyboard.press(process.platform === 'darwin' ? 'Meta+z' : 'Control+z');
+  await expect(inks).toHaveCount(1);
+  await sheet.hover();
+  const tools = page
+    .locator('.leaf-frame', { has: sheet })
+    .getByRole('group', { name: 'Block tools' });
+  await expect(tools.getByRole('button', { name: 'Download SVG' })).toBeVisible();
+
+  await page.goto('/diagrams/whiteboard.draw');
+  const board = page.locator('.leaf-drawing');
+  const b = (await board.boundingBox())!;
+  expect(b.height).toBeGreaterThan(300);
+  await scribble(b.x + b.width / 3, b.y + b.height / 2);
+  await expect(board.locator('path.leaf-ink')).toHaveCount(1);
+  const fileTools = page.getByRole('toolbar', { name: 'File tools' });
+  await fileTools.getByRole('button', { name: 'Undo' }).click();
+  await expect(board.locator('path.leaf-ink')).toHaveCount(0);
 });
 
 test('a deck in a document has the deck tools', async ({ page }) => {

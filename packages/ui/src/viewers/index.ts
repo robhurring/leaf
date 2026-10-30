@@ -17,6 +17,7 @@ import { plantuml } from './plantuml/index.js';
 import { image } from './image/index.js';
 import { markdown } from './markdown/index.js';
 import { media } from './media/index.js';
+import { draw } from './draw/index.js';
 
 /** The app-wide viewer registry with the built-in viewers. */
 export const viewers = createViewerRegistry();
@@ -29,6 +30,7 @@ for (const v of [
   live,
   chart,
   map,
+  draw,
   deck,
   notebook,
   code,

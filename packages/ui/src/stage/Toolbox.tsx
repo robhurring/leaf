@@ -1,5 +1,5 @@
 // The floating toolbox on the Stage: hand, pencil, zoom, ink options.
-import { Eraser, Hand, Minus, Pin, Plus, ZoomIn } from '../icons/index.js';
+import { Eraser, Hand, Minus, Pin, Plus, Undo, ZoomIn } from '../icons/index.js';
 import { BRUSH_WIDTHS, INK_COLORS, useStage, type Brush, type InkColor } from '../store/stage.js';
 
 type Props = {
@@ -8,13 +8,14 @@ type Props = {
   onFit(): void;
   onReset(): void;
   onClear(): void;
+  onUndo(): void;
 };
 
 const COLORS: InkColor[] = ['red', 'green', 'blue'];
 const BRUSHES: Brush[] = ['small', 'medium', 'large'];
 const label = (s: string) => s[0]!.toUpperCase() + s.slice(1);
 
-export function Toolbox({ canDraw, onZoom, onFit, onReset, onClear }: Props) {
+export function Toolbox({ canDraw, onZoom, onFit, onReset, onClear, onUndo }: Props) {
   const { tool, color, brush, sticky, setTool, setColor, setBrush, setSticky } = useStage();
   const btn = (
     name: string,
@@ -70,6 +71,7 @@ export function Toolbox({ canDraw, onZoom, onFit, onReset, onClear }: Props) {
           )}
           <span className="leaf-tb-sep" />
           {btn('Sticky ink', sticky, () => setSticky(!sticky), <Pin size={15} />)}
+          {btn('Undo', undefined, onUndo, <Undo size={15} />)}
           {btn('Clear drawings', undefined, onClear, <Eraser size={15} />)}
         </>
       )}

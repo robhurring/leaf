@@ -2,6 +2,7 @@ import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { act, fireEvent, render, screen } from '@testing-library/react';
 import { Stage } from '../src/stage/Stage.js';
 import { useStage } from '../src/store/stage.js';
+import { useAnnotations } from '../src/store/annotations.js';
 import type { Viewer, ViewerProps } from '../src/viewers/types.js';
 
 const Box = (p: ViewerProps) => (
@@ -98,6 +99,7 @@ describe('Stage', () => {
       'Fit',
       'Actual size',
       'Sticky ink',
+      'Undo',
       'Clear drawings',
     ]) {
       expect(toolbox.querySelector(`[aria-label="${name}"]`), name).toBeTruthy();
@@ -170,6 +172,26 @@ describe('Stage', () => {
     expect(useStage.getState().tool).toBe('hand');
     fireEvent.keyUp(window, { key: ' ' });
     expect(useStage.getState().tool).toBe('hand');
+  });
+
+  it('Undo and Cmd-Z take back the last stroke', () => {
+    render(<Stage />);
+    act(() => useStage.getState().openStage({ docPath: 'a.md', blockHash: 'h1', viewer, props }));
+    act(() => useStage.getState().setTool('pencil'));
+    const viewport = screen.getByTestId('stage-viewport');
+    const stroke = () => {
+      fireEvent.pointerDown(viewport, { clientX: 10, clientY: 10, button: 0, pointerId: 1 });
+      fireEvent.pointerMove(viewport, { clientX: 40, clientY: 25, pointerId: 1 });
+      fireEvent.pointerUp(viewport, { pointerId: 1 });
+    };
+    stroke();
+    stroke();
+    const count = () => useAnnotations.getState().strokes.length;
+    expect(count()).toBe(2);
+    fireEvent.click(screen.getByLabelText('Undo'));
+    expect(count()).toBe(1);
+    fireEvent.keyDown(window, { key: 'z', metaKey: true });
+    expect(count()).toBe(0);
   });
 
   it('a pencil stroke starts without a text selection: pointer down is default-prevented', () => {

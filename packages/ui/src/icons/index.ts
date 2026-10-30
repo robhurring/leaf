@@ -39,3 +39,5 @@ export { Pause } from './Pause.js';
 export { Restart } from './Restart.js';
 export { StepFrame } from './StepFrame.js';
 export { Slides } from './Slides.js';
+export { Undo } from './Undo.js';
+export { Fade } from './Fade.js';

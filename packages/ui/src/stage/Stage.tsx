@@ -59,6 +59,12 @@ export function StageCanvas({ content, onClose, toolsSlot, inline = false }: Can
     };
     const onKeyDown = (e: KeyboardEvent) => {
       if (e.key === 'Escape' && close) return close();
+      // Cmd-Z (Ctrl-Z) takes back the last stroke.
+      if (canDraw && (e.metaKey || e.ctrlKey) && !e.shiftKey && e.key.toLowerCase() === 'z') {
+        if (!close && (typing(e.target) || useStage.getState().open)) return;
+        e.preventDefault();
+        return useAnnotations.getState().undo(open.docPath, open.blockHash);
+      }
       if (e.metaKey || e.ctrlKey || e.altKey) return;
       // Inline, the keys are the reader's while typing or while the pop-up is up.
       if (!close && (typing(e.target) || useStage.getState().open)) return;
@@ -246,6 +252,7 @@ export function StageCanvas({ content, onClose, toolsSlot, inline = false }: Can
       onFit={fit}
       onReset={actualSize}
       onClear={() => useAnnotations.getState().clear(open.docPath, open.blockHash)}
+      onUndo={() => useAnnotations.getState().undo(open.docPath, open.blockHash)}
     />
   );
 

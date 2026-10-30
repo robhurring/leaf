@@ -25,6 +25,8 @@ type State = {
   isLive(docPath: string, blockHash: string): boolean;
   add(stroke: Stroke): void;
   clear(docPath: string, blockHash: string): void;
+  /** Takes back the block's latest stroke. */
+  undo(docPath: string, blockHash: string): void;
   /** Drops non-sticky strokes older than INK_GONE_MS. Returns how many remain. */
   expire(now: number): number;
   /** Sticky strokes for `docPath` with a different block hash become stale (the diagram changed). */
@@ -56,6 +58,14 @@ export const useAnnotations = create<State>((set, get) => ({
     set((s) => ({
       strokes: s.strokes.filter((k) => !(k.docPath === docPath && k.blockHash === blockHash)),
     })),
+  undo: (docPath, blockHash) =>
+    set((s) => {
+      let last = -1;
+      s.strokes.forEach((k, i) => {
+        if (k.docPath === docPath && k.blockHash === blockHash) last = i;
+      });
+      return last < 0 ? s : { strokes: s.strokes.filter((_, i) => i !== last) };
+    }),
   expire: (now) => {
     set((s) => ({ strokes: s.strokes.filter((k) => k.sticky || now - k.createdAt < INK_GONE_MS) }));
     return get().strokes.length;

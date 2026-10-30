@@ -3267,3 +3267,42 @@ html[data-resizing] .leaf-blame-resizer::after {
 .leaf-nb[data-embedded] .leaf-anchor {
   display: none;
 }
+
+/* Freeform drawing: a sheet to draw on, in a block or filling a .draw file's panel. */
+.leaf-draw-board {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  outline: none;
+}
+.leaf-draw-board[data-fill] {
+  height: 100%;
+  padding: 16px;
+  box-sizing: border-box;
+}
+.leaf-drawing {
+  display: block;
+  width: 100%;
+  height: auto;
+  border-radius: 6px;
+  box-shadow: 0 0 0 1px var(--leaf-line);
+  cursor: crosshair;
+  touch-action: none;
+  user-select: none;
+  -webkit-user-select: none;
+}
+.leaf-draw-board[data-fill] .leaf-drawing {
+  flex: 1;
+  min-height: 0;
+  height: 100%;
+  box-shadow: none;
+}
+.leaf-draw-board[data-fill] .leaf-drawing rect {
+  stroke: var(--leaf-line);
+}
+.leaf-draw-bar {
+  display: flex;
+  gap: 4px;
+  align-self: flex-end;
+  margin-bottom: 8px;
+}
