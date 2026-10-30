@@ -146,3 +146,33 @@ async fn link_kinds_are_kept_clean() {
         Some(vec!["vscode".to_string(), "cursor".to_string()])
     );
 }
+
+#[tokio::test]
+async fn link_kinds_and_window_settings_survive_a_reload() {
+    use leaf_protocol::OpenIn;
+    let d = tempfile::tempdir().unwrap();
+    let store = PreferencesStore::new(d.path().join("preferences.json"));
+    store
+        .save(Preferences {
+            link_schemes: Some(vec!["https".into(), "obsidian".into()]),
+            open_in: Some(OpenIn::Tab),
+            reopen_tabs: Some(true),
+            ..Default::default()
+        })
+        .await;
+    // Another setting saved later keeps them too.
+    store
+        .save(Preferences {
+            text_pct: Some(110),
+            ..Default::default()
+        })
+        .await;
+    let loaded = store.load().await;
+    assert_eq!(
+        loaded.link_schemes,
+        Some(vec!["https".to_string(), "obsidian".to_string()])
+    );
+    assert_eq!(loaded.open_in, Some(OpenIn::Tab));
+    assert_eq!(loaded.reopen_tabs, Some(true));
+    assert_eq!(loaded.text_pct, Some(110));
+}

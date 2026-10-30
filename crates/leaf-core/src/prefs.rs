@@ -36,6 +36,9 @@ fn sanitize(value: &serde_json::Value) -> Preferences {
         "textPct": pick("textPct"),
         "treeWidth": pick("treeWidth"),
         "outlineWidth": pick("outlineWidth"),
+        "linkSchemes": pick("linkSchemes"),
+        "openIn": pick("openIn"),
+        "reopenTabs": pick("reopenTabs"),
     });
     in_range(serde_json::from_value(cleaned).unwrap_or_default())
 }
