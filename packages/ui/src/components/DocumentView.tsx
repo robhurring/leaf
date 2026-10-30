@@ -32,7 +32,10 @@ function InlineStage({
   // A file made from text (a diagram, chart, map, or animation) flips to that text.
   const [showSource, setShowSource] = useState(false);
   const hasSource =
-    viewer.id !== 'image' && props.file.encoding === 'utf8' && !!props.content?.trim();
+    viewer.id !== 'image' &&
+    !viewer.stage?.sheet &&
+    props.file.encoding === 'utf8' &&
+    !!props.content?.trim();
   useEffect(
     () => useAnnotations.getState().trackBlock(props.docPath, blockHash),
     [props.docPath, blockHash],

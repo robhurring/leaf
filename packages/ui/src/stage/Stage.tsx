@@ -12,7 +12,8 @@ import {
 import { X } from '../icons/index.js';
 import { createPortal } from 'react-dom';
 import { useStage, type StageContent, type StageTool } from '../store/stage.js';
-import { useAnnotations } from '../store/annotations.js';
+import { strokesFor, useAnnotations } from '../store/annotations.js';
+import { composeSvg, downloadText, placedPicture, svgTextToPng } from './image.js';
 import { Draw, useDrawing } from './Draw.js';
 import { Toolbox } from './Toolbox.js';
 import { contentSize, sizeSvgs } from './measure.js';
@@ -27,6 +28,8 @@ type CanvasProps = {
   toolsSlot?: HTMLElement | null;
   /** Inline: render the picture in the app's appearance rather than always light. */
   inline?: boolean;
+  /** Inside a document: a plain scroll scrolls the page; a pinch still zooms. */
+  embedded?: boolean;
 };
 
 const typing = (el: EventTarget | null) => {
@@ -34,7 +37,13 @@ const typing = (el: EventTarget | null) => {
   return !!t && (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.isContentEditable);
 };
 
-export function StageCanvas({ content, onClose, toolsSlot, inline = false }: CanvasProps) {
+export function StageCanvas({
+  content,
+  onClose,
+  toolsSlot,
+  inline = false,
+  embedded = false,
+}: CanvasProps) {
   const open = content;
   const tool = useStage((s) => s.tool);
   const close = onClose;
@@ -46,6 +55,30 @@ export function StageCanvas({ content, onClose, toolsSlot, inline = false }: Can
   const drawing = useDrawing(open.docPath, open.blockHash);
 
   useEffect(() => viewport.subscribe(setT), [viewport]);
+  // A sheet is for drawing: while you're on it, the pencil and ink that stays. The
+  // tools you had come back after: when the file closes, or the pointer leaves a sheet
+  // in a document (one just sitting on a page leaves them alone).
+  const borrowed = useRef<{ tool: StageTool; sticky: boolean } | null>(null);
+  const borrow = () => {
+    if (!open.viewer.stage?.sheet || borrowed.current) return;
+    const s = useStage.getState();
+    borrowed.current = { tool: s.tool, sticky: s.sticky };
+    s.setTool('pencil');
+    s.setSticky(true);
+  };
+  const giveBack = () => {
+    const b = borrowed.current;
+    if (!b) return;
+    borrowed.current = null;
+    useStage.getState().setTool(b.tool);
+    useStage.getState().setSticky(b.sticky);
+  };
+  useEffect(() => {
+    if (embedded) return;
+    borrow();
+    return giveBack;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open.viewer, embedded]);
   useEffect(() => setT(viewport.get()), [viewport]);
 
   // Keys: Escape closes, 1 and 2 pick a tool, and holding space borrows the hand
@@ -102,8 +135,9 @@ export function StageCanvas({ content, onClose, toolsSlot, inline = false }: Can
     const el = viewRef.current;
     if (!el) return;
     const onWheel = (e: WheelEvent) => {
-      e.preventDefault();
       const intent = wheelIntent(e as WheelEvent & { wheelDeltaY?: number });
+      if (embedded && intent !== 'pinch') return;
+      e.preventDefault();
       if (intent === 'pan') return viewport.panBy(-e.deltaX, -e.deltaY);
       const rect = el.getBoundingClientRect();
       const factor = Math.exp(-e.deltaY * (intent === 'pinch' ? 0.01 : 0.002));
@@ -135,7 +169,7 @@ export function StageCanvas({ content, onClose, toolsSlot, inline = false }: Can
       for (const t of ['gesturestart', 'gesturechange', 'gestureend'])
         el.removeEventListener(t, onGesture);
     };
-  }, [open, viewport]);
+  }, [open, viewport, embedded]);
 
   // The window resizes: move the picture by half the change, so what was centered
   // stays centered, zoomed or not.
@@ -154,7 +188,7 @@ export function StageCanvas({ content, onClose, toolsSlot, inline = false }: Can
   }, [open, viewport]);
 
   // Once the content has a size (diagrams render asynchronously), show it at 1:1 in the
-  // middle; Fit is a button away.
+  // middle; Fit is a button away. A sheet starts fitted, the whole page in view.
   useEffect(() => {
     const layer = layerRef.current;
     if (!layer || typeof ResizeObserver === 'undefined') return;
@@ -164,7 +198,7 @@ export function StageCanvas({ content, onClose, toolsSlot, inline = false }: Can
       sizeSvgs(layer);
       if (contentSize(layer)) {
         done = true;
-        actualSize();
+        first();
         ro.disconnect();
       }
     });
@@ -175,7 +209,7 @@ export function StageCanvas({ content, onClose, toolsSlot, inline = false }: Can
       sizeSvgs(layer);
       if (contentSize(layer)) {
         done = true;
-        actualSize();
+        first();
         ro.disconnect();
         mo.disconnect();
       }
@@ -204,6 +238,33 @@ export function StageCanvas({ content, onClose, toolsSlot, inline = false }: Can
     const size = contentSize(layer);
     if (size) viewport.fit(size.w, size.h, view.clientWidth, view.clientHeight);
   }, [viewport]);
+  const first = () => (open.viewer.stage?.sheet ? fit() : actualSize());
+
+  // The picture with its ink over it, as one svg.
+  const composed = async () => {
+    const layer = layerRef.current;
+    const size = layer && contentSize(layer);
+    if (!layer || !size) throw new Error('nothing to copy');
+    const ink = strokesFor(useAnnotations.getState().strokes, open.docPath, open.blockHash);
+    return { svg: composeSvg(size, await placedPicture(layer, t.scale), ink), size };
+  };
+  const copy = () =>
+    navigator.clipboard.write([
+      new ClipboardItem({
+        // Started inside the click (WebKit requires it); the bytes follow.
+        'image/png': composed().then(({ svg, size }) =>
+          svgTextToPng(svg, { width: size.w, height: size.h }),
+        ),
+      }),
+    ]);
+  const download = async () => {
+    const { svg } = await composed();
+    const base = (open.lang ?? open.props.file.path.split('/').pop() ?? 'diagram').replace(
+      /\.[^.]+$/,
+      '',
+    );
+    downloadText(svg, `${base.replace(/[^\w.-]+/g, '-') || 'diagram'}.svg`);
+  };
 
   // Pointer position → content coordinates (the drawing layer lives inside the transformed layer).
   const contentPoint = (e: ReactPointerEvent): [number, number] => {
@@ -253,6 +314,8 @@ export function StageCanvas({ content, onClose, toolsSlot, inline = false }: Can
       onReset={actualSize}
       onClear={() => useAnnotations.getState().clear(open.docPath, open.blockHash)}
       onUndo={() => useAnnotations.getState().undo(open.docPath, open.blockHash)}
+      onCopy={copy}
+      onDownload={download}
     />
   );
 
@@ -266,6 +329,8 @@ export function StageCanvas({ content, onClose, toolsSlot, inline = false }: Can
         onPointerMove={onPointerMove}
         onPointerUp={onPointerUp}
         onPointerCancel={onPointerUp}
+        onPointerEnter={embedded ? borrow : undefined}
+        onPointerLeave={embedded ? giveBack : undefined}
         onDoubleClick={actualSize}
       >
         <div

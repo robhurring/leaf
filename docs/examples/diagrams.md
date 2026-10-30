@@ -244,15 +244,15 @@ A hand-drawn sketch of the pieces, exported straight from the scene JSON:
 
 ## Drawing
 
-A ` ```draw ` block is a blank sheet: draw on it with the mouse, pen, or a finger. Hover it for the ink colors, **invisible ink** (strokes fade away), **undo** (or <kbd>⌘Z</kbd> with the sheet focused), and **clear**, then **Copy as image** or **Download SVG** to keep what you drew. Drawings last until you close leaf; nothing is written to the file.
+A ` ```draw ` block is a blank sheet with the same tools as a diagram's zoomed view, along its foot: the hand to move around, the pencil, zoom, ink colors and brush sizes, **sticky ink** (off, strokes fade away), **undo** (or <kbd>⌘Z</kbd>), and **clear**. **Copy as image** and **Download SVG** keep what you drew. Scrolling over the sheet scrolls the page; pinch to zoom. Drawings last until you close leaf; nothing is written to the file.
 
 ```draw
 size: 800x360
 A scratch pad for this page.
 ```
 
-`size: 800x360` sets the sheet; any other text in the block is a note to yourself (two blocks with the same text share one drawing).
+`size: 800x360` sets the sheet and `height=480` after ` ```draw ` the block; any other text in the block is a note to yourself (two blocks with the same text share one drawing).
 
 ## Standalone files
 
-The same viewers open files on their own: [flow.mmd](./diagrams/flow.mmd), [sequence.puml](./diagrams/sequence.puml), and [sketch.excalidraw](./diagrams/sketch.excalidraw), each ready to pan, zoom, and draw on. [whiteboard.draw](./diagrams/whiteboard.draw) is a sheet that fills the window, with its tools in the file toolbar.
+The same viewers open files on their own: [flow.mmd](./diagrams/flow.mmd), [sequence.puml](./diagrams/sequence.puml), and [sketch.excalidraw](./diagrams/sketch.excalidraw), each ready to pan, zoom, and draw on. [whiteboard.draw](./diagrams/whiteboard.draw) is a sheet that fills the window, with its tools in the file toolbar. Every diagram's tools end with **Copy as image** and **Download SVG**, and both include what you drew on it.

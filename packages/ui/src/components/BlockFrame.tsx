@@ -81,6 +81,8 @@ export function BlockFrame({
   const [result, setResult] = useState<{ id: string; r: 'ok' | 'failed' } | null>(null);
   const [picture, setPicture] = useState<'svg' | 'img' | 'canvas' | 'iframe' | null>(null);
   const visual = viewer.stage !== undefined;
+  // A sheet runs its own Stage in the block, tools and all.
+  const sheet = !!viewer.stage?.sheet;
   // The tools element, for a viewer to add its own controls to (a notebook's Hide code).
   const [toolsEl, setToolsEl] = useState<HTMLElement | null>(null);
   // A picture made from text (a diagram, chart, map, or animation) can flip to that text.
@@ -93,8 +95,9 @@ export function BlockFrame({
   const [view, setView] = useState<View>(HOME);
   const [panning, setPanning] = useState(false);
   const drag = useRef<{ x: number; y: number } | null>(null);
-  const hasSource = ((visual && viewer.id !== 'image') || !!viewer.source) && source.trim() !== '';
-  const zoomable = visual && !!viewer.stage?.zoom && !slot && !showSource;
+  const hasSource =
+    ((visual && viewer.id !== 'image' && !sheet) || !!viewer.source) && source.trim() !== '';
+  const zoomable = visual && !sheet && !!viewer.stage?.zoom && !slot && !showSource;
   const moved = view.x !== 0 || view.y !== 0 || view.scale !== 1;
   const zoom = (factor: number) => setView((v) => ({ ...v, scale: clampScale(v.scale * factor) }));
   // A pinch zooms around the fingers. The view scales about its center, so keep the
@@ -228,7 +231,7 @@ export function BlockFrame({
           <Code size={15} />
         </button>
       )}
-      {visual && picture && !showSource && (
+      {visual && !sheet && picture && !showSource && (
         <button
           type="button"
           className="leaf-tool"
@@ -259,7 +262,7 @@ export function BlockFrame({
       >
         {iconOr('source', <Copy size={15} />)}
       </button>
-      {visual && picture === 'svg' && !showSource && (
+      {visual && !sheet && picture === 'svg' && !showSource && (
         <button
           type="button"
           className="leaf-tool"

@@ -101,6 +101,8 @@ describe('Stage', () => {
       'Sticky ink',
       'Undo',
       'Clear drawings',
+      'Copy as image',
+      'Download SVG',
     ]) {
       expect(toolbox.querySelector(`[aria-label="${name}"]`), name).toBeTruthy();
     }

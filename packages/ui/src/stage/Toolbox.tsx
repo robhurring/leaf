@@ -1,5 +1,18 @@
 // The floating toolbox on the Stage: hand, pencil, zoom, ink options.
-import { Eraser, Hand, Minus, Pin, Plus, Undo, ZoomIn } from '../icons/index.js';
+import { useState } from 'react';
+import {
+  Check,
+  Download,
+  Eraser,
+  Hand,
+  Image as ImageIcon,
+  Minus,
+  Pin,
+  Plus,
+  Undo,
+  X,
+  ZoomIn,
+} from '../icons/index.js';
 import { BRUSH_WIDTHS, INK_COLORS, useStage, type Brush, type InkColor } from '../store/stage.js';
 
 type Props = {
@@ -9,14 +22,32 @@ type Props = {
   onReset(): void;
   onClear(): void;
   onUndo(): void;
+  /** The picture with its ink, to the clipboard and as a file. */
+  onCopy(): Promise<void>;
+  onDownload(): Promise<void> | void;
 };
 
 const COLORS: InkColor[] = ['red', 'green', 'blue'];
 const BRUSHES: Brush[] = ['small', 'medium', 'large'];
 const label = (s: string) => s[0]!.toUpperCase() + s.slice(1);
 
-export function Toolbox({ canDraw, onZoom, onFit, onReset, onClear, onUndo }: Props) {
+export function Toolbox(props: Props) {
+  const { canDraw, onZoom, onFit, onReset, onClear, onUndo, onCopy, onDownload } = props;
   const { tool, color, brush, sticky, setTool, setColor, setBrush, setSticky } = useStage();
+  // Copy and download report by turning their own icon into a check or an x for a moment.
+  const [result, setResult] = useState<{ id: string; ok: boolean } | null>(null);
+  const run = async (id: string, fn: () => Promise<void> | void) => {
+    let ok = true;
+    try {
+      await fn();
+    } catch {
+      ok = false;
+    }
+    setResult({ id, ok });
+    setTimeout(() => setResult((r) => (r?.id === id ? null : r)), 1500);
+  };
+  const iconOr = (id: string, icon: React.ReactNode) =>
+    result?.id === id ? result.ok ? <Check size={15} /> : <X size={15} /> : icon;
   const btn = (
     name: string,
     pressed: boolean | undefined,
@@ -74,6 +105,19 @@ export function Toolbox({ canDraw, onZoom, onFit, onReset, onClear, onUndo }: Pr
           {btn('Undo', undefined, onUndo, <Undo size={15} />)}
           {btn('Clear drawings', undefined, onClear, <Eraser size={15} />)}
         </>
+      )}
+      <span className="leaf-tb-sep" />
+      {btn(
+        'Copy as image',
+        undefined,
+        () => void run('copy', onCopy),
+        iconOr('copy', <ImageIcon size={15} />),
+      )}
+      {btn(
+        'Download SVG',
+        undefined,
+        () => void run('download', onDownload),
+        iconOr('download', <Download size={15} />),
       )}
     </div>
   );

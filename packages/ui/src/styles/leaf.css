@@ -296,6 +296,7 @@ html[data-resizing] .leaf-resizer::after {
 .leaf-main-inner[data-viewer='mermaid'],
 .leaf-main-inner[data-viewer='plantuml'],
 .leaf-main-inner[data-viewer='excalidraw'],
+.leaf-main-inner[data-viewer='draw'],
 .leaf-main-inner[data-viewer='image'],
 .leaf-main-inner[data-viewer='map'],
 .leaf-main-inner[data-viewer='chart'],
@@ -3280,41 +3281,30 @@ html[data-resizing] .leaf-blame-resizer::after {
   display: none;
 }
 
-/* Freeform drawing: a sheet to draw on, in a block or filling a .draw file's panel. */
-.leaf-draw-board {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  outline: none;
+/* Freeform drawing: a blank sheet on the Stage, in a .draw file's panel or in a block,
+   on a backdrop so the paper's edges show. */
+.leaf-stage-viewport:has(.leaf-draw-sheet),
+.leaf-stage-inline .leaf-stage-viewport:has(.leaf-draw-sheet) {
+  background: color-mix(in srgb, var(--leaf-doc-text) 6%, var(--leaf-doc-bg));
 }
-.leaf-draw-board[data-fill] {
-  height: 100%;
-  padding: 16px;
-  box-sizing: border-box;
-}
-.leaf-drawing {
+.leaf-draw-sheet svg {
   display: block;
-  width: 100%;
-  height: auto;
-  border-radius: 6px;
-  box-shadow: 0 0 0 1px var(--leaf-line);
-  cursor: crosshair;
-  touch-action: none;
-  user-select: none;
-  -webkit-user-select: none;
+  box-shadow:
+    0 0 0 1px rgba(0, 0, 0, 0.08),
+    0 6px 20px rgba(0, 0, 0, 0.08);
 }
-.leaf-draw-board[data-fill] .leaf-drawing {
-  flex: 1;
-  min-height: 0;
-  height: 100%;
-  box-shadow: none;
-}
-.leaf-draw-board[data-fill] .leaf-drawing rect {
-  stroke: var(--leaf-line);
-}
-.leaf-draw-bar {
+.leaf-draw-block {
+  position: relative;
   display: flex;
-  gap: 4px;
-  align-self: flex-end;
-  margin-bottom: 8px;
+  overflow: hidden;
+  border-radius: 8px;
+  background: var(--leaf-surface-2, var(--leaf-block-bg));
+}
+.leaf-draw-block .leaf-stage-viewport {
+  flex: 1;
+}
+.leaf-draw-block .leaf-toolbox {
+  bottom: 10px;
+  max-width: calc(100% - 16px);
+  overflow-x: auto;
 }
