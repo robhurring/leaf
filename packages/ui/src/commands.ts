@@ -20,6 +20,7 @@ export const COMMANDS = [
   'openPath',
   'goBack',
   'goForward',
+  'scrollTop',
 ] as const;
 export type CommandName = (typeof COMMANDS)[number];
 /** A command takes the argument its sender passes; method syntax keeps parameter types bivariant. */

@@ -68,7 +68,7 @@ export function Chrome({ bridge, fits }: { bridge: Bridge; fits?: (s: string) =>
         onSettings={send('openSettings')}
         onAppearanceMenu={() => bridge.appearanceMenu()}
         onSearch={send('openPalette')}
-        onTitle={() => {}}
+        onTitle={send('scrollTop')}
         brand={only ? tabDragHandlers(bridge, only, 'mark') : undefined}
       />
       {(tabs.length > 1 || here !== null) && (

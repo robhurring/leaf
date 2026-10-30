@@ -162,8 +162,10 @@ pub fn front_window(app: &AppHandle) -> Option<Window<Wry>> {
     {
         return Some(w.clone());
     }
+    // Only windows of tabs: the speaker view (and the ghost) never take new tabs.
     let last = state.front.lock().unwrap().clone();
-    last.and_then(|l| windows.get(&l).cloned())
+    last.filter(|l| ours.contains(l))
+        .and_then(|l| windows.get(&l).cloned())
         .or_else(|| ours.iter().find_map(|l| windows.get(l).cloned()))
 }
 
@@ -183,12 +185,16 @@ pub fn open(app: &AppHandle, target: &Path, route: Option<String>, heading: Opti
         OpenIn::Tab => front_window(app),
         OpenIn::Window => None,
     };
-    let window = match window {
-        Some(w) => Some(w),
-        None => new_window(app, place_for(app, Some(target))),
+    let (window, made) = match window {
+        Some(w) => (Some(w), false),
+        None => (new_window(app, place_for(app, Some(target))), true),
     };
-    if let Some(w) = window {
-        add_tab(app, &w, target, None, route, None);
+    if let Some(w) = window
+        && add_tab(app, &w, target, None, route, None).is_none()
+        && made
+    {
+        // Nothing could open in it: no empty window left behind.
+        forget_window(app, &w);
     }
 }
 
@@ -235,11 +241,13 @@ pub fn show_in(app: &AppHandle, tab: &str, target: &Path, heading: Option<String
 pub fn place_for(app: &AppHandle, target: Option<&Path>) -> Option<Geometry> {
     let state = app.state::<AppState>();
     let open: Vec<Geometry> = app.windows().values().filter_map(geometry_of).collect();
+    // Screens first: asking for them waits on the main thread, which may want `places`.
+    let screens = screens(app);
     let places = state.places.lock().unwrap_or_else(|e| e.into_inner());
     let key = Path::new(PLACE_KEY);
     target
-        .and_then(|t| places.place(t, &open, &screens(app)))
-        .or_else(|| places.place(key, &open, &screens(app)))
+        .and_then(|t| places.place(t, &open, &screens))
+        .or_else(|| places.place(key, &open, &screens))
 }
 
 /// A new window with its chrome and no tabs yet, hidden until its first tab has painted.
@@ -293,6 +301,13 @@ pub fn new_window(app: &AppHandle, place: Option<Geometry>) -> Option<Window<Wry
         show(&shown);
     });
     Some(window)
+}
+
+/// Closes a window that never got a tab.
+fn forget_window(app: &AppHandle, window: &Window<Wry>) {
+    let state = app.state::<AppState>();
+    state.tabs.lock().unwrap().remove_window(window.label());
+    let _ = window.destroy();
 }
 
 /// Shows a window that opened hidden (once its first tab painted, or after a while).
@@ -626,27 +641,36 @@ fn ghost(app: &AppHandle) -> Option<tauri::WebviewWindow<Wry>> {
     Some(g)
 }
 
+/// Where in `w`'s tab row a tab let go at a screen point would land, if the point is
+/// over the top of that window.
+fn row_at(app: &AppHandle, w: &Window<Wry>, x: f64, y: f64) -> Option<usize> {
+    let scale = w.scale_factor().ok()?;
+    let p = w.outer_position().ok()?.to_logical::<f64>(scale);
+    let s = w.outer_size().ok()?.to_logical::<f64>(scale);
+    let inside = x >= p.x && x <= p.x + s.width && y >= p.y && y <= p.y + DROP_BAND;
+    if !inside {
+        return None;
+    }
+    let n = app
+        .state::<AppState>()
+        .tabs
+        .lock()
+        .unwrap()
+        .tabs_of(w.label())
+        .len();
+    let at = (((x - p.x) + TAB_WIDTH / 2.0) / TAB_WIDTH).floor() as usize;
+    Some(at.min(n))
+}
+
 /// The window (other than `except`) whose tab row is under a screen point, and where
 /// in its row a tab dropped there would land.
 fn row_under(app: &AppHandle, except: &str, x: f64, y: f64) -> Option<(Window<Wry>, usize)> {
-    let state = app.state::<AppState>();
-    let ours = state.tabs.lock().unwrap().windows();
+    let ours = app.state::<AppState>().tabs.lock().unwrap().windows();
     let windows = app.windows();
     ours.iter()
         .filter(|l| l.as_str() != except)
         .filter_map(|l| windows.get(l))
-        .find_map(|w| {
-            let scale = w.scale_factor().ok()?;
-            let p = w.outer_position().ok()?.to_logical::<f64>(scale);
-            let s = w.outer_size().ok()?.to_logical::<f64>(scale);
-            let inside = x >= p.x && x <= p.x + s.width && y >= p.y && y <= p.y + DROP_BAND;
-            if !inside {
-                return None;
-            }
-            let n = state.tabs.lock().unwrap().tabs_of(w.label()).len();
-            let at = (((x - p.x) + TAB_WIDTH / 2.0) / TAB_WIDTH).floor() as usize;
-            Some((w.clone(), at.min(n)))
-        })
+        .find_map(|w| row_at(app, w, x, y).map(|at| (w.clone(), at)))
 }
 
 /// Marks the window a dragged tab is over (opening its tab row), and tells the chromes.
@@ -710,6 +734,16 @@ pub fn leaf_drag_end(webview: Webview<Wry>, tab: String, x: f64, y: f64) {
     }
     hover(app, None);
     let from = webview.window();
+    // Let go over its own row: it stays, at the place it was dropped.
+    if let Some(at) = row_at(app, &from, x, y) {
+        app.state::<AppState>()
+            .tabs
+            .lock()
+            .unwrap()
+            .move_tab(&tab, from.label(), Some(at));
+        select(app, &tab);
+        return;
+    }
     match row_under(app, from.label(), x, y) {
         Some((dest, at)) => move_to(app, &tab, &dest, Some(at)),
         None => {
@@ -1000,8 +1034,9 @@ pub fn restore_session(app: &AppHandle) {
                 ids.push(id);
             }
         }
-        if let Some(active) = ids.get(w.active) {
-            select(app, active);
+        match ids.get(w.active).or(ids.first()) {
+            Some(active) => select(app, active),
+            None => forget_window(app, &window),
         }
     }
 }
@@ -1028,5 +1063,48 @@ pub fn leaf_appearance_menu(webview: Webview<Wry>) {
         .build();
     if let Ok(menu) = menu {
         let _ = webview.window().popup_menu(&menu);
+    }
+}
+
+/// A deck's speaker view: a plain window of its own with one reader, outside the tabs
+/// (no title row, never brought forward for a file, never given new tabs).
+pub fn speaker_window(app: &AppHandle, folder: &Path, route: String) {
+    let state = app.state::<AppState>();
+    let label = format!("s{}", state.next.fetch_add(1, Ordering::Relaxed));
+    {
+        let _rt = state.runtime.enter();
+        if let Err(e) = state.windows.open(&label, folder) {
+            tracing::error!(target = %folder.display(), error = %e, "cannot open the speaker view");
+            return;
+        }
+    }
+    let init =
+        format!("window.__LEAF_WINDOW__ = {label:?}; history.replaceState(null, '', {route:?});");
+    let b =
+        tauri::WebviewWindowBuilder::new(app, &label, WebviewUrl::App(PathBuf::from("index.html")))
+            .title("Speaker")
+            .inner_size(1100.0, 720.0)
+            .min_inner_size(640.0, 420.0)
+            .visible(false)
+            .initialization_script(&init)
+            .on_navigation(|url| {
+                leaf_app::launch::navigation_allowed(url.as_str(), cfg!(debug_assertions))
+            });
+    #[cfg(target_os = "macos")]
+    let b = b
+        .title_bar_style(tauri::TitleBarStyle::Overlay)
+        .hidden_title(true);
+    match b.build() {
+        Ok(w) => {
+            let shown = w.as_ref().window();
+            state.runtime.spawn(async move {
+                tokio::time::sleep(READY_FALLBACK).await;
+                show(&shown);
+            });
+        }
+        Err(e) => {
+            tracing::error!(error = %e, "could not open the speaker view");
+            state.windows.close(&label);
+        }
     }
 }

@@ -170,9 +170,7 @@ fn leaf_open_speaker(webview: Webview<Wry>, path: String) -> Result<(), String> 
         .ok_or("this tab has nothing open")?;
     // The same folder as this tab, so the deck's path means the same thing there.
     let (folder, route) = leaf_app::launch::speaker_target(&opened, &path)?;
-    if let Some(w) = tabbed::new_window(&app, tabbed::place_for(&app, Some(&folder))) {
-        tabbed::add_tab(&app, &w, &folder, None, Some(route), None);
-    }
+    tabbed::speaker_window(&app, &folder, route);
     Ok(())
 }
 
@@ -501,8 +499,11 @@ pub fn run(config: Config, link: Option<String>) -> i32 {
                 tabbed::refresh_menu(window.app_handle());
             }
             if let tauri::WindowEvent::Destroyed = event {
-                tabbed::window_gone(window.app_handle(), window.label());
-                tabbed::refresh_menu(window.app_handle());
+                let app = window.app_handle();
+                tabbed::window_gone(app, window.label());
+                // A window that is its own reader (the speaker view) has a session too.
+                app.state::<AppState>().windows.close(window.label());
+                tabbed::refresh_menu(app);
             }
         })
         .setup(move |app| {

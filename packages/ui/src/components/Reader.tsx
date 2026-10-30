@@ -258,6 +258,8 @@ export function Reader(props: ReaderProps) {
       },
       goBack: () => router.back(),
       goForward: () => router.forward(),
+      // The leaf mark in the window's title row.
+      scrollTop: () => mainRef.current?.scrollTo?.({ top: 0, behavior: 'smooth' }),
     }),
   );
 

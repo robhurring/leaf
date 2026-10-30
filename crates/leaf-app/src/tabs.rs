@@ -27,6 +27,13 @@ impl Tabs {
         Tabs::default()
     }
 
+    /// Forgets a window that has no tabs (one that never got any).
+    pub fn remove_window(&mut self, window: &str) {
+        if self.windows.get(window).is_some_and(|(o, _)| o.is_empty()) {
+            self.windows.remove(window);
+        }
+    }
+
     pub fn add_window(&mut self, window: &str) {
         self.windows
             .entry(window.to_string())

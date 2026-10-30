@@ -51,18 +51,25 @@ pub fn restorable(s: Saved) -> Saved {
         .windows
         .into_iter()
         .filter_map(|w| {
-            let tabs: Vec<SavedTab> = w
-                .tabs
-                .into_iter()
-                .filter(|t| t.roots.first().is_some_and(|r| r.exists()))
-                .collect();
+            let mut active = 0;
+            let mut tabs = Vec::new();
+            for (i, t) in w.tabs.into_iter().enumerate() {
+                if !t.roots.first().is_some_and(|r| r.exists()) {
+                    continue;
+                }
+                // The showing tab, or the nearest one kept before it.
+                if i <= w.active {
+                    active = tabs.len();
+                }
+                tabs.push(t);
+            }
             if tabs.is_empty() {
                 return None;
             }
             Some(SavedWindow {
-                active: w.active.min(tabs.len() - 1),
+                active,
                 tabs,
-                ..w
+                place: w.place,
             })
         })
         .collect();
@@ -145,5 +152,24 @@ mod tests {
         assert_eq!(load(&file), Saved::default());
         std::fs::write(&file, "{not json").unwrap();
         assert_eq!(load(&file), Saved::default());
+    }
+
+    #[test]
+    fn restore_keeps_the_showing_tab_when_an_earlier_one_is_gone() {
+        let d = tempfile::tempdir().unwrap();
+        let (a, b) = (d.path().join("a"), d.path().join("b"));
+        std::fs::create_dir(&a).unwrap();
+        std::fs::create_dir(&b).unwrap();
+        let s = Saved {
+            windows: vec![SavedWindow {
+                place: None,
+                active: 1,
+                tabs: vec![tab(&d.path().join("gone")), tab(&a), tab(&b)],
+            }],
+        };
+        let r = restorable(s);
+        assert_eq!(r.windows[0].tabs, vec![tab(&a), tab(&b)]);
+        // `a` was showing; it is first now.
+        assert_eq!(r.windows[0].active, 0);
     }
 }

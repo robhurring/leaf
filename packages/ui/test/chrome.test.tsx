@@ -132,4 +132,10 @@ describe('the window chrome', () => {
     expect(bridge.appearanceMenu).toHaveBeenCalled();
     expect(screen.queryByRole('menu')).toBeNull();
   });
+
+  it('the leaf mark takes the tab back to the top', async () => {
+    const { bridge } = await mount([tab('t1', '~/a', true), tab('t2', '~/b')]);
+    fireEvent.click(screen.getByRole('button', { name: /leaf/ }));
+    expect(bridge.command).toHaveBeenCalledWith('scrollTop');
+  });
 });
