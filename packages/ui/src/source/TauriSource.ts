@@ -101,6 +101,20 @@ export function treeMenu(path: string): void {
   void invoke('leaf_tree_menu', { path }).catch(() => {});
 }
 
+/** This window's other tabs, for ⌘K. */
+export function windowTabs(): Promise<
+  { id: string; label: string; doc: string; sameRoot: boolean }[]
+> {
+  return invoke<{ id: string; label: string; doc: string; sameRoot: boolean }[]>(
+    'leaf_window_tabs',
+  ).catch(() => []);
+}
+
+/** Switches this window to another of its tabs. */
+export function selectTab(id: string): void {
+  void invoke('leaf_select_tab', { id }).catch(() => {});
+}
+
 let shown = false;
 /** Tells the app this window has painted, so it shows it (windows open hidden). Once per window. */
 export function windowReady(): void {

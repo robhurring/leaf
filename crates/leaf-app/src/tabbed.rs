@@ -832,3 +832,53 @@ pub fn on_menu(app: &AppHandle, id: &str) -> bool {
     }
     true
 }
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct OtherTab {
+    id: String,
+    label: String,
+    doc: String,
+    same_root: bool,
+}
+
+/// The other tabs of the asking tab's window, for ⌘K: each one's name, the document it
+/// shows (as it last reported), and whether it is on the same root as the asker.
+#[tauri::command]
+pub fn leaf_window_tabs(webview: Webview<Wry>) -> Vec<OtherTab> {
+    let app = webview.app_handle();
+    let me = webview.label().to_string();
+    let state = app.state::<AppState>();
+    let shown = state.tab_state.lock().unwrap().clone();
+    let tabs = state.tabs.lock().unwrap();
+    let Some(window) = tabs.window_of(&me) else {
+        return vec![];
+    };
+    let my_root = tabs.workspace(&me).and_then(|ws| ws.roots.first().cloned());
+    let home = home();
+    tabs.tabs_of(&window)
+        .into_iter()
+        .filter(|t| *t != me)
+        .filter_map(|id| {
+            let ws = tabs.workspace(&id)?;
+            let doc = shown
+                .get(&id)
+                .and_then(|s| s.get("path"))
+                .and_then(|p| p.as_str())
+                .unwrap_or_default()
+                .to_string();
+            Some(OtherTab {
+                label: label(
+                    &Workspace {
+                        opened_at: None,
+                        ..ws.clone()
+                    },
+                    &home,
+                ),
+                doc,
+                same_root: ws.roots.first() == my_root.as_ref(),
+                id,
+            })
+        })
+        .collect()
+}

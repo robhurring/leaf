@@ -11,6 +11,8 @@ import {
   inTab,
   inTauri,
   reportTabState,
+  selectTab,
+  windowTabs,
   tauriWindowLabel,
   windowReady,
 } from '../source/TauriSource.js';
@@ -21,7 +23,7 @@ import { applyTheme, followOtherTabs, useUi, type Appearance, type Theme } from 
 import { DocumentView } from './DocumentView.js';
 import { ErrorBoundary } from './ErrorBoundary.js';
 import { Outline } from './Outline.js';
-import { GoTo, type GoToMode } from './GoTo.js';
+import { GoTo, type GoToMode, type GoToTab } from './GoTo.js';
 import { Resizer } from './Resizer.js';
 import { FindBar } from './FindBar.js';
 import { usePresence, type Presence } from '../usePresence.js';
@@ -385,6 +387,12 @@ export function Reader(props: ReaderProps) {
   const treeShown = usePresence(treeAvailable && treeOpen);
   const outlineShown = usePresence(outlineOn);
 
+  // ⌘K lists the window's other tabs; asked for each time it opens.
+  const [otherTabs, setOtherTabs] = useState<GoToTab[]>([]);
+  useEffect(() => {
+    if (tabbed && goto) void windowTabs().then(setOtherTabs);
+  }, [tabbed, goto]);
+
   // In a tab, the window's title row shows this tab's state, and the tab follows the
   // settings other tabs change.
   useEffect(() => {
@@ -459,6 +467,8 @@ export function Reader(props: ReaderProps) {
       onOpen={(p) => navigate(p)}
       onFind={(q, index) => runCommand('openFind', { q, index })}
       onClose={() => setGoto(null)}
+      tabs={tabbed ? otherTabs : undefined}
+      onTab={selectTab}
     />
   );
 

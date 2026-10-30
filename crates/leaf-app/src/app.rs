@@ -475,7 +475,8 @@ pub fn run(config: Config, link: Option<String>) -> i32 {
             tabbed::leaf_drag_move,
             tabbed::leaf_drag_end,
             tabbed::leaf_open_in_new_tab,
-            tabbed::leaf_tree_menu
+            tabbed::leaf_tree_menu,
+            tabbed::leaf_window_tabs
         ])
         .menu(build_menu)
         .on_menu_event(|app, event| on_menu(app, event.id().as_ref()))

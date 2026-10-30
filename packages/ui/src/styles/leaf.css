@@ -3428,3 +3428,16 @@ html[data-tab] {
   z-index: 30;
   width: min(560px, calc(100% - 32px));
 }
+
+.leaf-goto-doc {
+  margin-left: 8px;
+  color: var(--leaf-text-2);
+}
+.leaf-goto-badge {
+  margin-left: auto;
+  padding: 0 6px;
+  border-radius: 4px;
+  font-size: 11px;
+  color: var(--leaf-accent);
+  background: var(--leaf-accent-soft);
+}

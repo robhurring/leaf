@@ -1,8 +1,9 @@
 // ⌘K: the title bar's search field. One query finds headings in the open document,
 // files in the folder, and text in the document; results drop down beneath the field.
+// In a tab of the app it lists the window's other tabs first; picking one switches to it.
 import { useEffect, useMemo, useRef, useState } from 'react';
 import type { Entry, TextHit } from '@leaf/protocol';
-import { File as FileIcon, Search } from '../icons/index.js';
+import { File as FileIcon, Folder as Tabs, Search } from '../icons/index.js';
 import { findMatches } from '../find.js';
 import type { Heading } from '../render/headings.js';
 import { formatNumber } from '../render/number.js';
@@ -11,7 +12,18 @@ export type GoToMode = 'all' | 'files';
 
 type TextMatch = { index: number; before: string; match: string; after: string };
 
+/** Another tab of this window, as ⌘K lists it. */
+export type GoToTab = {
+  id: string;
+  label: string;
+  /** The document it shows, relative to its root. */
+  doc: string;
+  /** It is on the same folder as this tab, so `doc` names a file in these results. */
+  sameRoot: boolean;
+};
+
 type Item =
+  | { kind: 'tab'; tab: GoToTab }
   | { kind: 'heading'; heading: Heading }
   | { kind: 'file'; entry: Entry }
   | { kind: 'text'; text: TextMatch }
@@ -37,6 +49,9 @@ type Props = {
   /** Opens find in the document at match `index`. */
   onFind(q: string, index: number): void;
   onClose(): void;
+  /** The window's other tabs, in the app; none in a browser. */
+  tabs?: GoToTab[];
+  onTab?(id: string): void;
 };
 
 const LIMIT = 8;
@@ -118,12 +133,24 @@ export function GoTo(p: Props) {
         : p.headings.filter((h) => !needle || fuzzy(needle, h.text)).slice(0, needle ? LIMIT : 50),
     [filesOnly, p.headings, needle],
   );
+  const tabs = useMemo(
+    () => (p.tabs ?? []).filter((t) => !needle || fuzzy(needle, t.label) || fuzzy(needle, t.doc)),
+    [p.tabs, needle],
+  );
+  // A file another tab already shows is listed once, under that tab.
+  const shownElsewhere = useMemo(
+    () => new Set((p.tabs ?? []).filter((t) => t.sameRoot).map((t) => t.doc)),
+    [p.tabs],
+  );
   const files = useMemo(
     () =>
       needle || filesOnly
-        ? p.files.filter((e) => !needle || fuzzy(needle, e.path)).slice(0, filesOnly ? 50 : LIMIT)
+        ? p.files
+            .filter((e) => !shownElsewhere.has(e.path))
+            .filter((e) => !needle || fuzzy(needle, e.path))
+            .slice(0, filesOnly ? 50 : LIMIT)
         : [],
-    [filesOnly, p.files, needle],
+    [filesOnly, p.files, needle, shownElsewhere],
   );
   const [text, textTotal] = useMemo<[TextMatch[], number]>(() => {
     const root = p.docRoot();
@@ -139,6 +166,7 @@ export function GoTo(p: Props) {
       : p.hits.filter((h) => h.path !== p.currentPath).slice(0, LIMIT);
 
   const groups: { label: string; extra?: string; items: Item[] }[] = [
+    { label: 'Tabs', items: filesOnly ? [] : tabs.map((tab) => ({ kind: 'tab' as const, tab })) },
     {
       label: 'Headings',
       items: headings.map((heading) => ({ kind: 'heading' as const, heading })),
@@ -164,7 +192,8 @@ export function GoTo(p: Props) {
   const choose = (item: Item | undefined) => {
     if (!item) return;
     p.onClose();
-    if (item.kind === 'heading') p.onJump(item.heading.slug);
+    if (item.kind === 'tab') p.onTab?.(item.tab.id);
+    else if (item.kind === 'heading') p.onJump(item.heading.slug);
     else if (item.kind === 'file') p.onOpen(item.entry.path);
     else if (item.kind === 'hit') p.onOpenAt(item.hit.path, needle);
     else p.onFind(needle, item.text.index);
@@ -189,13 +218,15 @@ export function GoTo(p: Props) {
   const option = (item: Item) => {
     const i = ++n;
     const key =
-      item.kind === 'heading'
-        ? `h:${item.heading.slug}`
-        : item.kind === 'file'
-          ? `f:${item.entry.path}`
-          : item.kind === 'hit'
-            ? `x:${item.hit.path}:${item.hit.line}`
-            : `t:${item.text.index}`;
+      item.kind === 'tab'
+        ? `tab:${item.tab.id}`
+        : item.kind === 'heading'
+          ? `h:${item.heading.slug}`
+          : item.kind === 'file'
+            ? `f:${item.entry.path}`
+            : item.kind === 'hit'
+              ? `x:${item.hit.path}:${item.hit.line}`
+              : `t:${item.text.index}`;
     return (
       <li
         key={key}
@@ -207,7 +238,18 @@ export function GoTo(p: Props) {
         onMouseDown={(e) => e.preventDefault()}
         onClick={() => choose(item)}
       >
-        {item.kind === 'heading' ? (
+        {item.kind === 'tab' ? (
+          <>
+            <Tabs size={14} />
+            <span className="leaf-goto-text">
+              {item.tab.label}
+              <span className="leaf-goto-doc">{item.tab.doc}</span>
+            </span>
+            {item.tab.sameRoot && shownElsewhere.has(item.tab.doc) && needle && (
+              <span className="leaf-goto-badge">open</span>
+            )}
+          </>
+        ) : item.kind === 'heading' ? (
           <>
             <span className="leaf-goto-depth">
               {p.numbering && item.heading.number
