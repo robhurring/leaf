@@ -489,6 +489,25 @@ pub fn navigation_allowed(url: &str, dev: bool) -> bool {
     }
 }
 
+/// The route a deck's speaker window opens on: the deck's own, flagged for the speaker view.
+pub fn speaker_route(path: &str) -> String {
+    format!("{}?speaker", route_for(path))
+}
+
+#[cfg(test)]
+mod speaker_tests {
+    use super::{route_for, speaker_route};
+
+    #[test]
+    fn the_speaker_window_opens_on_the_deck_flagged_for_the_speaker() {
+        assert_eq!(
+            speaker_route("talks/q3 plan.md"),
+            format!("{}?speaker", route_for("talks/q3 plan.md"))
+        );
+        assert!(speaker_route("a.md").ends_with("/a.md?speaker"));
+    }
+}
+
 #[cfg(test)]
 mod navigation_tests {
     use super::navigation_allowed;

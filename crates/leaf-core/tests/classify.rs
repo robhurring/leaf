@@ -24,6 +24,7 @@ fn kinds_and_languages() {
         ("world.topojson", "text", Some("json")),
         ("logs.jsonl", "text", Some("json")),
         ("logs.ndjson", "text", Some("json")),
+        ("talk.marp", "text", Some("markdown")),
     ];
     for (path, kind, lang) in cases {
         let c = classify(Path::new(path));

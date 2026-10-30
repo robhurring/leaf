@@ -63,6 +63,8 @@ const TEXT_LANG: &[(&str, &str)] = &[
     ("ndjson", "json"),
     // leaf's interactive files: a chart's config, and code for a live pane.
     ("chart", "yaml"),
+    // A Marp deck: markdown with slide breaks, opened as slides.
+    ("marp", "markdown"),
     ("three", "javascript"),
     ("sketch", "javascript"),
     ("d3", "javascript"),

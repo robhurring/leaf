@@ -272,3 +272,20 @@ test('charts and maps draw, in documents and as files of their own', async ({ pa
   expect((await pane.boundingBox())!.height).toBeGreaterThan(300);
   expect(errors).toEqual([]);
 });
+
+test('a marp file opens as slides, steps with the keys, and presents', async ({ page }) => {
+  const errors = collectErrors(page);
+  await page.goto('/slides.md');
+  const count = page.getByRole('status', { name: 'Slide' });
+  await expect(count).toHaveText('1 / 5', { timeout: 15000 });
+  await page.keyboard.press('ArrowRight');
+  await expect(count).toHaveText('2 / 5');
+  await page.getByRole('button', { name: 'Present' }).click();
+  await expect(page.locator('.leaf-deck[data-presenting]')).toBeVisible();
+  await page.keyboard.press('Escape');
+  await expect(page.locator('.leaf-deck[data-presenting]')).toHaveCount(0);
+  const tools = page.getByRole('toolbar', { name: 'File tools' });
+  await tools.getByRole('button', { name: 'Read as a document' }).click();
+  await expect(page.getByRole('heading', { name: 'Writing a deck' })).toBeVisible();
+  expect(errors).toEqual([]);
+});

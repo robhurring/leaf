@@ -3,7 +3,8 @@ import { useCallback, useContext, useEffect, useState, type MouseEvent } from 'r
 import { createPortal } from 'react-dom';
 import type { Config, ErrorMessage, FileMessage } from '@leaf/protocol';
 import type { Handlers } from '../render/handlers.js';
-import { viewers } from '../viewers/index.js';
+import { viewers, deck } from '../viewers/index.js';
+import { isMarp } from '../viewers/deck/detect.js';
 import { BlockFrame } from './BlockFrame.js';
 import { Loading } from './Loading.js';
 import { DocToolsContext } from './Properties.js';
@@ -53,7 +54,9 @@ function InlineStage({
         <SourceView code={props.content ?? ''} lang={sourceLang(viewer.id, props.file.lang)} />
       ) : (
         <StageCanvas
-          key={`${props.docPath}:${blockHash}`}
+          // A picture with drawings starts over when it changes; a deck or a chart keeps
+          // its place (the slide it's on) through an edit.
+          key={viewer.stage?.zoom ? `${props.docPath}:${blockHash}` : props.docPath}
           content={{ docPath: props.docPath, blockHash, viewer, props }}
           toolsSlot={slot}
           inline
@@ -107,7 +110,10 @@ export function DocumentView({
   }
   if (!file) return <Loading label={path.slice(path.lastIndexOf('/') + 1) || undefined} />;
 
-  const viewer = viewers.forFile(file);
+  const found = viewers.forFile(file);
+  const marp = found.id === 'markdown' && !!file.content && isMarp(file.content);
+  // The reader sends a `marp: true` file here when it's shown as slides.
+  const viewer = marp ? deck : found;
   const Rich = viewer.Rich;
   const viewerProps = {
     file,

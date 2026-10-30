@@ -268,6 +268,33 @@ onFrame((t, dt) => {
 
 A block can take clicks and keys too: [Updraft](./animations/updraft.md) is a one-button game in a single canvas block.
 
+## A deck inside a document
+
+A ` ```marp ` block is a small Marp deck in the page: hover it for previous and next, or open the zoomed view for the whole deck with **Present**.
+
+```marp
+---
+theme: gaia
+class: lead
+---
+
+# Animations
+
+in markdown
+
+---
+
+# Two kinds
+
+`three` for 3D scenes, `canvas` for drawing
+
+---
+
+# All live
+
+Edit the file and they follow
+```
+
 ## When a block goes wrong
 
 An error shows under the pane with the line it came from; the rest of the document carries on.

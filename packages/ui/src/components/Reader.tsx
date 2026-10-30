@@ -1,6 +1,6 @@
 // The full reader: title bar, files, document, outline, palette. Bound to any
 // DocumentSource; UI state is sticky by default and controllable by the host.
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { Entry } from '@leaf/protocol';
 import type { Handlers } from '../render/handlers.js';
 import type { Heading } from '../render/headings.js';
@@ -27,6 +27,14 @@ import { BlameMargin } from './BlameMargin.js';
 import { BlameResizer, BlameShownContext } from './BlameColumn.js';
 import { Settings } from './Settings.js';
 import { NoticeBar } from './NoticeBar.js';
+import { createPortal } from 'react-dom';
+import { isMarp } from '../viewers/deck/detect.js';
+import { useDeckMode } from '../store/deckMode.js';
+
+const SpeakerView = lazy(() => import('../viewers/deck/SpeakerView.js'));
+/** A deck's speaker window, opened with ?speaker. Read once, before the router rewrites the address. */
+const SPEAKER_WINDOW =
+  typeof location !== 'undefined' && new URLSearchParams(location.search).has('speaker');
 import { AppearanceContext, useResolvedAppearance } from '../viewers/appearance.js';
 import { AssetContext, rawUrl, type AssetResolver } from '../render/components/assetContext.js';
 import { useAssets } from '../store/assets.js';
@@ -294,8 +302,18 @@ export function Reader(props: ReaderProps) {
     }),
     [docs.config, file?.git?.repoUrl],
   );
+  // A markdown file with `marp: true` shows as slides unless switched to a document.
+  const marp =
+    !!file &&
+    viewers.forFile(file).id === 'markdown' &&
+    file.encoding === 'utf8' &&
+    isMarp(file.content ?? '');
+  const speaker = SPEAKER_WINDOW;
+  const readAsDocument = useDeckMode((s) => (file ? !!s.documents[file.path] : false));
   const isMarkdown = file
-    ? viewers.forFile(file).id === 'markdown' && file.encoding === 'utf8'
+    ? viewers.forFile(file).id === 'markdown' &&
+      file.encoding === 'utf8' &&
+      !(marp && !readAsDocument)
     : false;
 
   const onRendered = useCallback(
@@ -347,6 +365,20 @@ export function Reader(props: ReaderProps) {
   const outlineOn = outlineAvailable && outlineOpen;
   const treeShown = usePresence(treeAvailable && treeOpen);
   const outlineShown = usePresence(outlineOn);
+
+  // A deck's speaker window (opened from the deck with ?speaker): only the speaker view.
+  if (speaker && marp && file)
+    return (
+      <AppearanceContext.Provider value={resolved}>
+        <AssetContext.Provider value={assetResolver}>
+          <div className="leaf-app leaf-speaker-app">
+            <Suspense fallback={null}>
+              <SpeakerView content={file.content ?? ''} docPath={file.path} />
+            </Suspense>
+          </div>
+        </AssetContext.Provider>
+      </AppearanceContext.Provider>
+    );
 
   return (
     <AppearanceContext.Provider value={resolved}>
@@ -442,6 +474,20 @@ export function Reader(props: ReaderProps) {
                   />
                 )}
                 <BlameShownContext.Provider value={blameShown}>
+                  {marp &&
+                    toolsEl &&
+                    createPortal(
+                      <button
+                        type="button"
+                        className="leaf-tool leaf-tool-text"
+                        aria-label={readAsDocument ? 'Show as slides' : 'Read as a document'}
+                        title={readAsDocument ? 'Show as slides' : 'Read as a document'}
+                        onClick={() => useDeckMode.getState().toggle(file!.path)}
+                      >
+                        {readAsDocument ? 'Slides' : 'Document'}
+                      </button>,
+                      toolsEl,
+                    )}
                   <DocToolsContext.Provider value={file && !isMarkdown ? toolsEl : null}>
                     <main className="leaf-main" ref={mainRef}>
                       <ErrorBoundary label="document" resetKey={`${path}:${file?.mtime ?? ''}`}>

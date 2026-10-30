@@ -2916,3 +2916,185 @@ html[data-resizing] .leaf-blame-resizer::after {
 .leaf-map svg[data-zoomed]:active {
   cursor: grabbing;
 }
+
+/* ---------- Marp decks ---------- */
+/* One slide at a time, letterboxed to fit. A whole deck fills the window with its bar
+   below; a deck in a document is a 16:9 box with previous/next on hover; presenting,
+   the slide fills the screen on black. */
+.leaf-deck {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  outline: none;
+}
+.leaf-deck[data-mode='full'] {
+  height: 100%;
+  background: var(--leaf-doc-bg);
+}
+.leaf-deck-slides {
+  flex: 1;
+  min-height: 0;
+  cursor: pointer;
+}
+.leaf-deck[data-mode='full'] .leaf-deck-slides {
+  margin: 24px 24px 0;
+}
+.leaf-deck[data-mode='mini'] .leaf-deck-slides {
+  aspect-ratio: 16 / 9;
+}
+.leaf-deck-overview {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+  padding: 24px;
+}
+.leaf-deck-bar {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  padding: 10px;
+  font: 13px/1 var(--leaf-font-ui);
+  color: var(--leaf-text-2);
+}
+.leaf-deck-bar .leaf-tool {
+  font-size: 18px;
+}
+.leaf-deck-bar .leaf-tool-text {
+  font-size: 13px;
+  padding: 0 10px;
+  width: auto;
+}
+.leaf-deck-count {
+  min-width: 64px;
+  text-align: center;
+  font-variant-numeric: tabular-nums;
+}
+.leaf-deck[data-mode='mini'] .leaf-deck-bar {
+  position: absolute;
+  right: 8px;
+  bottom: 8px;
+  padding: 2px;
+  border-radius: 8px;
+  border: 1px solid var(--leaf-line);
+  background: var(--leaf-glass);
+  -webkit-backdrop-filter: blur(20px);
+  backdrop-filter: blur(20px);
+  opacity: 0;
+  transition: opacity 0.12s;
+}
+.leaf-deck[data-mode='mini']:hover .leaf-deck-bar,
+.leaf-deck[data-mode='mini']:focus-within .leaf-deck-bar,
+.leaf-deck[data-mode='mini']:focus .leaf-deck-bar {
+  opacity: 1;
+}
+.leaf-deck[data-presenting] {
+  position: fixed;
+  inset: 0;
+  z-index: 2000;
+  background: #000;
+}
+.leaf-deck[data-presenting] .leaf-deck-slides {
+  margin: 0;
+}
+.leaf-deck[data-presenting] .leaf-deck-bar {
+  position: absolute;
+  left: 50%;
+  bottom: 16px;
+  transform: translateX(-50%);
+  border-radius: 10px;
+  background: rgba(0, 0, 0, 0.6);
+  color: #ddd;
+  opacity: 0;
+  transition: opacity 0.2s;
+}
+.leaf-deck[data-presenting]:hover .leaf-deck-bar {
+  opacity: 1;
+}
+.leaf-main-inner[data-viewer='deck'] {
+  max-width: none;
+  padding: 0;
+  height: 100%;
+  box-sizing: border-box;
+  display: flex;
+  flex-direction: column;
+}
+.leaf-main-inner[data-viewer='deck'] .leaf-stage-inline {
+  height: 100%;
+}
+
+/* ---------- a deck's speaker window ---------- */
+/* The slide on screen large; beside it the next one, the time talking, and the clock;
+   the slide's notes below, big enough to read at a glance. */
+.leaf-speaker-app {
+  height: 100vh;
+  background: var(--leaf-doc-bg);
+  color: var(--leaf-text);
+}
+.leaf-speaker {
+  display: grid;
+  grid-template-columns: minmax(0, 2fr) minmax(220px, 1fr);
+  grid-template-rows: minmax(0, 3fr) minmax(0, 2fr) auto;
+  gap: 16px;
+  height: 100%;
+  padding: 16px;
+  box-sizing: border-box;
+}
+.leaf-speaker-current {
+  min-height: 0;
+}
+.leaf-speaker-side {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  min-height: 0;
+}
+.leaf-speaker-next {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  flex: 1;
+}
+.leaf-speaker-next-slide {
+  flex: 1;
+  min-height: 0;
+  opacity: 0.85;
+}
+.leaf-speaker-label {
+  margin: 0 0 6px;
+  font: 600 12px/1.4 var(--leaf-font-ui);
+  color: var(--leaf-text-2);
+}
+.leaf-speaker-times {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 12px;
+  font: 600 28px/1 var(--leaf-font-ui);
+  font-variant-numeric: tabular-nums;
+}
+.leaf-speaker-times .leaf-tool-text {
+  font-size: 12px;
+  width: auto;
+  padding: 0 8px;
+}
+.leaf-speaker-clock {
+  margin-left: auto;
+  color: var(--leaf-text-2);
+}
+.leaf-speaker-notes {
+  grid-column: 1 / -1;
+  overflow: auto;
+  padding: 14px 18px;
+  border: 1px solid var(--leaf-line);
+  border-radius: var(--leaf-radius);
+  font: 20px/1.5 var(--leaf-font-ui);
+  white-space: pre-wrap;
+}
+.leaf-speaker-empty {
+  color: var(--leaf-text-2);
+}
+.leaf-speaker-bar {
+  grid-column: 1 / -1;
+  padding: 0;
+}

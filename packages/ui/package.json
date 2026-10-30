@@ -25,6 +25,8 @@
     "@codemirror/view": "^6.43.15",
     "@excalidraw/excalidraw": "^0.18.1",
     "@leaf/protocol": "*",
+    "@marp-team/marp-core": "^4.4.0",
+    "@marp-team/marpit-svg-polyfill": "^2.1.0",
     "@tauri-apps/api": "^2.12.4",
     "@types/hast": "^3.0.5",
     "@types/mdast": "^4.0.4",

@@ -8,6 +8,7 @@ import { code } from './code/index.js';
 import { live } from './live/index.js';
 import { chart } from './chart/index.js';
 import { map } from './map/index.js';
+import { deck } from './deck/index.js';
 import { csv } from './csv/index.js';
 import { excalidraw } from './excalidraw/index.js';
 import { mermaid } from './mermaid/index.js';
@@ -27,6 +28,7 @@ for (const v of [
   live,
   chart,
   map,
+  deck,
   code,
   image,
   media,
@@ -80,6 +82,7 @@ export {
   live,
   chart,
   map,
+  deck,
   code,
   image,
   media,

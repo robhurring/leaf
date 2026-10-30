@@ -146,6 +146,31 @@ async fn leaf_open_url(url: String, state: tauri::State<'_, AppState>) -> Result
     open::that_detached(&url).map_err(|e| e.to_string())
 }
 
+/// Opens the speaker view for a deck shown in `window`, in a window of its own on the
+/// same file. `path` is the deck's path within the window's folder.
+#[tauri::command]
+fn leaf_open_speaker(window: tauri::WebviewWindow, path: String) -> Result<(), String> {
+    let app = window.app_handle().clone();
+    let state = app.state::<AppState>();
+    let opened = state
+        .windows
+        .opened(window.label())
+        .ok_or("this window has nothing open")?;
+    // Only a file inside this window's folder.
+    if Path::new(&path)
+        .components()
+        .any(|c| !matches!(c, std::path::Component::Normal(_)))
+    {
+        return Err(format!("not a path inside the folder: {path}"));
+    }
+    let target = Windows::folder_of(&opened).join(&path);
+    if !target.is_file() {
+        return Err(format!("no such file: {path}"));
+    }
+    open_window_at(&app, &target, Some(leaf_app::launch::speaker_route(&path)));
+    Ok(())
+}
+
 /// The UI has painted: show its window. Windows open hidden so they never flash blank.
 #[tauri::command]
 fn leaf_ready(window: tauri::WebviewWindow) {
@@ -496,7 +521,8 @@ pub fn run(config: Config, link: Option<String>) -> i32 {
         .invoke_handler(tauri::generate_handler![
             leaf_send,
             leaf_ready,
-            leaf_open_url
+            leaf_open_url,
+            leaf_open_speaker
         ])
         .menu(build_menu)
         .on_menu_event(|app, event| on_menu(app, event.id().as_ref()))
