@@ -1453,12 +1453,16 @@ html[data-resizing] .leaf-resizer::after {
 }
 
 /* ---------- image viewer ---------- */
+/* The image on its own, no frame around it. A checkerboard sits behind the image itself,
+   so it shows exactly where the image is transparent and nowhere else. */
 .leaf-image-stage {
   display: grid;
   place-items: center;
-  padding: 24px;
-  border: 1px solid var(--leaf-line-2);
-  border-radius: var(--leaf-radius);
+}
+.leaf-image-stage .leaf-image {
+  max-width: 100%;
+  height: auto;
+  border-radius: 0;
   --checker: var(--leaf-surface-2);
   background-color: var(--leaf-surface);
   background-image:
@@ -1472,12 +1476,6 @@ html[data-resizing] .leaf-resizer::after {
     0 8px,
     8px -8px,
     -8px 0;
-}
-.leaf-image-stage .leaf-image {
-  max-width: 100%;
-  min-width: min(100%, 50%);
-  height: auto;
-  border-radius: 0;
 }
 
 /* ---------- file header ---------- */
@@ -2278,8 +2276,34 @@ html[data-connection='lost'] .leaf-math-pending {
 .leaf-main-inner[data-viewer='live'] .leaf-stage-inline {
   height: 100%;
 }
-.leaf-frame[data-viewer='csv'] .leaf-datatable {
+.leaf-frame[data-viewer='csv'][data-full] .leaf-datatable {
   padding: 32px 12px 12px;
+}
+/* A CSV in a document is a table like any other, with its filter above it: no box. */
+.leaf-frame[data-viewer='csv']:not([data-full]) {
+  background: transparent;
+  border: 0;
+  padding: 0;
+}
+.leaf-frame[data-viewer='csv']:not([data-full]) > .leaf-block-lang {
+  display: none;
+}
+.leaf-frame[data-viewer='csv']:not([data-full]) .leaf-datatable table {
+  font-size: 0.94em;
+}
+.leaf-frame[data-viewer='csv']:not([data-full]) .leaf-datatable th,
+.leaf-frame[data-viewer='csv']:not([data-full]) .leaf-datatable td {
+  padding: 10px 14px;
+}
+.leaf-frame[data-viewer='csv']:not([data-full]) .leaf-datatable tbody tr:nth-child(even) td {
+  background: var(--leaf-doc-table-stripe);
+}
+/* A markdown table marked <!--table:filter-->: the same filter bar above it. */
+.leaf-table-filter {
+  margin: 1em 0;
+}
+.leaf-table-filter > table {
+  margin: 0;
 }
 .leaf-frame[data-viewer='csv'] .leaf-datatable-bar {
   margin-bottom: 8px;

@@ -71,7 +71,9 @@ export function buildConfig(
     if (PER_POINT.includes(type))
       return { ...d, backgroundColor: (d.data ?? []).map((_, j) => paletteAt(j)) };
     const color = paletteAt(i);
-    return type === 'line' || type === 'radar'
+    // A radar fills its shape, so its fill is a tint; a line's background only colors its
+    // points and its legend swatch, so it's solid.
+    return type === 'radar'
       ? { ...d, borderColor: color, backgroundColor: color + '33' }
       : { ...d, backgroundColor: color, borderColor: color };
   });

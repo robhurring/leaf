@@ -186,3 +186,28 @@ describe('re-rendering a document', () => {
     expect(mounts).toBe(1);
   });
 });
+
+describe('filterable tables', () => {
+  const TABLE = '| name | kind |\n| --- | --- |\n| **logo** | image |\n| notes | text |\n';
+  it('a table after <!--table:filter--> gets a filter; others do not', async () => {
+    const withIt = renderToStaticMarkup(
+      (await renderMarkdown(`<!--table:filter-->\n${TABLE}`, base)).element,
+    );
+    expect(withIt).toContain('aria-label="Filter rows"');
+    expect(withIt).toMatch(/<strong[^>]*>logo<\/strong>/);
+    const without = renderToStaticMarkup((await renderMarkdown(TABLE, base)).element);
+    expect(without).not.toContain('Filter rows');
+  });
+
+  it('typing hides the rows that do not match', async () => {
+    const { render, screen, fireEvent } = await import('@testing-library/react');
+    const r = await renderMarkdown(`<!--table:filter-->\n\n${TABLE}`, base);
+    const view = render(r.element);
+    fireEvent.change(screen.getByRole('searchbox', { name: 'Filter rows' }), {
+      target: { value: 'note' },
+    });
+    const rows = [...view.container.querySelectorAll('tbody tr')] as HTMLElement[];
+    expect(rows.map((tr) => tr.hidden)).toEqual([true, false]);
+    expect(view.container.textContent).toContain('1 of 2 rows');
+  });
+});

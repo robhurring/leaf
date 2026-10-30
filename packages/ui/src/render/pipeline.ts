@@ -25,6 +25,7 @@ import type { Config } from '@leaf/protocol';
 import type { Handlers } from './handlers.js';
 import { extractHeadings, type Heading } from './headings.js';
 import { registries as defaultRegistries, type Registries } from './registries/index.js';
+import { remarkTableOptions } from './plugins/remarkTableOptions.js';
 import { remarkAlerts } from './plugins/remarkAlerts.js';
 import { remarkFrontmatterData } from './plugins/remarkFrontmatterData.js';
 import { rehypeCodeBlocks } from './plugins/rehypeCodeBlocks.js';
@@ -35,6 +36,7 @@ import { rehypeMathPending } from './plugins/rehypeMathPending.js';
 import { track } from './progress.js';
 import { load } from './connection.js';
 import { CodeBlock } from './components/CodeBlock.js';
+import { Table } from './components/Table.js';
 import { heading } from './components/Heading.js';
 import { image } from './components/Image.js';
 import { link } from './components/Link.js';
@@ -71,6 +73,7 @@ const schema = {
     div: [...(defaultSchema.attributes?.div ?? []), 'className', 'dataAlert'],
     p: [...(defaultSchema.attributes?.p ?? []), 'className'],
     code: [...(defaultSchema.attributes?.code ?? []), 'className'],
+    table: [...(defaultSchema.attributes?.table ?? []), 'dataFilter'],
   },
 };
 
@@ -116,7 +119,8 @@ export async function renderMarkdown(src: string, opts: RenderOptions): Promise<
     .use(remarkGfm)
     .use(remarkMath)
     .use(remarkGemoji)
-    .use(remarkAlerts);
+    .use(remarkAlerts)
+    .use(remarkTableOptions);
   for (const e of reg.parsers.all('remark')) processor.use(e.plugin as never, e.options as never);
   processor.use(remarkRehype, { allowDangerousHtml: true });
   if (raw) processor.use(raw.default);
@@ -152,6 +156,7 @@ export async function renderMarkdown(src: string, opts: RenderOptions): Promise<
     a: link({ docPath: opts.docPath, handlers: opts.handlers, linkBase: opts.linkBase ?? '' }),
     img: image(opts.docPath),
     'leaf-code': CodeBlock as never,
+    table: Table as never,
     ...opts.components,
     'leaf-node': LeafNode as never,
   };

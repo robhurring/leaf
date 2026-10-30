@@ -34,7 +34,18 @@ Mentions and topics light up: ask @rob about #rendering. Inside a GitHub checkou
 | a      |    b     |     c |
 | `code` | **bold** |  _em_ |
 
-A fenced ` ```csv ` block becomes a sortable table:
+Put `<!--table:filter-->` on the line before a table to give it a filter; it's an HTML comment, so GitHub shows the plain table:
+
+<!--table:filter-->
+
+| Service | Owner  | Status      |
+| :------ | :----- | :---------- |
+| `api`   | @rob   | **healthy** |
+| `auth`  | @ana   | degraded    |
+| `queue` | @rob   | **healthy** |
+| `web`   | @jules | down        |
+
+A fenced ` ```csv ` block becomes a table you can sort and filter:
 
 ```csv
 name,kind,size

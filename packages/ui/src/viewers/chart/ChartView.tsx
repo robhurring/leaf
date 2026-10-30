@@ -55,6 +55,11 @@ export default function ChartView(props: ViewerProps & { fill?: boolean }) {
       Chart.defaults.color = ink.muted;
       Chart.defaults.borderColor = ink.rule;
       Chart.defaults.font.family = 'system-ui, -apple-system, sans-serif';
+      // Legend entries as small solid swatches, not outlined boxes.
+      const labels = (Chart.defaults as { plugins?: { legend?: { labels?: object } } }).plugins
+        ?.legend?.labels;
+      if (labels)
+        Object.assign(labels, { usePointStyle: true, pointStyle: 'rectRounded', boxHeight: 8 });
       const c = chart.current;
       if (c && c.config.type === built.config.type) {
         // Same kind of chart: change it in place, so it animates to the new data.
