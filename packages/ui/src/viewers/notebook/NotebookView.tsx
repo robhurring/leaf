@@ -141,7 +141,6 @@ export default function NotebookView(props: ViewerProps) {
     }
   }, [text, from, file.error]);
   const [showCode, setShowCode] = useState(true);
-  const [open, setOpen] = useState(false);
   const blockTools = useContext(BlockToolsContext);
   const docTools = useContext(DocToolsContext);
   const docPath = from ? file.path : props.docPath;
@@ -163,7 +162,7 @@ export default function NotebookView(props: ViewerProps) {
     </button>
   );
   const target = blockTools ?? docTools;
-  // In a document it's a card that shows its top, until opened out.
+  // In a document it's a card of its own that scrolls.
   const embedded = !!blockTools && !docTools;
   const toggle = target ? (
     createPortal(button, target)
@@ -171,12 +170,7 @@ export default function NotebookView(props: ViewerProps) {
     <div className="leaf-nb-bar">{button}</div>
   );
   return (
-    <div
-      className="leaf-nb"
-      data-language={nb.language}
-      data-embedded={embedded ? '' : undefined}
-      data-open={embedded && open ? '' : undefined}
-    >
+    <div className="leaf-nb" data-language={nb.language} data-embedded={embedded ? '' : undefined}>
       {toggle}
       {nb.cells.map((cell, i) => (
         <CellView
@@ -187,11 +181,6 @@ export default function NotebookView(props: ViewerProps) {
           docPath={docPath}
         />
       ))}
-      {embedded && !open && (
-        <button type="button" className="leaf-nb-more" onClick={() => setOpen(true)}>
-          Show the whole notebook
-        </button>
-      )}
     </div>
   );
 }
