@@ -61,7 +61,12 @@ ditto -c -k --keepParent "$app" "$out/$name.zip"
 stage="$(mktemp -d)"
 cp -R "$app" "$stage/"
 ln -s /Applications "$stage/Applications"
-hdiutil create -quiet -volname "leaf reader" -srcfolder "$stage" -ov -format UDZO "$out/$name.dmg"
+# hdiutil on CI runners sometimes fails with "Resource busy"; a retry clears it.
+for attempt in 1 2 3 4; do
+  hdiutil create -volname "leaf reader" -srcfolder "$stage" -ov -format UDZO "$out/$name.dmg" && break
+  [[ $attempt == 4 ]] && { echo "bin/package: hdiutil could not make the disk image" >&2; exit 1; }
+  sleep $((attempt * 5))
+done
 rm -rf "$stage"
 if [[ -n "${LEAF_SIGN_IDENTITY:-}" ]]; then
   codesign --force --timestamp --sign "$LEAF_SIGN_IDENTITY" "$out/$name.dmg"
