@@ -15,7 +15,7 @@ use tauri::{
 use crate::app::{AppState, READY_FALLBACK, geometry_of, screens};
 use leaf_app::launch::route_for;
 use leaf_app::session::{self, Saved, SavedTab, SavedWindow};
-use leaf_app::tabs::{Workspace, label};
+use leaf_app::tabs::{MenuAction, Workspace, label, menu_action};
 use leaf_app::window::Windows;
 use leaf_app::window_state::Geometry;
 use leaf_protocol::{OpenIn, Preferences};
@@ -806,7 +806,8 @@ pub fn leaf_open_in_new_tab(webview: Webview<Wry>, path: String) {
     open_in_new_tab(webview.app_handle(), webview.label(), &path);
 }
 
-/// The id of a tree menu's Open in New Tab: the tab and the path, split by a unit separator.
+/// The id of a tree menu's Open in New Tab: the tab and the path, split by a unit
+/// separator (read back by `menu_action`).
 const OPEN_TAB: &str = "open-tab\u{1f}";
 
 /// Right-click on a file in a tab's tree: the app's menu, with Open in New Tab.
@@ -823,13 +824,46 @@ pub fn leaf_tree_menu(webview: Webview<Wry>, path: String) {
     }
 }
 
-/// Runs a menu item of the tabs' own (from `leaf_tree_menu`); false when `id` isn't one.
+/// Runs a tab menu item (File, Window, or the tree's Open in New Tab) in the front
+/// window; false when `id` isn't one.
 pub fn on_menu(app: &AppHandle, id: &str) -> bool {
-    let Some(rest) = id.strip_prefix(OPEN_TAB) else {
+    let Some(action) = menu_action(id) else {
         return false;
     };
-    if let Some((tab, path)) = rest.split_once('\u{1f}') {
-        open_in_new_tab(app, tab, path);
+    match action {
+        MenuAction::OpenInNewTab { tab, path } => open_in_new_tab(app, &tab, &path),
+        MenuAction::Select(tab) => select(app, &tab),
+        action => {
+            let Some(window) = front_window(app) else {
+                return true;
+            };
+            let active = active_tab(app, window.label());
+            let state = app.state::<AppState>();
+            match action {
+                MenuAction::NewTab => new_tab(app, &window),
+                MenuAction::CloseTab => {
+                    if let Some(t) = active {
+                        close_tab(app, &t);
+                    }
+                }
+                MenuAction::CloseWindow => {
+                    let _ = window.destroy();
+                }
+                MenuAction::Step(by) => {
+                    let next = state.tabs.lock().unwrap().step(window.label(), by);
+                    if let Some(t) = next {
+                        select(app, &t);
+                    }
+                }
+                MenuAction::MoveToNewWindow => {
+                    let many = state.tabs.lock().unwrap().tabs_of(window.label()).len() > 1;
+                    if let (Some(t), true) = (active, many) {
+                        move_to_new_window(app, &t, None);
+                    }
+                }
+                _ => {}
+            }
+        }
     }
     true
 }

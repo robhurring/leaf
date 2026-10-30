@@ -206,6 +206,46 @@ pub fn tab_menu_items(tabs: &[(String, String)]) -> Vec<(String, String, Option<
         .collect()
 }
 
+/// What a tab menu item does, by its id.
+#[derive(Debug, PartialEq)]
+pub enum MenuAction {
+    NewTab,
+    CloseTab,
+    CloseWindow,
+    /// Show the tab this many places on, wrapping.
+    Step(isize),
+    MoveToNewWindow,
+    Select(String),
+    /// Open in New Tab from a tab's tree: the tab, and the file in its folder.
+    OpenInNewTab {
+        tab: String,
+        path: String,
+    },
+}
+
+/// The tab action a menu item id names, if it names one.
+pub fn menu_action(id: &str) -> Option<MenuAction> {
+    if let Some(rest) = id.strip_prefix("open-tab\u{1f}") {
+        let (tab, path) = rest.split_once('\u{1f}')?;
+        return Some(MenuAction::OpenInNewTab {
+            tab: tab.into(),
+            path: path.into(),
+        });
+    }
+    if let Some(tab) = id.strip_prefix("tab:select:") {
+        return Some(MenuAction::Select(tab.into()));
+    }
+    Some(match id {
+        "tab:new" => MenuAction::NewTab,
+        "tab:close" => MenuAction::CloseTab,
+        "tab:close-window" => MenuAction::CloseWindow,
+        "tab:next" => MenuAction::Step(1),
+        "tab:prev" => MenuAction::Step(-1),
+        "tab:move-out" => MenuAction::MoveToNewWindow,
+        _ => return None,
+    })
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -354,5 +394,38 @@ mod tests {
         assert_eq!(items[9].2.as_deref(), Some("CmdOrCtrl+9"));
         let two = tab_menu_items(&tabs[..2]);
         assert_eq!(two[1].2.as_deref(), Some("CmdOrCtrl+2"));
+    }
+
+    #[test]
+    fn menu_ids_name_tab_actions() {
+        assert_eq!(menu_action("tab:new"), Some(MenuAction::NewTab));
+        assert_eq!(menu_action("tab:close"), Some(MenuAction::CloseTab));
+        assert_eq!(
+            menu_action("tab:close-window"),
+            Some(MenuAction::CloseWindow)
+        );
+        assert_eq!(menu_action("tab:next"), Some(MenuAction::Step(1)));
+        assert_eq!(menu_action("tab:prev"), Some(MenuAction::Step(-1)));
+        assert_eq!(
+            menu_action("tab:move-out"),
+            Some(MenuAction::MoveToNewWindow)
+        );
+        assert_eq!(
+            menu_action("tab:select:t7"),
+            Some(MenuAction::Select("t7".into()))
+        );
+        assert_eq!(
+            menu_action("open-tab\u{1f}t3\u{1f}docs/a b.md"),
+            Some(MenuAction::OpenInNewTab {
+                tab: "t3".into(),
+                path: "docs/a b.md".into()
+            })
+        );
+        assert_eq!(menu_action("cmd:goBack"), None);
+        assert_eq!(menu_action("tab:bogus"), None);
+        // Every tab item the menu offers is one of these.
+        for (id, _, _) in tab_menu_items(&[("t1".into(), "~/a".into())]) {
+            assert!(menu_action(&id).is_some(), "{id}");
+        }
     }
 }
