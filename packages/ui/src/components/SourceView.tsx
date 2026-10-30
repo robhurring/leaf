@@ -6,7 +6,16 @@ import { toJsxRuntime } from 'hast-util-to-jsx-runtime';
 import { Fragment, jsx, jsxs } from 'react/jsx-runtime';
 import { highlightToHast } from '../render/highlight.js';
 
-export function SourceView({ code, lang }: { code: string; lang: string }) {
+export function SourceView({
+  code,
+  lang,
+  label,
+}: {
+  code: string;
+  lang: string;
+  /** What the source is (`sketch`, `csv`), shown top left. */
+  label?: string;
+}) {
   const [hast, setHast] = useState<{ code: string; el: Element } | null>(null);
   useEffect(() => {
     let live = true;
@@ -20,6 +29,7 @@ export function SourceView({ code, lang }: { code: string; lang: string }) {
   }, [code, lang]);
   return (
     <div className="leaf-block-source">
+      {label && <span className="leaf-source-label">{label}</span>}
       {hast?.code === code ? (
         toJsxRuntime(hast.el, { Fragment, jsx, jsxs })
       ) : (

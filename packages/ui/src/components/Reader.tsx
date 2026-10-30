@@ -30,6 +30,7 @@ import { NoticeBar } from './NoticeBar.js';
 import { createPortal } from 'react-dom';
 import { isMarp } from '../viewers/deck/detect.js';
 import { useDeckMode } from '../store/deckMode.js';
+import { File, Slides } from '../icons/index.js';
 
 const SpeakerView = lazy(() => import('../viewers/deck/SpeakerView.js'));
 /** A deck's speaker window, opened with ?speaker. Read once, before the router rewrites the address. */
@@ -479,12 +480,12 @@ export function Reader(props: ReaderProps) {
                     createPortal(
                       <button
                         type="button"
-                        className="leaf-tool leaf-tool-text"
+                        className="leaf-tool"
                         aria-label={readAsDocument ? 'Show as slides' : 'Read as a document'}
                         title={readAsDocument ? 'Show as slides' : 'Read as a document'}
                         onClick={() => useDeckMode.getState().toggle(file!.path)}
                       >
-                        {readAsDocument ? 'Slides' : 'Document'}
+                        {readAsDocument ? <Slides size={15} /> : <File size={15} />}
                       </button>,
                       toolsEl,
                     )}

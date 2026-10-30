@@ -1,77 +1,46 @@
+# Slides
+
+leaf shows [Marp](https://marp.app) decks three ways:
+
+- **[slides/marp.md](./slides/marp.md)** is a markdown file with `marp: true` in its frontmatter. It opens as a deck; the page button in the file toolbar reads it as a document instead.
+- **[slides/launch.marp](./slides/launch.marp)** is a `.marp` file. It is always a deck.
+- A ` ```marp ` block, like the one below, is a deck inside an ordinary document.
+
+## A deck in a document
+
+The block has the same tools as a whole deck: **‹ ›** to move (or click the slide, or focus it and use the arrow keys), **All slides**, **Notes** for the speaker notes, and **Present** to fill the screen. **Esc** comes back.
+
+```marp
 ---
-marp: true
-theme: default
+theme: gaia
 paginate: true
 ---
 
-# Slides
+# Quarterly review
 
-A markdown file with `marp: true` in its frontmatter opens as a deck, drawn by [Marp](https://marp.app) so it looks the same as in VS Code or `marp-cli`.
-
-Use **→** or **space** to move on.
+Embedded in `slides.md`
 
 <!--
-Welcome everyone. These are the **speaker notes** for this slide: they show under the slide while you rehearse, and in the speaker window while you present.
-
-- Notes are Marp comments, written in markdown
-- Lists, **bold**, and `code` all work
+These notes are hidden in the document until you press **Notes**.
 -->
 
 ---
 
-# Writing a deck
+## Numbers
 
-- `---` starts a new slide
-- `theme:` picks Marp's `default`, `gaia`, or `uncover`
-- `paginate: true` numbers the slides
-- Comments become the speaker notes
-
-Edit this file while it's open: the deck follows and stays on this slide.
+- Revenue up **12%**
+- Two launches shipped
+- One incident, fixed in an hour
 
 <!--
-Walk through the four bullets quickly. The point to land: **a deck is just markdown**, so it diffs, reviews, and lives next to the code.
-
-Try it now: change a bullet and save.
+Pause on the incident: what we changed afterwards matters more than the hour.
 -->
 
 ---
 
 <!-- _class: lead -->
 
-# Presenting
-
-**Present** fills the screen with the slide. **Speaker** opens a window with these notes, the next slide, and a timer, and keeps it in step. **All slides** shows every slide at once. **Document** in the file toolbar reads this file as a plain document.
-
-<!--
-Click **Present** and press **Esc** to come back.
-
-Then open **Speaker**: move with the arrow keys in either window and the other follows.
--->
-
----
-
-# Code and math
-
-```ts
-const greet = (name: string) => `hello, ${name}`;
+# Questions?
 ```
 
-$$
-e^{i\pi} + 1 = 0
-$$
-
-<!--
-Code is highlighted and math is typeset with KaTeX, offline.
-
-If someone asks: Euler's identity ties together *e*, *i*, *π*, 1, and 0.
--->
-
----
-
-# Thanks
-
-Slides can also sit inside any document as a ` ```marp ` block: see [animations.md](./animations.md) for blocks that move, and the [README](./README.md) for everything else.
-
-<!--
-Wrap up. Point at the README for the rest of what leaf can show, then take questions.
--->
+The text around the deck is plain markdown, so a deck can sit in a design doc or a README next to the prose that explains it.

@@ -15,6 +15,9 @@ import { Check, Code, Copy, X } from '../icons/index.js';
 import { SourceView, sourceLang } from './SourceView.js';
 import type { Viewer, ViewerProps } from '../viewers/types.js';
 
+/** A file's kind by its extension: `sketch`, `csv`. */
+const extOf = (path: string) => path.slice(path.lastIndexOf('.') + 1).toLowerCase();
+
 /** A whole diagram or image file: the Stage's pan, zoom, and drawing, in the panel. */
 function InlineStage({
   viewer,
@@ -51,7 +54,11 @@ function InlineStage({
           slot,
         )}
       {showSource ? (
-        <SourceView code={props.content ?? ''} lang={sourceLang(viewer.id, props.file.lang)} />
+        <SourceView
+          code={props.content ?? ''}
+          lang={sourceLang(viewer.id, props.file.lang)}
+          label={extOf(props.file.path)}
+        />
       ) : (
         <StageCanvas
           // A picture with drawings starts over when it changes; a deck or a chart keeps
@@ -98,16 +105,6 @@ function WithSource({
           <button
             type="button"
             className="leaf-tool"
-            aria-label="Show source"
-            title={showSource ? 'Back to the table' : 'Show the source'}
-            aria-pressed={showSource}
-            onClick={() => setShowSource((v) => !v)}
-          >
-            <Code size={15} />
-          </button>
-          <button
-            type="button"
-            className="leaf-tool"
             aria-label="Copy source"
             title="Copy source"
             data-result={copied ?? undefined}
@@ -121,11 +118,25 @@ function WithSource({
               <Copy size={15} />
             )}
           </button>
+          <button
+            type="button"
+            className="leaf-tool"
+            aria-label="Show source"
+            title={showSource ? 'Back to the table' : 'Show the source'}
+            aria-pressed={showSource}
+            onClick={() => setShowSource((v) => !v)}
+          >
+            <Code size={15} />
+          </button>
         </>,
         slot,
       )}
       {showSource ? (
-        <SourceView code={text} lang={sourceLang(viewer.id, props.file.lang)} />
+        <SourceView
+          code={text}
+          lang={sourceLang(viewer.id, props.file.lang)}
+          label={extOf(props.file.path)}
+        />
       ) : (
         <Rich {...props} />
       )}

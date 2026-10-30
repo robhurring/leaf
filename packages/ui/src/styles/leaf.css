@@ -1174,6 +1174,16 @@ html[data-resizing] .leaf-resizer::after {
   font-weight: 500;
   letter-spacing: 0.02em;
 }
+/* Showing its source, a block says what it is, top left, all the time. */
+.leaf-frame:has(> .leaf-block-source) > .leaf-block-lang {
+  opacity: 1;
+}
+.leaf-source-label {
+  display: block;
+  margin-bottom: 8px;
+  font: 600 11px/1 var(--leaf-font-ui);
+  color: var(--leaf-text-2);
+}
 /* The label gives way to the toolbar on hover. */
 .leaf-codeblock:hover .leaf-block-lang,
 .leaf-codeblock:focus-within .leaf-block-lang {
@@ -1489,7 +1499,9 @@ html[data-resizing] .leaf-resizer::after {
    then Properties. Line two, only when a viewer has controls: those controls. */
 .leaf-dochead {
   container-type: inline-size;
-  --leaf-dochead-shade: color-mix(in srgb, var(--leaf-doc-text) 3%, var(--leaf-doc-bg));
+  /* The commit line and toolbar: barely off the page, so the header reads as one. */
+  --leaf-dochead-shade: color-mix(in srgb, var(--leaf-doc-text) 1.5%, var(--leaf-doc-bg));
+  --leaf-dochead-rule: color-mix(in srgb, var(--leaf-line) 40%, transparent);
   flex: none;
   position: relative;
   z-index: 5;
@@ -1518,7 +1530,7 @@ html[data-resizing] .leaf-resizer::after {
 .leaf-dochead-git {
   min-height: 30px;
   background: var(--leaf-dochead-shade);
-  border-top: 1px solid color-mix(in srgb, var(--leaf-line) 60%, transparent);
+  border-top: 1px solid var(--leaf-dochead-rule);
 }
 .leaf-crumbs {
   flex: 1;
@@ -1713,7 +1725,7 @@ html[data-resizing] .leaf-resizer::after {
   padding: 2px 12px 2px 20px;
   box-sizing: border-box;
   /* The same shade and soft divider as the commit line, so the header reads as one. */
-  border-top: 1px solid color-mix(in srgb, var(--leaf-line) 60%, transparent);
+  border-top: 1px solid var(--leaf-dochead-rule);
   background: var(--leaf-dochead-shade);
 }
 .leaf-dochead-tools:empty {

@@ -39,6 +39,8 @@ describe('a whole file made from text', () => {
     fireEvent.click(toggle);
     expect(screen.queryByTitle('canvas animation')).toBeNull();
     expect(document.querySelector('.leaf-block-source')!.textContent).toContain('ctx.fillRect');
+    // The source says what it is, top left.
+    expect(document.querySelector('.leaf-source-label')?.textContent).toBe('sketch');
     fireEvent.click(toggle);
     expect(await screen.findByTitle('canvas animation')).toBeTruthy();
   });

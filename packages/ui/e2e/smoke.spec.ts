@@ -108,6 +108,18 @@ test('gutter click and shift-click select lines and set the hash', async ({ page
   await expect(page.locator('.cm-selectionBackground').first()).toBeVisible();
 });
 
+test('a mouse selection in code lights its line numbers too', async ({ page }) => {
+  await page.goto('/files/script.py');
+  const lines = page.locator('.cm-line');
+  const a = (await lines.nth(2).boundingBox())!;
+  const z = (await lines.nth(4).boundingBox())!;
+  await page.mouse.move(a.x + 20, a.y + a.height / 2);
+  await page.mouse.down();
+  await page.mouse.move(z.x + 40, z.y + z.height / 2, { steps: 5 });
+  await page.mouse.up();
+  await expect(page.locator('.cm-selectedLineGutter')).toHaveText(['3', '4', '5']);
+});
+
 test('diagrams render, zoom into the Stage, and sticky ink survives navigation', async ({
   page,
 }) => {
@@ -281,9 +293,21 @@ test('charts and maps draw, in documents and as files of their own', async ({ pa
   expect(errors).toEqual([]);
 });
 
+test('a deck in a document has the deck tools', async ({ page }) => {
+  await page.goto('/slides.md');
+  const deck = page.locator('.leaf-deck[data-mode="mini"]');
+  await expect(deck.getByRole('status', { name: 'Slide' })).toHaveText('1 / 3', { timeout: 15000 });
+  await deck.getByRole('button', { name: 'Notes' }).click();
+  await expect(deck.getByRole('region', { name: 'Speaker notes' })).toContainText('hidden');
+  await deck.getByRole('button', { name: 'Present' }).click();
+  await expect(page.locator('.leaf-deck[data-presenting]')).toBeVisible();
+  await page.keyboard.press('Escape');
+  await expect(page.locator('.leaf-deck[data-presenting]')).toHaveCount(0);
+});
+
 test('a marp file opens as slides, steps with the keys, and presents', async ({ page }) => {
   const errors = collectErrors(page);
-  await page.goto('/slides.md');
+  await page.goto('/slides/marp.md');
   const count = page.getByRole('status', { name: 'Slide' });
   await expect(count).toHaveText('1 / 5', { timeout: 15000 });
   await page.keyboard.press('ArrowRight');

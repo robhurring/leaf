@@ -26,8 +26,9 @@ export default function DeckView(props: Props) {
   const [index, setIndex] = useState(0);
   const [overview, setOverview] = useState(false);
   const [presenting, setPresenting] = useState(false);
-  // The slide's speaker notes under it (Marp's comment notes), unless switched off.
-  const [showNotes, setShowNotes] = useState(true);
+  // The slide's speaker notes under it (Marp's comment notes): on for a whole deck,
+  // off for one in a document until asked for.
+  const [showNotes, setShowNotes] = useState(mode === 'full');
   const slides = useRef<HTMLDivElement>(null);
   const grid = useRef<HTMLDivElement>(null);
   const box = useRef<HTMLDivElement>(null);
@@ -157,7 +158,7 @@ export default function DeckView(props: Props) {
         data-presenting={presenting ? '' : undefined}
         onClick={onSlideClick}
       />
-      {mode === 'full' && !presenting && showNotes && !overview && (
+      {!presenting && showNotes && !overview && (
         <section className="leaf-deck-notes" aria-label="Speaker notes">
           {deck?.notes[at] ? (
             <Markdown source={deck.notes[at]!} docPath={docPath} />
@@ -190,7 +191,7 @@ export default function DeckView(props: Props) {
         >
           ›
         </button>
-        {mode === 'full' && !presenting && (
+        {!presenting && (
           <>
             <span className="leaf-tool-sep" />
             <button
@@ -220,15 +221,18 @@ export default function DeckView(props: Props) {
             >
               Present
             </button>
-            <button
-              type="button"
-              className="leaf-tool leaf-tool-text"
-              aria-label="Speaker view"
-              title="Open the speaker view: notes, the next slide, and a timer, in a window of its own"
-              onClick={() => void openSpeaker(docPath)}
-            >
-              Speaker
-            </button>
+            {/* The speaker window reads a whole file; a deck in a document has none of its own. */}
+            {mode === 'full' && (
+              <button
+                type="button"
+                className="leaf-tool leaf-tool-text"
+                aria-label="Speaker view"
+                title="Open the speaker view: notes, the next slide, and a timer, in a window of its own"
+                onClick={() => void openSpeaker(docPath)}
+              >
+                Speaker
+              </button>
+            )}
           </>
         )}
         {presenting && (

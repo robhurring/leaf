@@ -121,7 +121,11 @@ describe('Marp decks', () => {
     render(<Reader source={scripted({ 'talk.md': DECK }).source} />);
     await waitFor(() => expect(counter()).toBe('1 / 3'));
     const tools = screen.getByRole('toolbar', { name: 'File tools' });
-    fireEvent.click(within(tools).getByRole('button', { name: 'Read as a document' }));
+    const toggle = within(tools).getByRole('button', { name: 'Read as a document' });
+    // An icon, not a word.
+    expect(toggle.querySelector('svg')).toBeTruthy();
+    expect(toggle.textContent).toBe('');
+    fireEvent.click(toggle);
     expect(await screen.findByRole('heading', { name: 'One' })).toBeTruthy();
     expect(screen.queryByRole('status', { name: 'Slide' })).toBeNull();
     fireEvent.click(within(tools).getByRole('button', { name: 'Show as slides' }));
@@ -138,6 +142,22 @@ describe('Marp decks', () => {
     expect(counter()).toBe('2 / 2');
     fireEvent.click(screen.getByRole('button', { name: 'Previous slide' }));
     expect(counter()).toBe('1 / 2');
+  });
+
+  it('a ```marp fence has the deck tools too: All slides, Notes, Present', async () => {
+    const el = registries.blocks
+      .resolve('marp')!
+      .render('# A\n\n---\n\n# B\n', '', { docPath: 'doc.md', config: {} }) as ReactElement;
+    render(el);
+    await waitFor(() => expect(counter()).toBe('1 / 2'));
+    // Notes start hidden in a document, and show on request.
+    expect(screen.queryByRole('region', { name: 'Speaker notes' })).toBeNull();
+    fireEvent.click(screen.getByRole('button', { name: 'Notes' }));
+    expect(screen.getByRole('region', { name: 'Speaker notes' })).toBeTruthy();
+    fireEvent.click(screen.getByRole('button', { name: 'All slides' }));
+    expect(document.querySelector('.leaf-deck-overview')).toBeTruthy();
+    fireEvent.click(screen.getByRole('button', { name: 'Present' }));
+    expect(document.querySelector('.leaf-deck[data-presenting]')).toBeTruthy();
   });
 
   it('All slides and back returns to the slide; Present from All slides presents the slide', async () => {

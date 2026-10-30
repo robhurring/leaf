@@ -17,6 +17,7 @@ import {
   highlightSpecialChars,
   drawSelection,
   keymap,
+  ViewPlugin,
 } from '@codemirror/view';
 import { RangeSet } from '@codemirror/state';
 import {
@@ -85,6 +86,29 @@ const selectedLineGutter = gutterLineClass.compute(['selection'], (state) => {
   const last = state.doc.lineAt(to).number;
   for (let n = first; n <= last; n++) marks.push(selectedGutter.range(state.doc.line(n).from));
   return RangeSet.of(marks);
+});
+
+/** A read-only view isn't editable, so a mouse drag makes only a browser selection;
+ * mirror it into the editor's, which paints whole lines and marks their gutter. */
+const nativeSelection = ViewPlugin.define((view) => {
+  const sync = () => {
+    const sel = view.dom.ownerDocument.getSelection();
+    if (!sel || !sel.anchorNode || !sel.focusNode) return;
+    const inside = (n: Node) => view.contentDOM.contains(n);
+    if (!inside(sel.anchorNode) || !inside(sel.focusNode)) return;
+    try {
+      const anchor = view.posAtDOM(sel.anchorNode, sel.anchorOffset);
+      const head = view.posAtDOM(sel.focusNode, sel.focusOffset);
+      const main = view.state.selection.main;
+      if (main.anchor !== anchor || main.head !== head)
+        view.dispatch({ selection: EditorSelection.single(anchor, head) });
+    } catch {
+      /* a node CodeMirror doesn't map: leave the selection be */
+    }
+  };
+  const doc = view.dom.ownerDocument;
+  doc.addEventListener('selectionchange', sync);
+  return { destroy: () => doc.removeEventListener('selectionchange', sync) };
 });
 
 const anchors = new WeakMap<EditorView, number>();
@@ -236,6 +260,7 @@ export function createReadOnlyView(
       },
     }),
     selectedLineGutter,
+    nativeSelection,
     highlightSpecialChars(),
     drawSelection(),
     search({ top: true }),
