@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { act, fireEvent, render, screen } from '@testing-library/react';
+import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { BlockFrame } from '../src/components/BlockFrame.js';
 import { useStage } from '../src/store/stage.js';
 import { mermaid } from '../src/viewers/mermaid/index.js';
@@ -10,6 +10,8 @@ import { plantuml } from '../src/viewers/plantuml/index.js';
 const imageMocks = vi.hoisted(() => ({
   copyImage: vi.fn(async () => {}),
   copyRaster: vi.fn(async () => {}),
+  copyCanvas: vi.fn(async () => {}),
+  copyFrame: vi.fn(async () => {}),
   downloadText: vi.fn(),
 }));
 vi.mock('../src/stage/image.js', async (orig) => ({
@@ -145,6 +147,34 @@ describe('BlockFrame', () => {
     expect(screen.queryByRole('button', { name: 'Zoom in' })).toBeNull();
     fireEvent.click(screen.getByRole('button', { name: 'Show source' }));
     expect(screen.getByTestId('picture')).toBeTruthy();
+  });
+
+  it('a chart or a live pane copies as an image too', async () => {
+    const chartViewer = { ...mermaid, id: 'chart', stage: {} };
+    const { unmount } = render(
+      <BlockFrame viewer={chartViewer} props={props} lang="chart">
+        <div className="leaf-chart">
+          <canvas data-testid="canvas" />
+        </div>
+      </BlockFrame>,
+    );
+    fireEvent.click(await screen.findByRole('button', { name: 'Copy as image' }));
+    await waitFor(() =>
+      expect(imageMocks.copyCanvas).toHaveBeenCalledWith(screen.getByTestId('canvas')),
+    );
+    unmount();
+    const liveViewer = { ...mermaid, id: 'live', stage: {} };
+    render(
+      <BlockFrame viewer={liveViewer} props={props} lang="canvas">
+        <div className="leaf-live">
+          <iframe title="canvas animation" data-testid="frame" />
+        </div>
+      </BlockFrame>,
+    );
+    fireEvent.click(await screen.findByRole('button', { name: 'Copy as image' }));
+    await waitFor(() =>
+      expect(imageMocks.copyFrame).toHaveBeenCalledWith(screen.getByTestId('frame')),
+    );
   });
 
   it('a code block offers only copy', () => {

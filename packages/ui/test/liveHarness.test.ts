@@ -225,6 +225,18 @@ describe('live pane harness', () => {
     expect((window as unknown as { count: number }).count).toBe(3);
   });
 
+  it('hands back a snapshot of its picture when asked', async () => {
+    HTMLCanvasElement.prototype.toDataURL = () => 'data:image/png;base64,AAAA';
+    await run('onFrame(() => {});');
+    send({ leaf: 'live', type: 'snapshot', id: 7 });
+    expect(posted).toContainEqual({
+      leaf: 'live',
+      type: 'snapshot',
+      id: 7,
+      url: 'data:image/png;base64,AAAA',
+    });
+  });
+
   it('still works after being turned into source text, as the frame receives it', async () => {
     const copy = new Function(`return ${harness.toString()}`)() as typeof harness;
     await run('onFrame(() => {});', {}, copy);

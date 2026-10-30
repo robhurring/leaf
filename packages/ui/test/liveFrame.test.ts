@@ -82,5 +82,12 @@ describe('live pane frame', () => {
     expect(isFromFrame('ready')).toBe(false);
     expect(isFromFrame({ leaf: 'live', type: 'error' })).toBe(false);
     expect(isFromFrame({ leaf: 'live', type: 'nope' })).toBe(false);
+    expect(
+      isFromFrame({ leaf: 'live', type: 'snapshot', id: 1, url: 'data:image/png;base64,AA' }),
+    ).toBe(true);
+    // Only a PNG of the picture, never a link somewhere.
+    expect(isFromFrame({ leaf: 'live', type: 'snapshot', id: 1, url: 'https://x/y.png' })).toBe(
+      false,
+    );
   });
 });

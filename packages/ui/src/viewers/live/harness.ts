@@ -172,8 +172,19 @@ export function harness(win: Window): void {
   Object.defineProperty(w, 'theme', { get: () => theme, configurable: true });
   win.addEventListener('message', (e) => {
     if (e.source !== win.parent) return;
-    const d = e.data as { leaf?: string; type?: string; theme?: 'light' | 'dark' };
+    const d = e.data as { leaf?: string; type?: string; theme?: 'light' | 'dark'; id?: number };
     if (!d || d.leaf !== 'live') return;
+    if (d.type === 'snapshot') {
+      // The picture as it is now, for copying: leaf can't reach into this frame itself.
+      try {
+        if (draw) draw();
+        const surface = doc.querySelector('canvas');
+        if (surface) post({ type: 'snapshot', id: d.id, url: surface.toDataURL('image/png') });
+      } catch {
+        // Nothing to copy.
+      }
+      return;
+    }
     if (d.type === 'pause') {
       // Before the first frame, let it draw so a resting pane still shows its picture.
       if (running && !drewFirst) firstOnly = true;

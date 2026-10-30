@@ -73,6 +73,74 @@ export async function copyImage(svg: SVGElement): Promise<void> {
   await navigator.clipboard.write([new ClipboardItem({ 'image/png': svgToPngBlob(svg) })]);
 }
 
+/** The page color behind `el`, so a copied picture keeps its background when pasted. */
+function backdropOf(el: Element): string {
+  for (let e: Element | null = el; e; e = e.parentElement) {
+    const bg = getComputedStyle(e).backgroundColor;
+    if (bg && bg !== 'transparent' && !/rgba\(.*,\s*0\)$/.test(bg)) return bg;
+  }
+  return '#ffffff';
+}
+
+/** A canvas (a chart) as a PNG on the page's color. */
+async function canvasToPng(source: CanvasImageSource, w: number, h: number, bg: string) {
+  const canvas = document.createElement('canvas');
+  canvas.width = w;
+  canvas.height = h;
+  const ctx = canvas.getContext('2d');
+  if (!ctx) throw new Error('canvas unavailable');
+  ctx.fillStyle = bg;
+  ctx.fillRect(0, 0, w, h);
+  ctx.drawImage(source, 0, 0, w, h);
+  return new Promise<Blob>((resolve, reject) =>
+    canvas.toBlob((b) => (b ? resolve(b) : reject(new Error('png encode failed'))), 'image/png'),
+  );
+}
+
+export async function copyCanvas(canvas: HTMLCanvasElement): Promise<void> {
+  const png = canvasToPng(canvas, canvas.width, canvas.height, backdropOf(canvas));
+  await navigator.clipboard.write([new ClipboardItem({ 'image/png': png })]);
+}
+
+let snapshots = 0;
+/** A live pane's picture: its sandboxed frame sends a PNG when asked. */
+function snapshotOf(frame: HTMLIFrameElement): Promise<Blob> {
+  const id = ++snapshots;
+  return new Promise<string>((resolve, reject) => {
+    const done = setTimeout(() => {
+      removeEventListener('message', onMessage);
+      reject(new Error('no picture'));
+    }, 2000);
+    const onMessage = (e: MessageEvent) => {
+      const d = e.data as { leaf?: string; type?: string; id?: number; url?: unknown };
+      if (e.source !== frame.contentWindow || d?.leaf !== 'live' || d.type !== 'snapshot') return;
+      if (d.id !== id || typeof d.url !== 'string' || !d.url.startsWith('data:image/png;base64,'))
+        return;
+      clearTimeout(done);
+      removeEventListener('message', onMessage);
+      resolve(d.url);
+    };
+    addEventListener('message', onMessage);
+    frame.contentWindow?.postMessage({ leaf: 'live', type: 'snapshot', id }, '*');
+  }).then(
+    (url) =>
+      new Promise<Blob>((resolve, reject) => {
+        const img = new Image();
+        img.onload = () =>
+          canvasToPng(img, img.naturalWidth, img.naturalHeight, backdropOf(frame)).then(
+            resolve,
+            reject,
+          );
+        img.onerror = () => reject(new Error('bad picture'));
+        img.src = url;
+      }),
+  );
+}
+
+export async function copyFrame(frame: HTMLIFrameElement): Promise<void> {
+  await navigator.clipboard.write([new ClipboardItem({ 'image/png': snapshotOf(frame) })]);
+}
+
 export function downloadText(text: string, name: string, type = 'image/svg+xml'): void {
   const url = URL.createObjectURL(new Blob([text], { type }));
   const a = document.createElement('a');

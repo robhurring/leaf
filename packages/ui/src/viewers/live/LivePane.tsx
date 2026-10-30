@@ -121,7 +121,8 @@ export function LivePane(props: ViewerProps & { fill?: boolean }) {
       if (!frame.current || e.source !== frame.current.contentWindow) return;
       if (!isFromFrame(e.data)) return;
       if (e.data.type === 'ready') hear({ ready: true });
-      else hear({ failure: { message: e.data.message, line: e.data.line } });
+      else if (e.data.type === 'error')
+        hear({ failure: { message: e.data.message, line: e.data.line } });
     };
     window.addEventListener('message', onMessage);
     return () => window.removeEventListener('message', onMessage);

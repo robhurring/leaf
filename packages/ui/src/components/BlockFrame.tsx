@@ -19,7 +19,14 @@ import {
 } from '../icons/index.js';
 import { useAnnotations } from '../store/annotations.js';
 import { useStage } from '../store/stage.js';
-import { copyImage, copyRaster, downloadText, svgElementToString } from '../stage/image.js';
+import {
+  copyCanvas,
+  copyFrame,
+  copyImage,
+  copyRaster,
+  downloadText,
+  svgElementToString,
+} from '../stage/image.js';
 import { contentHash } from '../viewers/hash.js';
 import { SourceView, sourceLang } from './SourceView.js';
 import type { Viewer, ViewerProps } from '../viewers/types.js';
@@ -35,10 +42,11 @@ type Props = {
 };
 
 /** The rendered picture inside the frame: the diagram's svg or img, never a toolbar icon. */
-function pictureIn(host: HTMLElement | null): SVGSVGElement | HTMLImageElement | null {
+type Picture = SVGSVGElement | HTMLImageElement | HTMLCanvasElement | HTMLIFrameElement;
+function pictureIn(host: HTMLElement | null): Picture | null {
   if (!host) return null;
-  return host.querySelector<SVGSVGElement | HTMLImageElement>(
-    '.leaf-diagram svg, .leaf-diagram img, img.leaf-image, .leaf-image svg',
+  return host.querySelector<Picture>(
+    '.leaf-diagram svg, .leaf-diagram img, img.leaf-image, .leaf-image svg, .leaf-chart canvas, .leaf-live iframe',
   );
 }
 
@@ -56,7 +64,7 @@ export function BlockFrame({
 }: Props) {
   const host = useRef<HTMLDivElement>(null);
   const [result, setResult] = useState<'ok' | 'failed' | null>(null);
-  const [picture, setPicture] = useState<'svg' | 'img' | null>(null);
+  const [picture, setPicture] = useState<'svg' | 'img' | 'canvas' | 'iframe' | null>(null);
   const visual = viewer.stage !== undefined;
   // A picture made from text (a diagram, chart, map, or animation) can flip to that text.
   const [showSource, setShowSource] = useState(false);
@@ -98,7 +106,8 @@ export function BlockFrame({
     if (!visual || !host.current || typeof MutationObserver === 'undefined') return;
     const update = () => {
       const p = pictureIn(host.current);
-      setPicture(p ? (p.tagName.toLowerCase() === 'img' ? 'img' : 'svg') : null);
+      const tag = p?.tagName.toLowerCase();
+      setPicture(tag === 'img' || tag === 'canvas' || tag === 'iframe' ? tag : tag ? 'svg' : null);
     };
     update();
     const mo = new MutationObserver(update);
@@ -199,6 +208,8 @@ export function BlockFrame({
               const p = pictureIn(host.current);
               if (!p) throw new Error('nothing to copy');
               if (p instanceof HTMLImageElement) await copyRaster(p);
+              else if (p instanceof HTMLCanvasElement) await copyCanvas(p);
+              else if (p instanceof HTMLIFrameElement) await copyFrame(p);
               else await copyImage(p);
             })
           }
@@ -224,7 +235,7 @@ export function BlockFrame({
           onClick={() =>
             run(() => {
               const p = pictureIn(host.current);
-              if (!p || p instanceof HTMLImageElement) throw new Error('nothing to download');
+              if (!(p instanceof SVGSVGElement)) throw new Error('nothing to download');
               downloadText(svgElementToString(p), name);
             })
           }

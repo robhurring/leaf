@@ -11,9 +11,12 @@ export type Boot = { kind: LiveKind; code: string; theme: Theme; paused: boolean
 
 export type ToFrame =
   | { leaf: 'live'; type: 'play' | 'pause' | 'restart' }
+  | { leaf: 'live'; type: 'snapshot'; id: number }
   | { leaf: 'live'; type: 'theme'; theme: Theme };
 export type FromFrame =
-  { leaf: 'live'; type: 'ready' } | { leaf: 'live'; type: 'error'; message: string; line?: number };
+  | { leaf: 'live'; type: 'ready' }
+  | { leaf: 'live'; type: 'error'; message: string; line?: number }
+  | { leaf: 'live'; type: 'snapshot'; id: number; url: string };
 
 export const FRAME_CSP =
   "default-src 'none'; script-src 'unsafe-inline' 'unsafe-eval'; style-src 'unsafe-inline'; img-src data: blob:; media-src data: blob:; font-src data:";
@@ -61,5 +64,11 @@ export function isFromFrame(data: unknown): data is FromFrame {
   const d = data as Record<string, unknown>;
   if (d.leaf !== 'live') return false;
   if (d.type === 'ready') return true;
+  if (d.type === 'snapshot')
+    return (
+      typeof d.id === 'number' &&
+      typeof d.url === 'string' &&
+      d.url.startsWith('data:image/png;base64,')
+    );
   return d.type === 'error' && typeof d.message === 'string';
 }
