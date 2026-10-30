@@ -243,6 +243,35 @@ describe('live pane harness', () => {
     expect(scaleNow()).toBe(base);
   });
 
+  it('step advances one frame while paused, by a sixtieth of a second', async () => {
+    await run('window.ts = []; onFrame((t, dt) => window.ts.push([t, dt]));');
+    const ts = () => (window as unknown as { ts: [number, number][] }).ts;
+    frame();
+    frame();
+    send({ leaf: 'live', type: 'pause' });
+    frame(500);
+    const n = ts().length;
+    send({ leaf: 'live', type: 'step' });
+    expect(ts()).toHaveLength(n + 1);
+    expect(ts().at(-1)![1]).toBeCloseTo(1000 / 60, 3);
+    expect(ts().at(-1)![0] - ts().at(-2)![0]).toBeCloseTo(1000 / 60, 3);
+    send({ leaf: 'live', type: 'step' });
+    expect(ts()).toHaveLength(n + 2);
+    // Still paused: no frames on their own.
+    frame();
+    expect(ts()).toHaveLength(n + 2);
+  });
+
+  it('step on a running pane pauses it, then steps', async () => {
+    await run('window.count = 0; onFrame(() => window.count++);');
+    frame();
+    send({ leaf: 'live', type: 'step' });
+    const c = (window as unknown as { count: number }).count;
+    expect(c).toBe(2);
+    frame();
+    expect((window as unknown as { count: number }).count).toBe(2);
+  });
+
   it('a resize while paused redraws once, so the picture never goes blank', async () => {
     await run('window.count = 0; onFrame(() => window.count++);');
     frame();

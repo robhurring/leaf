@@ -135,6 +135,15 @@ describe('live animation blocks', () => {
     expect(sent.at(-1)).toEqual({ leaf: 'live', type: 'play' });
   });
 
+  it('step pauses the pane and moves it one frame', () => {
+    render(block(SINE));
+    intersect(pane());
+    watchFrame();
+    fireEvent.click(screen.getByRole('button', { name: 'Step' }));
+    expect(sent).toContainEqual({ leaf: 'live', type: 'step' });
+    expect(screen.getByRole('button', { name: 'Play' })).toBeTruthy();
+  });
+
   it('pauses off screen and while the window is hidden', () => {
     render(block(SINE));
     intersect(pane());

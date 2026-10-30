@@ -7,7 +7,7 @@ import { DiagramError } from '../diagramError.js';
 import { contentHash } from '../hash.js';
 import { useAppearance } from '../appearance.js';
 import { useStage } from '../../store/stage.js';
-import { Pause, Play, Restart } from '../../icons/index.js';
+import { Pause, Play, Restart, StepFrame } from '../../icons/index.js';
 import {
   buildSrcdoc,
   isFromFrame,
@@ -178,6 +178,18 @@ export function LivePane(props: ViewerProps & { fill?: boolean }) {
             onClick={() => setUserPaused((p) => !p)}
           >
             {userPaused ? <Play size={15} /> : <Pause size={15} />}
+          </button>
+          <button
+            type="button"
+            className="leaf-tool"
+            aria-label="Step"
+            title="Step one frame"
+            onClick={() => {
+              setUserPaused(true);
+              send({ leaf: 'live', type: 'step' });
+            }}
+          >
+            <StepFrame size={15} />
           </button>
           <button
             type="button"

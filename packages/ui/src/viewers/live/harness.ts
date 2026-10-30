@@ -67,10 +67,13 @@ export function harness(win: Window): void {
   const queued = new Map<number, FrameRequestCallback>();
   let rafIds = 0;
   let pending = 0;
+  // The time of the last frame delivered, which a step moves on from.
+  let clock = 0;
   const pump = () => {
     if (paused || pending || queued.size === 0) return;
     pending = nativeRaf((ts) => {
       pending = 0;
+      clock = ts;
       const due = [...queued.values()];
       queued.clear();
       for (const cb of due) cb(ts);
@@ -183,6 +186,16 @@ export function harness(win: Window): void {
       } catch {
         // Nothing to copy.
       }
+      return;
+    }
+    if (d.type === 'step') {
+      // One frame, a sixtieth of a second on, then stay paused.
+      if (!paused) setPaused(true);
+      firstOnly = false;
+      clock += 1000 / 60;
+      const due = [...queued.values()];
+      queued.clear();
+      for (const cb of due) cb(clock);
       return;
     }
     if (d.type === 'pause') {

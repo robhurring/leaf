@@ -37,3 +37,4 @@ export { Blame } from './Blame.js';
 export { Play } from './Play.js';
 export { Pause } from './Pause.js';
 export { Restart } from './Restart.js';
+export { StepFrame } from './StepFrame.js';
