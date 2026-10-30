@@ -1,8 +1,9 @@
 // The file sidebar: lazy folder tree, filter box, expand/collapse all.
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useState, type MouseEvent } from 'react';
 import type { Entry } from '@leaf/protocol';
 import { Chevron, CollapseAll, ExpandAll, File as FileIcon, Search } from '../icons/index.js';
 import { iconFor } from './fileIcon.js';
+import { inTab, openInNewTab, treeMenu } from '../source/TauriSource.js';
 import { useDocuments } from '../store/documents.js';
 import { IconButton } from './IconButton.js';
 import type { Presence } from '../usePresence.js';
@@ -13,7 +14,16 @@ type Props = {
   state?: Presence;
 };
 
-export function Tree({ onOpen, state = 'open' }: Props) {
+export function Tree({ onOpen: openHere, state = 'open' }: Props) {
+  // In a tab of the app, ⌘-click opens a file in a new tab, and right-click offers to.
+  const tabbed = inTab();
+  const onOpen = (path: string, e?: MouseEvent) =>
+    tabbed && e?.metaKey ? openInNewTab(path) : openHere(path);
+  const onMenu = (path: string) => (e: MouseEvent) => {
+    if (!tabbed) return;
+    e.preventDefault();
+    treeMenu(path);
+  };
   const tree = useDocuments((s) => s.tree);
   const expanded = useDocuments((s) => s.expanded);
   const current = useDocuments((s) => s.path);
@@ -58,9 +68,10 @@ export function Tree({ onOpen, state = 'open' }: Props) {
           type="button"
           className={`leaf-row ${active ? 'leaf-row-active' : ''}`}
           style={{ paddingLeft: 10 + depth * 14 }}
-          onClick={() =>
-            e.kind === 'dir' ? (isOpen ? collapse(e.path) : expand(e.path)) : onOpen(e.path)
+          onClick={(ev) =>
+            e.kind === 'dir' ? (isOpen ? collapse(e.path) : expand(e.path)) : onOpen(e.path, ev)
           }
+          onContextMenu={e.kind === 'dir' ? undefined : onMenu(e.path)}
         >
           {e.kind === 'dir' ? (
             <Chevron size={12} className={`leaf-chev ${isOpen ? 'leaf-chev-open' : ''}`} />
@@ -135,7 +146,8 @@ export function Tree({ onOpen, state = 'open' }: Props) {
               <button
                 type="button"
                 className={`leaf-row ${e.path === current ? 'leaf-row-active' : ''}`}
-                onClick={() => onOpen(e.path)}
+                onClick={(ev) => onOpen(e.path, ev)}
+                onContextMenu={onMenu(e.path)}
               >
                 <FileIcon size={15} className="leaf-row-icon" />
                 <span className="leaf-row-name">{e.path}</span>

@@ -91,6 +91,16 @@ export function reportTabState(state: Record<string, unknown>): void {
   void invoke('leaf_tab_state', { state }).catch(() => {});
 }
 
+/** Opens `path` (in this tab's folder) in a new tab on the same folder: a clone of this tab. */
+export function openInNewTab(path: string): void {
+  void invoke('leaf_open_in_new_tab', { path }).catch(() => {});
+}
+
+/** Shows the app's own menu for a file in the tree (Open in New Tab). */
+export function treeMenu(path: string): void {
+  void invoke('leaf_tree_menu', { path }).catch(() => {});
+}
+
 let shown = false;
 /** Tells the app this window has painted, so it shows it (windows open hidden). Once per window. */
 export function windowReady(): void {

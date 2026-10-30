@@ -290,6 +290,9 @@ fn build_menu(app: &AppHandle) -> tauri::Result<Menu<Wry>> {
 
 /// Menu items name commands; the focused window runs them.
 fn on_menu(app: &AppHandle, id: &str) {
+    if tabbed::on_menu(app, id) {
+        return;
+    }
     if id == "open-folder" {
         use tauri_plugin_dialog::DialogExt;
         let handle = app.clone();
@@ -441,7 +444,9 @@ pub fn run(config: Config, link: Option<String>) -> i32 {
             tabbed::leaf_tab_state,
             tabbed::leaf_reorder,
             tabbed::leaf_drag_move,
-            tabbed::leaf_drag_end
+            tabbed::leaf_drag_end,
+            tabbed::leaf_open_in_new_tab,
+            tabbed::leaf_tree_menu
         ])
         .menu(build_menu)
         .on_menu_event(|app, event| on_menu(app, event.id().as_ref()))

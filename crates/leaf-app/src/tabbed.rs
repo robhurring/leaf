@@ -747,3 +747,60 @@ pub fn move_to_new_window(app: &AppHandle, tab: &str, at: Option<(f64, f64)>) {
         show(&dest);
     }
 }
+
+/// Opens `path` (in `tab`'s folder) in a clone of `tab`: a new tab on the same root,
+/// right after it, opened at that document.
+pub fn open_in_new_tab(app: &AppHandle, tab: &str, path: &str) {
+    let state = app.state::<AppState>();
+    let (window, root, at) = {
+        let tabs = state.tabs.lock().unwrap();
+        let Some(window) = tabs.window_of(tab) else {
+            return;
+        };
+        let Some(root) = tabs.workspace(tab).and_then(|ws| ws.roots.first().cloned()) else {
+            return;
+        };
+        let at = tabs
+            .tabs_of(&window)
+            .iter()
+            .position(|t| t == tab)
+            .map(|i| i + 1);
+        (window, root, at)
+    };
+    if let Some(w) = app.get_window(&window) {
+        add_tab(app, &w, &root, Some(path.to_string()), None, at);
+    }
+}
+
+#[tauri::command]
+pub fn leaf_open_in_new_tab(webview: Webview<Wry>, path: String) {
+    open_in_new_tab(webview.app_handle(), webview.label(), &path);
+}
+
+/// The id of a tree menu's Open in New Tab: the tab and the path, split by a unit separator.
+const OPEN_TAB: &str = "open-tab\u{1f}";
+
+/// Right-click on a file in a tab's tree: the app's menu, with Open in New Tab.
+#[tauri::command]
+pub fn leaf_tree_menu(webview: Webview<Wry>, path: String) {
+    use tauri::menu::{Menu, MenuItem};
+    let app = webview.app_handle();
+    let id = format!("{OPEN_TAB}{}\u{1f}{path}", webview.label());
+    let Ok(item) = MenuItem::with_id(app, id, "Open in New Tab", true, None::<&str>) else {
+        return;
+    };
+    if let Ok(menu) = Menu::with_items(app, &[&item]) {
+        let _ = webview.window().popup_menu(&menu);
+    }
+}
+
+/// Runs a menu item of the tabs' own (from `leaf_tree_menu`); false when `id` isn't one.
+pub fn on_menu(app: &AppHandle, id: &str) -> bool {
+    let Some(rest) = id.strip_prefix(OPEN_TAB) else {
+        return false;
+    };
+    if let Some((tab, path)) = rest.split_once('\u{1f}') {
+        open_in_new_tab(app, tab, path);
+    }
+    true
+}
