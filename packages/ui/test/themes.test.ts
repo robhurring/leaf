@@ -122,8 +122,10 @@ describe('themes', () => {
     expect(code).toContain('max-width: none');
     expect(code).toContain('padding: 0');
   });
-  it('sidebars slide in and out, cast a soft shadow, and stop moving under reduced motion', () => {
-    expect(block(base, '.leaf-body {')).toContain('transition: grid-template-columns');
+  it('sidebars slide in, cast a soft shadow, and stop moving under reduced motion', () => {
+    // The column changes in one step: animating its width re-wraps the document (and
+    // clears animations) on every frame of the slide, which reads as flicker.
+    expect(block(base, '.leaf-body {')).not.toContain('transition');
     expect(base).toMatch(/@keyframes leaf-slide-in/);
     expect(block(base, '.leaf-tree {')).toContain('box-shadow');
     expect(base).toMatch(/prefers-reduced-motion: reduce\)[^]*\.leaf-body[^]*transition: none/);

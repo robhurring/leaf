@@ -243,6 +243,15 @@ describe('live pane harness', () => {
     expect(scaleNow()).toBe(base);
   });
 
+  it('a resize while paused redraws once, so the picture never goes blank', async () => {
+    await run('window.count = 0; onFrame(() => window.count++);');
+    frame();
+    send({ leaf: 'live', type: 'pause' });
+    const before = (window as unknown as { count: number }).count;
+    window.dispatchEvent(new Event('resize'));
+    expect((window as unknown as { count: number }).count).toBe(before + 1);
+  });
+
   it('hands back a snapshot of its picture when asked', async () => {
     HTMLCanvasElement.prototype.toDataURL = () => 'data:image/png;base64,AAAA';
     await run('onFrame(() => {});');

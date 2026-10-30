@@ -229,6 +229,18 @@ export function harness(win: Window): void {
     }
     w.requestAnimationFrame(loop);
   };
+  // One picture now, outside the frame loop: a resize clears a canvas, and a paused
+  // pane would otherwise stay blank until it plays again.
+  const redrawOnce = () => {
+    if (!paused || failed || !running) return;
+    try {
+      if (beforeFrame) beforeFrame();
+      for (const cb of callbacks) cb(elapsed, 0);
+      if (draw && !manual) draw();
+    } catch (e) {
+      report(e);
+    }
+  };
   const start = () => {
     if (running) return;
     running = true;
@@ -320,6 +332,7 @@ export function harness(win: Window): void {
       canvas.height = Math.round(height * dpr);
       settle(zoom.k, zoom.x, zoom.y);
       applyView();
+      redrawOnce();
     };
     fit();
     win.addEventListener('resize', fit);
@@ -343,6 +356,7 @@ export function harness(win: Window): void {
         renderer.setSize(s.width, s.height);
         camera.aspect = s.width / s.height;
         camera.updateProjectionMatrix();
+        redrawOnce();
       });
       w.renderer = renderer;
       w.scene = scene;
