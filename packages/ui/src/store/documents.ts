@@ -46,6 +46,8 @@ export type DocumentsState = {
   attach(source: DocumentSource): () => void;
   open(path: string): void;
   refresh(path: string): void;
+  /** Keeps `path` read and re-read when it changes (a data file a document uses); returns the release. */
+  watch(path: string): () => void;
   expand(dir: string): void;
   collapse(dir: string): void;
   expandAll(): void;
@@ -61,6 +63,8 @@ let stopPreferenceSync: (() => void) | null = null;
 let requestId = 0;
 let expandingAll = false;
 const pendingReads = new Set<string>();
+/** Data files in use, by how many views use each. */
+const watched = new Map<string, number>();
 const nextId = () => `r${++requestId}`;
 let textQuery = '';
 
@@ -158,6 +162,7 @@ export const useDocuments = create<DocumentsState>((set, get) => {
             if (get().blame[path]) send({ type: 'blame', path, id: nextId() });
           }
         }
+        for (const p of touched) if (p !== path && watched.has(p)) read(p);
         for (const dir of ['', ...expanded])
           if (touched.some((t) => parentOf(t) === dir)) list(dir);
         return;
@@ -243,6 +248,16 @@ export const useDocuments = create<DocumentsState>((set, get) => {
 
     refresh(path) {
       read(path);
+    },
+
+    watch(path) {
+      watched.set(path, (watched.get(path) ?? 0) + 1);
+      if (!get().files[path]) read(path);
+      return () => {
+        const n = (watched.get(path) ?? 1) - 1;
+        if (n > 0) watched.set(path, n);
+        else watched.delete(path);
+      };
     },
 
     requestBlame(path) {
