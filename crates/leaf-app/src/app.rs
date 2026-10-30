@@ -204,7 +204,7 @@ fn item(
     }
 }
 
-fn build_menu(app: &AppHandle) -> tauri::Result<Menu<Wry>> {
+pub(crate) fn build_menu(app: &AppHandle) -> tauri::Result<Menu<Wry>> {
     let app_menu = SubmenuBuilder::new(app, "leaf reader")
         .about(None)
         .separator()
@@ -229,7 +229,14 @@ fn build_menu(app: &AppHandle) -> tauri::Result<Menu<Wry>> {
             Some("CmdOrCtrl+Shift+O"),
         )?)
         .separator()
-        .close_window()
+        .item(&item(app, "tab:new", "New Tab", Some("CmdOrCtrl+T"))?)
+        .item(&item(app, "tab:close", "Close Tab", Some("CmdOrCtrl+W"))?)
+        .item(&item(
+            app,
+            "tab:close-window",
+            "Close Window",
+            Some("CmdOrCtrl+Shift+W"),
+        )?)
         .build()?;
     // Cmd only: on other platforms ctrl-f stays the reader's page-down key.
     let find_key = cfg!(target_os = "macos").then_some("Cmd+F");
@@ -277,12 +284,34 @@ fn build_menu(app: &AppHandle) -> tauri::Result<Menu<Wry>> {
         .item(&item(app, "cmd:goBack", "Back", Some("CmdOrCtrl+["))?)
         .item(&item(app, "cmd:goForward", "Forward", Some("CmdOrCtrl+]"))?)
         .build()?;
-    let window = SubmenuBuilder::new(app, "Window")
+    let mut window = SubmenuBuilder::new(app, "Window")
+        .item(&item(
+            app,
+            "tab:next",
+            "Show Next Tab",
+            Some("CmdOrCtrl+Shift+]"),
+        )?)
+        .item(&item(
+            app,
+            "tab:prev",
+            "Show Previous Tab",
+            Some("CmdOrCtrl+Shift+["),
+        )?)
+        .item(&item(app, "tab:move-out", "Move Tab to New Window", None)?)
+        .separator()
         .minimize()
         .maximize()
         .separator()
-        .fullscreen()
-        .build()?;
+        .fullscreen();
+    // The front window's tabs, ⌘1…⌘9 to pick one.
+    let tabs = tabbed::front_tabs(app);
+    if !tabs.is_empty() {
+        window = window.separator();
+        for (id, text, key) in leaf_app::tabs::tab_menu_items(&tabs) {
+            window = window.item(&item(app, &id, &text, key.as_deref())?);
+        }
+    }
+    let window = window.build()?;
     MenuBuilder::new(app)
         .items(&[&app_menu, &file, &edit, &view, &go, &window])
         .build()

@@ -189,6 +189,23 @@ pub fn label(ws: &Workspace, home: &Path) -> String {
     out
 }
 
+/// The Window menu's list of a window's tabs, given as (id, label): each item's id,
+/// text, and key. ⌘1…⌘8 go to the first eight; ⌘9 to the last, as in browsers.
+pub fn tab_menu_items(tabs: &[(String, String)]) -> Vec<(String, String, Option<String>)> {
+    let last = tabs.len().saturating_sub(1);
+    tabs.iter()
+        .enumerate()
+        .map(|(i, (id, label))| {
+            let key = match i {
+                0..=7 => Some(format!("CmdOrCtrl+{}", i + 1)),
+                _ if i == last => Some("CmdOrCtrl+9".to_string()),
+                _ => None,
+            };
+            (format!("tab:select:{id}"), label.clone(), key)
+        })
+        .collect()
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -315,5 +332,27 @@ mod tests {
         assert_eq!(label(&ws("c", "/opt/x"), home), "/opt/x");
         assert_eq!(label(&ws("d", "/Users/rob"), home), "/Users/rob");
         assert_eq!(label(&ws("e", "/Users/r"), home), "~");
+    }
+
+    #[test]
+    fn menu_items_for_tabs() {
+        let tabs: Vec<(String, String)> = (1..=10)
+            .map(|i| (format!("t{i}"), format!("~/p{i}")))
+            .collect();
+        let items = tab_menu_items(&tabs);
+        assert_eq!(items.len(), 10);
+        assert_eq!(
+            items[0],
+            (
+                "tab:select:t1".into(),
+                "~/p1".into(),
+                Some("CmdOrCtrl+1".into())
+            )
+        );
+        assert_eq!(items[7].2.as_deref(), Some("CmdOrCtrl+8"));
+        assert_eq!(items[8].2, None);
+        assert_eq!(items[9].2.as_deref(), Some("CmdOrCtrl+9"));
+        let two = tab_menu_items(&tabs[..2]);
+        assert_eq!(two[1].2.as_deref(), Some("CmdOrCtrl+2"));
     }
 }

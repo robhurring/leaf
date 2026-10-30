@@ -100,9 +100,37 @@ pub fn relayout(app: &AppHandle, window: &Window<Wry>) {
     }
 }
 
-/// Tells every chrome the tabs changed.
+/// Tells every chrome the tabs changed, and lists them in the Window menu.
 pub fn changed(app: &AppHandle) {
     let _ = app.emit("leaf://tabs", ());
+    refresh_menu(app);
+}
+
+/// Rebuilds the menu bar, whose Window menu lists the front window's tabs.
+pub fn refresh_menu(app: &AppHandle) {
+    match crate::app::build_menu(app) {
+        Ok(menu) => {
+            let _ = app.set_menu(menu);
+        }
+        Err(e) => tracing::warn!(error = %e, "could not rebuild the menu"),
+    }
+}
+
+/// The front window's tabs as (id, label), for the Window menu. Empty before the app's
+/// state exists (the first menu is built before setup).
+pub fn front_tabs(app: &AppHandle) -> Vec<(String, String)> {
+    let Some(state) = app.try_state::<AppState>() else {
+        return vec![];
+    };
+    let Some(window) = front_window(app) else {
+        return vec![];
+    };
+    let tabs = state.tabs.lock().unwrap();
+    let home = home();
+    tabs.tabs_of(window.label())
+        .into_iter()
+        .filter_map(|id| Some((id.clone(), label(tabs.workspace(&id)?, &home))))
+        .collect()
 }
 
 /// Sends a reader command (`{name, arg}`) to one tab.
