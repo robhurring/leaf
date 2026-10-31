@@ -491,6 +491,19 @@ fn window_of_webview(webview: &Webview<Wry>) -> String {
     webview.window().label().to_string()
 }
 
+/// What the calling chrome's active tab last reported: a chrome that loads after its
+/// tab did (a tab dragged into a new window) missed the event.
+#[tauri::command]
+pub fn leaf_active_state(webview: Webview<Wry>) -> Option<serde_json::Value> {
+    let state = webview.app_handle().state::<AppState>();
+    let tab = state
+        .tabs
+        .lock()
+        .unwrap()
+        .active(&window_of_webview(&webview))?;
+    state.tab_state.lock().unwrap().get(&tab).cloned()
+}
+
 #[tauri::command]
 pub fn leaf_tabs(webview: Webview<Wry>) -> Vec<TabInfo> {
     let app = webview.app_handle();

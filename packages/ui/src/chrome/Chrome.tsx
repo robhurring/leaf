@@ -33,6 +33,8 @@ export function Chrome({ bridge, fits }: { bridge: Bridge; fits?: (s: string) =>
     let live = true;
     const load = () => void bridge.tabs().then((t) => live && setTabs(t));
     load();
+    // A tab moved here reported before this page listened: ask, unless it reports first.
+    void bridge.state().then((s) => live && s && setState((now) => (now === BLANK ? s : now)));
     const offs = [bridge.onTabs(load), bridge.onHover(setHover), bridge.onTabState(setState)];
     return () => {
       live = false;

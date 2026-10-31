@@ -469,6 +469,7 @@ pub fn run(config: Config, link: Option<String>) -> i32 {
             tabbed::leaf_new_tab,
             tabbed::leaf_tab_command,
             tabbed::leaf_tab_state,
+            tabbed::leaf_active_state,
             tabbed::leaf_reorder,
             tabbed::leaf_drag_move,
             tabbed::leaf_drag_end,

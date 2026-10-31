@@ -17,7 +17,7 @@ const tab = (
   active,
 });
 
-function fakeBridge(tabs: TabInfo[]) {
+function fakeBridge(tabs: TabInfo[], shown: TabState | null = null) {
   const subs = {
     tabs: [] as (() => void)[],
     hover: [] as ((h: Hover) => void)[],
@@ -26,6 +26,7 @@ function fakeBridge(tabs: TabInfo[]) {
   const bridge: Bridge = {
     windowLabel: () => 'w1',
     tabs: vi.fn(async () => tabs),
+    state: vi.fn(async () => shown),
     select: vi.fn(),
     close: vi.fn(),
     newTab: vi.fn(),
@@ -49,6 +50,27 @@ async function mount(tabs: TabInfo[], fits?: (s: string) => boolean) {
 }
 
 describe('the window chrome', () => {
+  it('asks for the active tab’s state when it loads, so a moved tab keeps its look', async () => {
+    const f = fakeBridge([tab('t1', '~/a', true)], {
+      title: 'Guide',
+      path: 'guide.md',
+      canBack: false,
+      canForward: false,
+      treeAvailable: true,
+      treeOpen: true,
+      outlineAvailable: true,
+      outlineOpen: false,
+      numbering: false,
+      textPct: 100,
+      theme: 'github',
+      appearance: 'dark',
+      status: 'open',
+    });
+    render(<Chrome bridge={f.bridge} />);
+    await act(async () => {});
+    expect(document.documentElement.dataset.appearance).toBe('dark');
+  });
+
   it('hides the tab row for one tab, and shows it for two', async () => {
     await mount([tab('t1', '~/a')]);
     expect(screen.queryByRole('tablist')).toBeNull();

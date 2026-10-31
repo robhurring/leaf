@@ -38,6 +38,8 @@ export type Hover = { window: string; index: number } | null;
 export type Bridge = {
   windowLabel(): string;
   tabs(): Promise<TabInfo[]>;
+  /** What the active tab last reported, for a chrome that loads after it did. */
+  state(): Promise<TabState | null>;
   select(id: string): void;
   close(id: string): void;
   newTab(): void;
@@ -71,6 +73,7 @@ function on<T>(event: string, fn: (payload: T) => void): () => void {
 export const tauriBridge: Bridge = {
   windowLabel: () => (window as { __LEAF_CHROME__?: string }).__LEAF_CHROME__ ?? '',
   tabs: () => invoke<TabInfo[]>('leaf_tabs'),
+  state: () => invoke<TabState | null>('leaf_active_state'),
   select: (id) => fire('leaf_select_tab', { id }),
   close: (id) => fire('leaf_close_tab', { id }),
   newTab: () => fire('leaf_new_tab'),
