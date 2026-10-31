@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
-import { act, render, screen, fireEvent, waitFor } from '@testing-library/react';
+import { act, render, screen, fireEvent, waitFor, within } from '@testing-library/react';
 import { invoke } from '@tauri-apps/api/core';
 import { Reader } from '../src/components/Reader.js';
 import { useDocuments } from '../src/store/documents.js';
@@ -46,6 +46,15 @@ describe('a reader inside a tab', () => {
     );
     act(() => void runCommand('toggleTree'));
     await waitFor(() => expect(reported().at(-1)).toMatchObject({ treeOpen: false }));
+  });
+
+  it('opens the folders down to the file it starts on', async () => {
+    history.replaceState(null, '', '/docs/guide.md');
+    render(<Reader source={dir().source} />);
+    await screen.findByRole('heading', { name: 'Guide', level: 1 });
+    const files = screen.getByRole('navigation', { name: 'Files' });
+    const guide = await within(files).findByRole('button', { name: /guide\.md/ });
+    expect(guide.closest('[role="treeitem"]')?.getAttribute('aria-selected')).toBe('true');
   });
 
   it('opens Go to over the top of the tab', async () => {

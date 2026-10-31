@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { Appearance as AppearanceIcon } from '../icons/index.js';
+import { Sliders } from '../icons/index.js';
 import { THEMES, type Appearance, type Theme } from '../store/ui.js';
 import { IconButton } from './IconButton.js';
 
@@ -50,13 +50,13 @@ export function ThemeMenu({
   return (
     <div className="leaf-menu-host" ref={ref}>
       <IconButton
-        label="Appearance"
+        label="Appearance and settings"
         pressed={open}
         onClick={() => (onOpenMenu ? onOpenMenu() : setOpen((o) => !o))}
         aria-haspopup="menu"
         aria-expanded={open}
       >
-        <AppearanceIcon />
+        <Sliders />
       </IconButton>
       {open && (
         <div className="leaf-menu" role="menu" aria-label="Appearance and theme">

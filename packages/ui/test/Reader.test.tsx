@@ -100,7 +100,7 @@ describe('Reader', () => {
   it('theme menu switches theme and appearance', async () => {
     render(<Reader source={dir().source} />);
     await screen.findByRole('heading', { level: 1 });
-    fireEvent.click(screen.getByRole('button', { name: 'Appearance' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Appearance and settings' }));
     fireEvent.click(screen.getByRole('menuitemradio', { name: 'Card' }));
     expect(document.documentElement.dataset.theme).toBe('card');
     fireEvent.click(screen.getByRole('menuitemradio', { name: 'Dark' }));
@@ -433,7 +433,7 @@ describe('Reader', () => {
     expect(screen.getByRole('dialog', { name: 'Settings' })).toBeTruthy();
     fireEvent.click(screen.getByRole('button', { name: 'Close' }));
     expect(screen.queryByRole('dialog', { name: 'Settings' })).toBeNull();
-    fireEvent.click(screen.getByRole('button', { name: 'Appearance' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Appearance and settings' }));
     fireEvent.click(screen.getByRole('menuitem', { name: 'Settings…' }));
     expect(screen.getByRole('dialog', { name: 'Settings' })).toBeTruthy();
   });

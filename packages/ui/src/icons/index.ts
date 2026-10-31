@@ -2,7 +2,6 @@ export { Leaf } from './Leaf.js';
 export { Sidebar } from './Sidebar.js';
 export { Outline } from './Outline.js';
 export { Numbering } from './Numbering.js';
-export { Appearance } from './Appearance.js';
 export { Search } from './Search.js';
 export { Plus } from './Plus.js';
 export { Minus } from './Minus.js';

@@ -44,7 +44,7 @@ describe('in the app window', () => {
       expect(bar.querySelector(part)!.hasAttribute('data-tauri-drag-region'), part).toBe(true);
     for (const b of bar.querySelectorAll('button'))
       expect(b.hasAttribute('data-tauri-drag-region')).toBe(false);
-    fireEvent.click(screen.getByRole('button', { name: 'Appearance' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Appearance and settings' }));
     // Local and always connected: no connection dot in the app.
     expect(document.querySelector('.leaf-dot')).toBeNull();
     expect(document.documentElement.dataset.shell).toBe('app');

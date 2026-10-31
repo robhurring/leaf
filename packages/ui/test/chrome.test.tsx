@@ -128,7 +128,7 @@ describe('the window chrome', () => {
 
   it('opens the appearance menu as the app’s own, not inside the 44px title row', async () => {
     const { bridge } = await mount([tab('t1', '~/a', true)]);
-    fireEvent.click(screen.getByRole('button', { name: 'Appearance' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Appearance and settings' }));
     expect(bridge.appearanceMenu).toHaveBeenCalled();
     expect(screen.queryByRole('menu')).toBeNull();
   });

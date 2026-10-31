@@ -26,7 +26,7 @@ describe('appearance reaches viewers live', () => {
     expect(mocks.initialize).toHaveBeenLastCalledWith(
       expect.objectContaining({ theme: 'default' }),
     );
-    fireEvent.click(screen.getByRole('button', { name: 'Appearance' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Appearance and settings' }));
     fireEvent.click(screen.getByRole('menuitemradio', { name: 'Dark' }));
     await waitFor(() =>
       expect(mocks.initialize).toHaveBeenLastCalledWith(

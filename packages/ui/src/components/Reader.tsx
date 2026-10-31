@@ -160,8 +160,9 @@ export function Reader(props: ReaderProps) {
     const fromUrl = props.path ?? router.current().path;
     const target =
       fromUrl || (docs.root.kind === 'file' ? rootEntries[0]?.path : defaultDocument(rootEntries));
-    if (target)
-      navigate(`${target}${router.current().slug ? '#' + router.current().slug : ''}`, true);
+    if (!target) return;
+    navigate(`${target}${router.current().slug ? '#' + router.current().slug : ''}`, true);
+    useDocuments.getState().reveal(target);
   }, [docs.root, rootEntries, docs.path, props.path, router, navigate]);
 
   useEffect(() => router.subscribe((loc) => useDocuments.getState().open(loc.path)), [router]);

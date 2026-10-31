@@ -49,6 +49,8 @@ export type DocumentsState = {
   /** Keeps `path` read and re-read when it changes (a data file a document uses); returns the release. */
   watch(path: string): () => void;
   expand(dir: string): void;
+  /** Opens every folder above `path`, so the tree shows it. */
+  reveal(path: string): void;
   collapse(dir: string): void;
   expandAll(): void;
   collapseAll(): void;
@@ -262,6 +264,10 @@ export const useDocuments = create<DocumentsState>((set, get) => {
 
     requestBlame(path) {
       send({ type: 'blame', path, id: nextId() });
+    },
+
+    reveal(path) {
+      for (let dir = parentOf(path); dir !== ''; dir = parentOf(dir)) get().expand(dir);
     },
 
     expand(dir) {
