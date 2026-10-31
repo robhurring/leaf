@@ -416,11 +416,25 @@ pub fn select(app: &AppHandle, tab: &str) {
     changed(app);
 }
 
+/// The window theme for a tab's reported state: light or dark as chosen, or the
+/// system's (None) for System.
+fn window_theme(state: &serde_json::Value) -> Option<tauri::Theme> {
+    match state.get("appearance")?.as_str()? {
+        "light" => Some(tauri::Theme::Light),
+        "dark" => Some(tauri::Theme::Dark),
+        _ => None,
+    }
+}
+
 /// Gives `window`'s chrome the state `tab` last reported.
 fn send_state(app: &AppHandle, window: &str, tab: &str) {
     let state = app.state::<AppState>();
     let s = state.tab_state.lock().unwrap().get(tab).cloned();
     if let Some(s) = s {
+        // The window's own frame and shadow follow leaf's appearance, not the system's.
+        if let Some(w) = app.get_window(window) {
+            let _ = w.set_theme(window_theme(&s));
+        }
         let _ = app.emit_to(
             EventTarget::AnyLabel {
                 label: chrome_label(window),
@@ -1119,5 +1133,19 @@ pub fn speaker_window(app: &AppHandle, folder: &Path, route: String) {
             tracing::error!(error = %e, "could not open the speaker view");
             state.windows.close(&label);
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn a_window_wears_its_tabs_appearance() {
+        let theme = |a: &str| window_theme(&serde_json::json!({ "appearance": a }));
+        assert_eq!(theme("light"), Some(tauri::Theme::Light));
+        assert_eq!(theme("dark"), Some(tauri::Theme::Dark));
+        assert_eq!(theme("auto"), None);
+        assert_eq!(window_theme(&serde_json::json!({})), None);
     }
 }
