@@ -253,7 +253,8 @@ test('live panes run, pause, and show their errors', async ({ page }) => {
     await expect(torus.getByRole('alert')).toContainText(/WebGL/i);
   const sine = page.locator('.leaf-live[data-kind="canvas"]').first();
   await expect(async () => sine.scrollIntoViewIfNeeded({ timeout: 1000 })).toPass();
-  await expect(sine).toHaveAttribute('data-state', 'running');
+  // The live-pane code loads with the first live block; Linux WebKit needs more than 5 s to fetch it and boot the frame.
+  await expect(sine).toHaveAttribute('data-state', 'running', { timeout: 20000 });
   // It moves: the picture changes from one moment to the next.
   const picture = () =>
     page
