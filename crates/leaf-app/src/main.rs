@@ -3,6 +3,7 @@
 //! stays in the foreground with the logs; so does an explicit -l on the command line.
 mod app;
 mod tabbed;
+mod tabbed_share;
 
 use std::collections::HashMap;
 use std::sync::Arc;

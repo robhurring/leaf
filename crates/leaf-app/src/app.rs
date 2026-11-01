@@ -14,12 +14,13 @@ use tauri::{AppHandle, Emitter, EventTarget, Manager, Webview, Wry};
 
 use leaf_app::launch::{link_in_argv, parse_deep_link};
 use leaf_app::raw;
+use leaf_app::recent_shares::RecentShares;
 use leaf_app::tabs::Tabs;
 use leaf_app::welcome;
 use leaf_app::window::Windows;
 use leaf_app::window_state::{Geometry, Rect, WindowStates};
 
-use crate::tabbed;
+use crate::{tabbed, tabbed_share};
 
 pub(crate) struct AppState {
     /// One core session per tab, keyed by the tab's id.
@@ -41,6 +42,12 @@ pub(crate) struct AppState {
     pub(crate) hovered: Mutex<Option<(String, usize)>>,
     /// The window focused last, where new tabs go.
     pub(crate) front: Mutex<Option<String>>,
+    /// The live share of each shared tab, keyed by the tab's label.
+    pub(crate) shares: Mutex<HashMap<String, leaf_app::sharing::ShareHandle>>,
+    /// Shares whose tab closed, resumable for the relay's grace period.
+    pub(crate) recent: Mutex<RecentShares>,
+    /// The name viewers see for this host.
+    pub(crate) name: String,
 }
 
 /// How long after the last move or resize the window places are written.
@@ -551,7 +558,11 @@ pub fn run(config: Config, link: Option<String>, welcome: bool) -> i32 {
             tabbed::leaf_open_in_new_tab,
             tabbed::leaf_tree_menu,
             tabbed::leaf_window_tabs,
-            tabbed::leaf_appearance_menu
+            tabbed::leaf_appearance_menu,
+            tabbed_share::leaf_share_state,
+            tabbed_share::leaf_share_start,
+            tabbed_share::leaf_share_resume,
+            tabbed_share::leaf_share_end
         ])
         .menu(build_menu)
         .on_menu_event(|app, event| on_menu(app, event.id().as_ref()))
@@ -602,6 +613,9 @@ pub fn run(config: Config, link: Option<String>, welcome: bool) -> i32 {
                 tab_state: Mutex::new(HashMap::new()),
                 hovered: Mutex::new(None),
                 front: Mutex::new(None),
+                shares: Mutex::new(HashMap::new()),
+                recent: Mutex::new(RecentShares::new(std::time::Duration::from_secs(60))),
+                name: leaf_app::sharing::host_name(&std::env::vars().collect()),
             });
             // The tabs open at the last quit come back first (when asked for), then
             // what this launch names opens among them.

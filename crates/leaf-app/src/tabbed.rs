@@ -35,6 +35,7 @@ pub struct TabInfo {
     kind: &'static str,
     name: String,
     active: bool,
+    shared: bool,
 }
 
 fn home() -> PathBuf {
@@ -452,6 +453,7 @@ pub fn close_tab(app: &AppHandle, tab: &str) {
     if let Some(v) = app.get_webview(tab) {
         let _ = v.close();
     }
+    crate::tabbed_share::release(app, tab);
     state.windows.close(tab);
     state.tab_state.lock().unwrap().remove(tab);
     let Some(window) = window else { return };
@@ -475,6 +477,7 @@ pub fn window_gone(app: &AppHandle, window: &str) {
     let tabs = state.tabs.lock().unwrap().tabs_of(window);
     for t in tabs {
         state.tabs.lock().unwrap().close_tab(&t);
+        crate::tabbed_share::release(app, &t);
         state.windows.close(&t);
         state.tab_state.lock().unwrap().remove(&t);
     }
@@ -526,6 +529,7 @@ pub fn leaf_tabs(webview: Webview<Wry>) -> Vec<TabInfo> {
     let tabs = state.tabs.lock().unwrap();
     let active = tabs.active(&window);
     let home = home();
+    let shares = state.shares.lock().unwrap();
     tabs.tabs_of(&window)
         .into_iter()
         .filter_map(|id| {
@@ -547,6 +551,7 @@ pub fn leaf_tabs(webview: Webview<Wry>) -> Vec<TabInfo> {
                     .map(|n| n.to_string_lossy().into_owned())
                     .unwrap_or_default(),
                 active: active.as_deref() == Some(id.as_str()),
+                shared: shares.contains_key(&id),
                 id,
             })
         })
@@ -604,7 +609,14 @@ pub fn leaf_tab_command(webview: Webview<Wry>, name: String, arg: Option<serde_j
 pub fn leaf_tab_state(webview: Webview<Wry>, state: serde_json::Value) {
     let app = webview.app_handle();
     let tab = webview.label().to_string();
-    app.state::<AppState>()
+    let app_state = app.state::<AppState>();
+    // What the host reads is what viewers of its share see it reading.
+    if let Some(path) = state.get("path").and_then(|p| p.as_str())
+        && let Some(h) = app_state.shares.lock().unwrap().get(&tab)
+    {
+        h.set_path(Some(path.to_string()));
+    }
+    app_state
         .tab_state
         .lock()
         .unwrap()
