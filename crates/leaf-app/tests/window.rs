@@ -42,6 +42,7 @@ async fn windows_are_sessions_sharing_an_engine_per_folder() {
             "w1",
             ClientMessage::Hello {
                 protocol: 1,
+                name: None,
                 id: Some("h".into()),
             },
         )
@@ -65,6 +66,7 @@ async fn windows_are_sessions_sharing_an_engine_per_folder() {
             "w2",
             ClientMessage::Hello {
                 protocol: 1,
+                name: None,
                 id: None,
             },
         )
@@ -161,6 +163,7 @@ async fn a_single_file_window_shows_that_file_not_its_folder() {
             "f",
             ClientMessage::Hello {
                 protocol: 1,
+                name: None,
                 id: None,
             },
         )

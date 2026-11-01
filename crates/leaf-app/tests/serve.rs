@@ -139,6 +139,7 @@ async fn websocket_round_trip_and_live_change() {
     let send = |m: ClientMessage| Message::Text(serde_json::to_string(&m).unwrap().into());
     ws.send(send(ClientMessage::Hello {
         protocol: 1,
+        name: None,
         id: Some("h".into()),
     }))
     .await

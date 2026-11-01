@@ -53,6 +53,9 @@ pub struct Config {
     pub topic_url: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub max_entries: Option<u64>,
+    /// The sharing relay this app talks to (its base URL).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub relay_url: Option<String>,
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq)]

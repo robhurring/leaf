@@ -1,0 +1,60 @@
+{
+  "$ref": "#/definitions/presence",
+  "definitions": {
+    "presence": {
+      "type": "object",
+      "properties": {
+        "type": {
+          "type": "string",
+          "const": "presence"
+        },
+        "host": {
+          "type": "object",
+          "properties": {
+            "id": {
+              "type": "string"
+            },
+            "name": {
+              "type": "string"
+            },
+            "color": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "id",
+            "name",
+            "color"
+          ],
+          "additionalProperties": false
+        },
+        "hostPath": {
+          "type": "string"
+        },
+        "viewers": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/presence/properties/host"
+          }
+        },
+        "you": {
+          "type": "string"
+        },
+        "id": {
+          "type": "string"
+        },
+        "inReplyTo": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "type",
+        "host",
+        "viewers",
+        "you"
+      ],
+      "additionalProperties": false
+    }
+  },
+  "$schema": "http://json-schema.org/draft-07/schema#"
+}

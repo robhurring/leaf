@@ -47,6 +47,9 @@
             "maxEntries": {
               "type": "integer",
               "exclusiveMinimum": 0
+            },
+            "relayUrl": {
+              "type": "string"
             }
           },
           "additionalProperties": false
@@ -158,6 +161,54 @@
               "type": "boolean"
             }
           },
+          "additionalProperties": false
+        },
+        "share": {
+          "type": "object",
+          "properties": {
+            "id": {
+              "type": "string"
+            },
+            "host": {
+              "type": "object",
+              "properties": {
+                "id": {
+                  "type": "string"
+                },
+                "name": {
+                  "type": "string"
+                },
+                "color": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "id",
+                "name",
+                "color"
+              ],
+              "additionalProperties": false
+            },
+            "mode": {
+              "type": "string",
+              "enum": [
+                "read-only"
+              ]
+            },
+            "webUrl": {
+              "type": "string"
+            },
+            "appUrl": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "id",
+            "host",
+            "mode",
+            "webUrl",
+            "appUrl"
+          ],
           "additionalProperties": false
         },
         "id": {

@@ -32,6 +32,7 @@ async fn engine() -> (Arc<Engine>, tempfile::TempDir) {
 fn hello(id: &str) -> ClientMessage {
     ClientMessage::Hello {
         protocol: 1,
+        name: None,
         id: Some(id.into()),
     }
 }
@@ -50,6 +51,7 @@ async fn hello_then_welcome_with_config_capabilities_and_preferences() {
             capabilities,
             participant,
             preferences,
+            share: _,
             in_reply_to,
         } => {
             assert_eq!(*protocol, 1);
@@ -334,6 +336,7 @@ async fn hello_with_another_protocol_version_is_refused() {
             s,
             ClientMessage::Hello {
                 protocol: 2,
+                name: None,
                 id: Some("h".into()),
             },
         )

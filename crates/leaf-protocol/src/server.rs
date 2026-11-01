@@ -2,7 +2,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::{
     BlameHunk, Capabilities, Change, Config, Encoding, Entry, ErrorCode, GitInfo, Participant,
-    Preferences, RootInfo,
+    Peer, Preferences, RootInfo, ShareInfo,
 };
 
 /// One line containing a text query: 1-based line number and the line's text.
@@ -12,6 +12,15 @@ pub struct TextHit {
     pub path: String,
     pub line: u32,
     pub text: String,
+}
+
+/// Where a shared session stands, from the host's side.
+#[derive(Serialize, Deserialize, Clone, Copy, Debug, PartialEq, Eq)]
+#[serde(rename_all = "lowercase")]
+pub enum ShareState {
+    Live,
+    Reconnecting,
+    Ended,
 }
 
 /// What a server sends: replies carry `inReplyTo`; pushes (`changed`) do not.
@@ -28,6 +37,9 @@ pub enum ServerMessage {
         /// Present when the server stores preferences; the client then sends its changes back.
         #[serde(skip_serializing_if = "Option::is_none")]
         preferences: Option<Preferences>,
+        /// Present when this session is shared.
+        #[serde(skip_serializing_if = "Option::is_none")]
+        share: Option<ShareInfo>,
         #[serde(skip_serializing_if = "Option::is_none")]
         in_reply_to: Option<String>,
     },
@@ -92,6 +104,26 @@ pub enum ServerMessage {
         #[serde(skip_serializing_if = "Option::is_none")]
         in_reply_to: Option<String>,
     },
+    /// Who is in a shared session and what the host is reading.
+    #[serde(rename_all = "camelCase")]
+    Presence {
+        host: Peer,
+        #[serde(skip_serializing_if = "Option::is_none")]
+        host_path: Option<String>,
+        viewers: Vec<Peer>,
+        /// The receiving viewer's own id.
+        you: String,
+        #[serde(skip_serializing_if = "Option::is_none")]
+        in_reply_to: Option<String>,
+    },
+    #[serde(rename_all = "camelCase")]
+    ShareStatus {
+        state: ShareState,
+        #[serde(skip_serializing_if = "Option::is_none")]
+        reason: Option<String>,
+        #[serde(skip_serializing_if = "Option::is_none")]
+        in_reply_to: Option<String>,
+    },
     #[serde(rename_all = "camelCase")]
     Error {
         code: ErrorCode,
@@ -114,6 +146,8 @@ impl ServerMessage {
             | ServerMessage::Matches { in_reply_to, .. }
             | ServerMessage::TextMatches { in_reply_to, .. }
             | ServerMessage::BlameHunks { in_reply_to, .. }
+            | ServerMessage::Presence { in_reply_to, .. }
+            | ServerMessage::ShareStatus { in_reply_to, .. }
             | ServerMessage::Error { in_reply_to, .. } => in_reply_to,
         };
         *slot = id.map(str::to_string);

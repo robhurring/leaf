@@ -49,6 +49,9 @@
                 "maxEntries": {
                   "type": "integer",
                   "exclusiveMinimum": 0
+                },
+                "relayUrl": {
+                  "type": "string"
                 }
               },
               "additionalProperties": false
@@ -160,6 +163,54 @@
                   "type": "boolean"
                 }
               },
+              "additionalProperties": false
+            },
+            "share": {
+              "type": "object",
+              "properties": {
+                "id": {
+                  "type": "string"
+                },
+                "host": {
+                  "type": "object",
+                  "properties": {
+                    "id": {
+                      "type": "string"
+                    },
+                    "name": {
+                      "type": "string"
+                    },
+                    "color": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "id",
+                    "name",
+                    "color"
+                  ],
+                  "additionalProperties": false
+                },
+                "mode": {
+                  "type": "string",
+                  "enum": [
+                    "read-only"
+                  ]
+                },
+                "webUrl": {
+                  "type": "string"
+                },
+                "appUrl": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "id",
+                "host",
+                "mode",
+                "webUrl",
+                "appUrl"
+              ],
               "additionalProperties": false
             },
             "id": {
@@ -505,6 +556,74 @@
             "type",
             "path",
             "hunks"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "type": {
+              "type": "string",
+              "const": "presence"
+            },
+            "host": {
+              "$ref": "#/definitions/server/anyOf/0/properties/share/properties/host"
+            },
+            "hostPath": {
+              "type": "string"
+            },
+            "viewers": {
+              "type": "array",
+              "items": {
+                "$ref": "#/definitions/server/anyOf/0/properties/share/properties/host"
+              }
+            },
+            "you": {
+              "type": "string"
+            },
+            "id": {
+              "$ref": "#/definitions/server/anyOf/0/properties/id"
+            },
+            "inReplyTo": {
+              "$ref": "#/definitions/server/anyOf/0/properties/inReplyTo"
+            }
+          },
+          "required": [
+            "type",
+            "host",
+            "viewers",
+            "you"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "type": {
+              "type": "string",
+              "const": "shareStatus"
+            },
+            "state": {
+              "type": "string",
+              "enum": [
+                "live",
+                "reconnecting",
+                "ended"
+              ]
+            },
+            "reason": {
+              "type": "string"
+            },
+            "id": {
+              "$ref": "#/definitions/server/anyOf/0/properties/id"
+            },
+            "inReplyTo": {
+              "$ref": "#/definitions/server/anyOf/0/properties/inReplyTo"
+            }
+          },
+          "required": [
+            "type",
+            "state"
           ],
           "additionalProperties": false
         },

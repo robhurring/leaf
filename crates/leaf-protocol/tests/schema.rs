@@ -51,6 +51,8 @@ fn every_server_fixture_round_trips_and_validates() {
         "matches",
         "textMatches",
         "blameHunks",
+        "presence",
+        "shareStatus",
         "error",
     ] {
         let v = fixture(name);

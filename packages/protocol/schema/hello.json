@@ -12,6 +12,9 @@
           "type": "number",
           "const": 1
         },
+        "name": {
+          "type": "string"
+        },
         "id": {
           "type": "string"
         }

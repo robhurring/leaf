@@ -1,0 +1,37 @@
+{
+  "$ref": "#/definitions/shareStatus",
+  "definitions": {
+    "shareStatus": {
+      "type": "object",
+      "properties": {
+        "type": {
+          "type": "string",
+          "const": "shareStatus"
+        },
+        "state": {
+          "type": "string",
+          "enum": [
+            "live",
+            "reconnecting",
+            "ended"
+          ]
+        },
+        "reason": {
+          "type": "string"
+        },
+        "id": {
+          "type": "string"
+        },
+        "inReplyTo": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "type",
+        "state"
+      ],
+      "additionalProperties": false
+    }
+  },
+  "$schema": "http://json-schema.org/draft-07/schema#"
+}

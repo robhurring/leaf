@@ -4,6 +4,8 @@ import { PROTOCOL_VERSION, Preferences, envelope } from './common.js';
 export const HelloMessage = z.object({
   type: z.literal('hello'),
   protocol: z.literal(PROTOCOL_VERSION),
+  /** Who is asking, when the client knows (a viewer of a shared session). */
+  name: z.string().optional(),
   ...envelope,
 });
 export const ListMessage = z.object({

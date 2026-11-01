@@ -244,6 +244,7 @@ impl Engine {
                         mention_url: self.config.mention_url.clone(),
                         topic_url: self.config.topic_url.clone(),
                         max_entries: Some(self.config.max_entries as u64),
+                        relay_url: None,
                     },
                     capabilities: {
                         let mut c = self.source.capabilities();
@@ -259,6 +260,7 @@ impl Engine {
                         color: None,
                     },
                     preferences: Some(self.prefs.load().await),
+                    share: None,
                     in_reply_to: None,
                 }]
             }

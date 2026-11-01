@@ -9,6 +9,9 @@ pub enum ClientMessage {
     #[serde(rename_all = "camelCase")]
     Hello {
         protocol: u8,
+        /// Who is asking, when the client knows (a viewer of a shared session).
+        #[serde(skip_serializing_if = "Option::is_none")]
+        name: Option<String>,
         #[serde(skip_serializing_if = "Option::is_none")]
         id: Option<String>,
     },

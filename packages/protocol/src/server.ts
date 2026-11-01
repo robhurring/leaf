@@ -13,6 +13,7 @@ import {
   RootInfo,
   replyEnvelope,
 } from './common.js';
+import { Peer, ShareInfo } from './relay.js';
 
 export const WelcomeMessage = z.object({
   type: z.literal('welcome'),
@@ -23,6 +24,8 @@ export const WelcomeMessage = z.object({
   participant: Participant,
   /** Present when the server stores preferences; the client then sends its changes back. */
   preferences: Preferences.optional(),
+  /** Present when this session is shared. */
+  share: ShareInfo.optional(),
   ...replyEnvelope,
 });
 export const TreeMessage = z.object({
@@ -82,6 +85,24 @@ export const BlameHunksMessage = z.object({
   repoUrl: z.string().optional(),
   ...replyEnvelope,
 });
+/** Who is in a shared session and what the host is reading. */
+export const PresenceMessage = z.object({
+  type: z.literal('presence'),
+  host: Peer,
+  hostPath: z.string().optional(),
+  viewers: z.array(Peer),
+  /** The receiving viewer's own id. */
+  you: z.string(),
+  ...replyEnvelope,
+});
+export const ShareState = z.enum(['live', 'reconnecting', 'ended']);
+export type ShareState = z.infer<typeof ShareState>;
+export const ShareStatusMessage = z.object({
+  type: z.literal('shareStatus'),
+  state: ShareState,
+  reason: z.string().optional(),
+  ...replyEnvelope,
+});
 export const ErrorMessage = z.object({
   type: z.literal('error'),
   code: ErrorCode,
@@ -98,6 +119,8 @@ export const ServerMessage = z.discriminatedUnion('type', [
   MatchesMessage,
   TextMatchesMessage,
   BlameHunksMessage,
+  PresenceMessage,
+  ShareStatusMessage,
   ErrorMessage,
 ]);
 
@@ -109,6 +132,8 @@ export type MatchesMessage = z.infer<typeof MatchesMessage>;
 export type TextHit = z.infer<typeof TextHit>;
 export type TextMatchesMessage = z.infer<typeof TextMatchesMessage>;
 export type BlameHunksMessage = z.infer<typeof BlameHunksMessage>;
+export type PresenceMessage = z.infer<typeof PresenceMessage>;
+export type ShareStatusMessage = z.infer<typeof ShareStatusMessage>;
 export type ErrorMessage = z.infer<typeof ErrorMessage>;
 export type ServerMessage = z.infer<typeof ServerMessage>;
 export type ServerMessageType = ServerMessage['type'];

@@ -29,6 +29,8 @@ export const Config = z.object({
   topicUrl: z.string().optional(),
   /** Server cap for expand-all and search, so the UI can stop and say so. */
   maxEntries: z.number().int().positive().optional(),
+  /** The sharing relay this app talks to (its base URL). */
+  relayUrl: z.string().optional(),
 });
 export type Config = z.infer<typeof Config>;
 

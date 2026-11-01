@@ -1,0 +1,17 @@
+{
+  "type": "presence",
+  "host": {
+    "id": "h",
+    "name": "Rob",
+    "color": "#3b82f6"
+  },
+  "hostPath": "docs/plan.md",
+  "viewers": [
+    {
+      "id": "v1",
+      "name": "Brisk Otter",
+      "color": "#10b981"
+    }
+  ],
+  "you": "v1"
+}

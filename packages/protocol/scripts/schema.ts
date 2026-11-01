@@ -26,6 +26,8 @@ const singles: Record<string, Parameters<typeof zodToJsonSchema>[0]> = {
   matches: p.MatchesMessage,
   textMatches: p.TextMatchesMessage,
   blameHunks: p.BlameHunksMessage,
+  presence: p.PresenceMessage,
+  shareStatus: p.ShareStatusMessage,
   error: p.ErrorMessage,
   client: p.ClientMessage,
   server: p.ServerMessage,
