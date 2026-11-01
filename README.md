@@ -60,7 +60,11 @@ From a checkout, `leaf open docs/examples` is the tour: every kind of file leaf 
 
 ## Install
 
-**macOS, with Homebrew** (recommended): installs **leaf reader** in Applications and `leaf` in your terminal. Each release updates [the tap](https://github.com/robhurring/homebrew-tap).
+Three ways in: Homebrew, a release download, or a build from source. leaf runs on Apple Silicon and Intel Macs; on Linux, build from source.
+
+### Homebrew (macOS, recommended)
+
+Installs **leaf reader** in Applications and `leaf` in your terminal. Each release updates [the tap](https://github.com/robhurring/homebrew-tap).
 
 ```sh
 brew install --cask robhurring/tap/leaf
@@ -68,19 +72,25 @@ brew upgrade --cask leaf                  # a newer release
 brew uninstall --cask leaf                # add --zap to remove ~/.config/leaf too
 ```
 
-**macOS, by hand:** download the `.dmg` from [Releases](https://github.com/robhurring/leaf/releases) and drag **leaf reader** to Applications. It runs on Apple Silicon and Intel. To get `leaf` in your terminal, link the binary inside the app:
+### Download a release (macOS)
+
+Download the `.dmg` (or `.zip`) from [Releases](https://github.com/robhurring/leaf/releases) and drag **leaf reader** to Applications. To get `leaf` in your terminal, link the binary inside the app:
 
 ```sh
 ln -s "/Applications/leaf reader.app/Contents/MacOS/leaf" /usr/local/bin/leaf
 ```
 
-Builds that aren't notarized yet are stopped the first time you open them: open **System Settings > Privacy & Security** and choose **Open Anyway**.
+Builds that aren't notarized yet are stopped the first time you open them: open **System Settings > Privacy & Security** and choose **Open Anyway**. Homebrew installs get the same prompt.
 
-**From a checkout** (macOS, and the only way on Linux for now), with Rust and Node 22 or newer:
+### Build from source (macOS and Linux)
+
+With Rust and Node 22 or newer:
 
 ```sh
-bin/setup                  # dependencies
+git clone https://github.com/robhurring/leaf && cd leaf
+bin/setup                  # dependencies, .env, and the browsers the tests use
 bin/install                # builds, then links `leaf` into ~/.local/bin
+bin/build                  # after a pull: rebuilds, and the linked `leaf` picks it up
 ```
 
 On macOS `bin/install` also puts `leaf reader.app` in `~/Applications` so `leaf://` links open in leaf; `bin/install --uninstall` removes both. Its icon follows light and dark mode; `LEAF_ICON=vein-arrow` or `LEAF_ICON=page` before `bin/install` (or `bin/build`) picks one of the other two designs.
