@@ -204,9 +204,33 @@ async fn open_link(
 
 /// Shares `opts.engine` through the relay; resolves once the relay has given it an id.
 pub async fn start(opts: HostOptions) -> Result<ShareHandle, String> {
+    start_checked(opts).await.map_err(|e| e.message)
+}
+
+/// Why a share did not start: `permanent` when the relay refused it for good (a share it
+/// doesn't know, a wrong key, a version it can't speak), so trying again cannot help.
+#[derive(Debug)]
+pub struct StartError {
+    pub message: String,
+    pub permanent: bool,
+}
+
+/// `start`, saying whether a failure is worth retrying.
+pub async fn start_checked(opts: HostOptions) -> Result<ShareHandle, StartError> {
     let (ws, shared) = match open_link(&opts, opts.resume.clone()).await {
         Ok(ok) => ok,
-        Err(Refused::Final(m) | Refused::Retry(m)) => return Err(m),
+        Err(Refused::Final(message)) => {
+            return Err(StartError {
+                message,
+                permanent: true,
+            });
+        }
+        Err(Refused::Retry(message)) => {
+            return Err(StartError {
+                message,
+                permanent: false,
+            });
+        }
     };
     tracing::info!(share = %shared.id, url = %shared.web_url, "sharing");
     let (viewers_tx, viewers) = watch::channel(Vec::new());

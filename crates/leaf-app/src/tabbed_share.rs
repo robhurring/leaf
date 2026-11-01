@@ -8,7 +8,7 @@ use tauri::{AppHandle, Emitter, EventTarget, Manager, Webview, Wry};
 
 use crate::app::AppState;
 use crate::tabbed;
-use leaf_app::sharing::{self, HostOptions, LinkStatus, ShareHandle};
+use leaf_app::sharing::{self, HostOptions, LinkStatus, ShareHandle, StartError};
 use leaf_protocol::ShareMode;
 use leaf_protocol::relay::{Peer, Resume};
 
@@ -19,7 +19,7 @@ pub struct TabShare {
     pub id: String,
     pub web_url: String,
     pub app_url: String,
-    /// `live`, `reconnecting` or `ended`.
+    /// `idle` (not sharing), `live`, `reconnecting` or `ended`.
     pub status: String,
     pub viewers: Vec<Peer>,
     /// An id this tab's root could take back (its tab closed while it was live).
@@ -42,6 +42,17 @@ fn snapshot(h: &ShareHandle) -> TabShare {
         status: status_name(*h.status.borrow()).to_string(),
         viewers: h.viewers.borrow().clone(),
         resumable: None,
+    }
+}
+
+fn idle(resumable: Option<String>) -> TabShare {
+    TabShare {
+        id: String::new(),
+        web_url: String::new(),
+        app_url: String::new(),
+        status: "idle".into(),
+        viewers: Vec::new(),
+        resumable,
     }
 }
 
@@ -83,11 +94,24 @@ fn watch_share(app: &AppHandle, tab: &str, h: &ShareHandle) {
             };
             let now = {
                 let state = app.state::<AppState>();
-                let shares = state.shares.lock().unwrap();
-                shares.get(&tab).filter(|h| h.id == id).map(snapshot)
+                let mut shares = state.shares.lock().unwrap();
+                let mine = shares.get(&tab).filter(|h| h.id == id).map(snapshot);
+                // The relay ended it: the tab stops being shared.
+                if mine.as_ref().is_some_and(|s| s.status == "ended") {
+                    shares.remove(&tab);
+                    Some((mine.unwrap(), true))
+                } else {
+                    mine.map(|s| (s, false))
+                }
             };
             match now {
-                Some(s) => announce(&app, &tab, &s),
+                Some((s, over)) => {
+                    announce(&app, &tab, &s);
+                    if over {
+                        tabbed::changed(&app);
+                        break;
+                    }
+                }
                 None => break,
             }
             if !alive {
@@ -97,15 +121,40 @@ fn watch_share(app: &AppHandle, tab: &str, h: &ShareHandle) {
     });
 }
 
-async fn start_tab(app: &AppHandle, tab: &str, resume: Option<Resume>) -> Result<TabShare, String> {
+async fn start_tab(
+    app: &AppHandle,
+    tab: &str,
+    resume: Option<Resume>,
+) -> Result<TabShare, StartError> {
+    let soft = |m: &str| StartError {
+        message: m.to_string(),
+        permanent: false,
+    };
     let state = app.state::<AppState>();
-    if let Some(h) = state.shares.lock().unwrap().get(tab) {
-        return Ok(snapshot(h));
+    {
+        let mut shares = state.shares.lock().unwrap();
+        match shares.get(tab) {
+            Some(h) if *h.status.borrow() != LinkStatus::Ended => return Ok(snapshot(h)),
+            // Ended by the relay and not yet cleared: a new share replaces it.
+            Some(_) => {
+                shares.remove(tab);
+            }
+            None => {}
+        }
     }
-    let relay_url = state.windows.relay_url().ok_or("no relay set")?;
-    let engine = state.windows.engine_of(tab).ok_or("no such tab")?;
-    let root = state.windows.root_info(tab).ok_or("no such tab")?;
-    let handle = sharing::start(HostOptions {
+    let relay_url = state
+        .windows
+        .relay_url()
+        .ok_or_else(|| soft("no relay set"))?;
+    let engine = state
+        .windows
+        .engine_of(tab)
+        .ok_or_else(|| soft("no such tab"))?;
+    let root = state
+        .windows
+        .root_info(tab)
+        .ok_or_else(|| soft("no such tab"))?;
+    let handle = sharing::start_checked(HostOptions {
         relay_url,
         name: state.name.clone(),
         root,
@@ -114,6 +163,17 @@ async fn start_tab(app: &AppHandle, tab: &str, resume: Option<Resume>) -> Result
         resume,
     })
     .await?;
+    let path = state
+        .tab_state
+        .lock()
+        .unwrap()
+        .get(tab)
+        .and_then(|s| s.get("path"))
+        .and_then(|p| p.as_str())
+        .map(str::to_string);
+    if path.is_some() {
+        handle.set_path(path);
+    }
     let share = {
         let mut shares = state.shares.lock().unwrap();
         if let Some(existing) = shares.get(tab) {
@@ -130,31 +190,27 @@ async fn start_tab(app: &AppHandle, tab: &str, resume: Option<Resume>) -> Result
     Ok(share)
 }
 
-/// The tab's share. Not sharing: none, unless its root left a share when a tab closed,
-/// which comes as an `ended` share carrying only `resumable` (the page offers to resume).
+/// The tab's share; `idle` when it isn't sharing, with `resumable` naming a share its
+/// root left when a tab closed (the page offers to resume it).
 #[tauri::command]
-pub fn leaf_share_state(webview: Webview<Wry>) -> Option<TabShare> {
+pub fn leaf_share_state(webview: Webview<Wry>) -> TabShare {
     let tab = webview.label();
     let state = webview.app_handle().state::<AppState>();
     if let Some(h) = state.shares.lock().unwrap().get(tab) {
-        return Some(snapshot(h));
+        return snapshot(h);
     }
-    let root = state.windows.opened(tab)?;
-    let recent = state.recent.lock().unwrap();
-    let r = recent.peek(&root, Instant::now())?;
-    Some(TabShare {
-        id: String::new(),
-        web_url: String::new(),
-        app_url: String::new(),
-        status: "ended".into(),
-        viewers: Vec::new(),
-        resumable: Some(r.id.clone()),
-    })
+    let resumable = state.windows.opened(tab).and_then(|root| {
+        let recent = state.recent.lock().unwrap();
+        recent.peek(&root, Instant::now()).map(|r| r.id.clone())
+    });
+    idle(resumable)
 }
 
 #[tauri::command]
 pub async fn leaf_share_start(webview: Webview<Wry>) -> Result<TabShare, String> {
-    start_tab(webview.app_handle(), webview.label(), None).await
+    start_tab(webview.app_handle(), webview.label(), None)
+        .await
+        .map_err(|e| e.message)
 }
 
 #[tauri::command]
@@ -173,16 +229,21 @@ pub async fn leaf_share_resume(webview: Webview<Wry>) -> Result<TabShare, String
         id: recent.id.clone(),
         host_key: recent.host_key.clone(),
     };
-    let started = start_tab(app, tab, Some(resume)).await;
-    if started.is_err() {
-        // It may still be resumable later: put it back.
-        state
-            .recent
-            .lock()
-            .unwrap()
-            .remember(root, recent.id, recent.host_key, Instant::now());
+    // A failure the relay can't recover from drops the entry; a transient one puts it
+    // back with its original deadline, so it never outlives the relay's grace period.
+    match start_tab(app, tab, Some(resume)).await {
+        Ok(share) => Ok(share),
+        Err(e) => {
+            if !e.permanent {
+                state
+                    .recent
+                    .lock()
+                    .unwrap()
+                    .put_back(recent, Instant::now());
+            }
+            Err(e.message)
+        }
     }
-    started
 }
 
 #[tauri::command]
@@ -198,4 +259,18 @@ pub fn leaf_share_end(webview: Webview<Wry>) {
     ended.status = "ended".into();
     announce(app, tab, &ended);
     tabbed::changed(app);
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn a_tab_share_speaks_camel_case() {
+        let json = serde_json::to_value(idle(Some("abc".into()))).unwrap();
+        assert_eq!(json["webUrl"], "");
+        assert_eq!(json["appUrl"], "");
+        assert_eq!(json["resumable"], "abc");
+        assert_eq!(json["status"], "idle");
+    }
 }

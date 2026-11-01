@@ -39,6 +39,14 @@ impl RecentShares {
         self.items.iter().find(|r| r.root == root && r.until > now)
     }
 
+    /// Puts back an entry taken for a resume that failed, keeping its original deadline.
+    pub fn put_back(&mut self, recent: Recent, now: Instant) {
+        if recent.until > now {
+            self.items.retain(|r| r.root != recent.root);
+            self.items.push(recent);
+        }
+    }
+
     /// Takes what `root` could resume (once); expired entries are dropped.
     pub fn take(&mut self, root: &Path, now: Instant) -> Option<Recent> {
         self.items.retain(|r| r.until > now);
@@ -70,5 +78,19 @@ mod tests {
 
         recent.remember(root.clone(), "abc".into(), "key".into(), t0);
         assert!(recent.take(Path::new("/other"), at).is_none());
+    }
+
+    #[test]
+    fn a_put_back_share_keeps_its_original_deadline() {
+        let t0 = Instant::now();
+        let root = PathBuf::from("/notes");
+        let mut recent = RecentShares::new(Duration::from_secs(60));
+        recent.remember(root.clone(), "abc".into(), "key".into(), t0);
+        let at = t0 + Duration::from_secs(30);
+        let taken = recent.take(&root, at).unwrap();
+        recent.put_back(taken, at);
+        assert!(recent.peek(&root, t0 + Duration::from_secs(59)).is_some());
+        assert!(recent.peek(&root, t0 + Duration::from_secs(60)).is_none());
+        assert!(recent.take(&root, t0 + Duration::from_secs(61)).is_none());
     }
 }
