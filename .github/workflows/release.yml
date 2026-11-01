@@ -78,8 +78,8 @@ jobs:
         run: |
           gh release create "$GITHUB_REF_NAME" --title "leaf $GITHUB_REF_NAME" --generate-notes \
             dist/release/*.dmg dist/release/*.zip dist/release/*.sha256
-      # The cask in robhurring/homebrew-tap follows each release (brew install --cask
-      # robhurring/tap/leaf), when a token that can push there is in the secrets.
+      # The cask in robhurring/homebrew-taps follows each release (brew install --cask
+      # robhurring/taps/leaf), when a token that can push there is in the secrets.
       - name: Homebrew cask
         if: github.event_name == 'push' && env.HAS_TAP == 'true'
         env:
@@ -87,7 +87,7 @@ jobs:
         run: |
           version="${GITHUB_REF_NAME#v}"
           sha="$(awk '/\.zip$/ { print $1 }' dist/release/*.sha256)"
-          git clone -q "https://x-access-token:$TAP_TOKEN@github.com/robhurring/homebrew-tap.git" "$RUNNER_TEMP/tap"
+          git clone -q "https://x-access-token:$TAP_TOKEN@github.com/robhurring/homebrew-taps.git" "$RUNNER_TEMP/tap"
           cd "$RUNNER_TEMP/tap"
           sed -i '' -e "s/^  version \".*\"/  version \"$version\"/" \
             -e "s/^  sha256 \".*\"/  sha256 \"$sha\"/" Casks/leaf.rb
