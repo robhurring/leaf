@@ -39,9 +39,9 @@ import { createPortal } from 'react-dom';
 import { isMarp } from '../viewers/deck/detect.js';
 import { useDeckMode } from '../store/deckMode.js';
 import { Check, Code, Copy, File, Slides, X } from '../icons/index.js';
-import { ShareMenu } from '../share/ShareMenu.js';
 import { SourceView } from './SourceView.js';
 
+const ShareMenu = lazy(() => import('../share/ShareMenu.js'));
 const SpeakerView = lazy(() => import('../viewers/deck/SpeakerView.js'));
 /** A deck's speaker window, opened with ?speaker. Read once, before the router rewrites the address. */
 const SPEAKER_WINDOW =
@@ -111,6 +111,7 @@ export function Reader(props: ReaderProps) {
   const native = inTauri();
   // In a tab of an app window the window's chrome holds the title row.
   const tabbed = inTab();
+  const shareable = tabbed && !!docs.config?.relayUrl;
   const theme = props.theme ?? ui.theme;
   const appearance = props.appearance ?? ui.appearance;
   const resolved = useResolvedAppearance(appearance);
@@ -553,7 +554,14 @@ export function Reader(props: ReaderProps) {
                   />
                 )}
                 <BlameShownContext.Provider value={blameShown}>
-                  {toolsEl && createPortal(<ShareMenu />, toolsEl)}
+                  {toolsEl &&
+                    shareable &&
+                    createPortal(
+                      <Suspense fallback={null}>
+                        <ShareMenu />
+                      </Suspense>,
+                      toolsEl,
+                    )}
                   {marp &&
                     toolsEl &&
                     createPortal(

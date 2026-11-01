@@ -4,43 +4,20 @@ import { inTab, onShare } from '../source/TauriSource.js';
 import { useDocuments } from '../store/documents.js';
 import { useShare } from './store.js';
 
-type Copied = { which: 'app' | 'web'; ok: boolean } | null;
-
 /** The toolbar's Share button: starts, resumes and ends this tab's share and hands out its links. */
 export function ShareMenu() {
   const relayUrl = useDocuments((s) => s.config?.relayUrl);
   const active = inTab() && !!relayUrl;
-  const { state, error } = useShare();
+  const { state, error: alert, ended, copied } = useShare();
   const [open, setOpen] = useState(false);
-  const [copied, setCopied] = useState<Copied>(null);
-  const [ended, setEnded] = useState(false);
-  const [alert, setAlert] = useState<string | null>(null);
   const ref = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     if (!active) return;
+    const off = onShare((s) => useShare.getState().apply(s));
     void useShare.getState().load();
-    return onShare((s) => {
-      useShare.setState({ state: s });
-      if (s.status === 'ended') setEnded(true);
-    });
+    return off;
   }, [active]);
-  useEffect(() => {
-    if (!ended) return;
-    const t = setTimeout(() => setEnded(false), 4000);
-    return () => clearTimeout(t);
-  }, [ended]);
-  useEffect(() => {
-    setAlert(error);
-    if (!error) return;
-    const t = setTimeout(() => setAlert(null), 4000);
-    return () => clearTimeout(t);
-  }, [error]);
-  useEffect(() => {
-    if (!copied) return;
-    const t = setTimeout(() => setCopied(null), 1500);
-    return () => clearTimeout(t);
-  }, [copied]);
   useEffect(() => {
     if (!open) return;
     const onDown = (e: MouseEvent) => {
@@ -55,24 +32,20 @@ export function ShareMenu() {
     };
   }, [open]);
 
-  if (!active) return null;
   const sharing = state?.status === 'live' || state?.status === 'reconnecting';
   const resumable = !sharing && !!state?.resumable;
+  useEffect(() => {
+    if (!sharing && !resumable) setOpen(false);
+  }, [sharing, resumable]);
+  if (!active) return null;
   const viewers = state?.viewers ?? [];
   const act = (fn: () => Promise<void>) => {
     setOpen(false);
     void fn();
   };
-  const copy = (which: 'app' | 'web') => {
-    const url = which === 'app' ? state?.appUrl : state?.webUrl;
-    navigator.clipboard.writeText(url ?? '').then(
-      () => setCopied({ which, ok: true }),
-      () => setCopied({ which, ok: false }),
-    );
-  };
   const flash = (which: 'app' | 'web') =>
     copied?.which !== which ? undefined : copied.ok ? <Check size={14} /> : <X size={14} />;
-  const { start, resume, end } = useShare.getState();
+  const { start, resume, end, copy } = useShare.getState();
 
   return (
     <div className="leaf-menu-host leaf-share" ref={ref}>
@@ -105,7 +78,7 @@ export function ShareMenu() {
             type="button"
             role="menuitem"
             className="leaf-menu-item"
-            onClick={() => copy('app')}
+            onClick={() => void copy('app')}
           >
             Copy app link
             {flash('app')}
@@ -114,7 +87,7 @@ export function ShareMenu() {
             type="button"
             role="menuitem"
             className="leaf-menu-item"
-            onClick={() => copy('web')}
+            onClick={() => void copy('web')}
           >
             Copy web link
             {flash('web')}
@@ -166,3 +139,5 @@ export function ShareMenu() {
     </div>
   );
 }
+
+export default ShareMenu;

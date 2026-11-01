@@ -26,7 +26,7 @@ const writeText = vi.fn(async (_: string) => undefined);
 beforeEach(() => {
   history.replaceState(null, '', '/');
   useDocuments.getState().reset();
-  useShare.setState({ state: null, busy: false, error: null });
+  useShare.setState({ state: null, busy: false, error: null, ended: false, copied: null });
   w.__TAURI_INTERNALS__ = {};
   w.__LEAF_TAB__ = true;
   current = IDLE;
@@ -137,5 +137,47 @@ describe('the Share menu', () => {
     expect(screen.getByRole('button', { name: 'Share this tab' }).getAttribute('title')).toBe(
       'relay said no',
     );
+  });
+});
+
+describe('the Share menu across navigation and events', () => {
+  it('keeps a pushed event over a slower first read', async () => {
+    let release: (v: unknown) => void = () => {};
+    vi.mocked(invoke).mockImplementation((async (cmd: string) =>
+      cmd === 'leaf_share_state' ? new Promise((r) => (release = r)) : undefined) as never);
+    await open('wss://relay.test');
+    await waitFor(() => expect(pushShare).toBeTypeOf('function'));
+    act(() => pushShare(LIVE));
+    await screen.findByRole('button', { name: 'Sharing' });
+    await act(async () => release(IDLE));
+    expect(screen.getByRole('button', { name: 'Sharing' })).toBeTruthy();
+  });
+
+  it('shows Sharing ended after the user ends it, and it survives a remount', async () => {
+    current = LIVE;
+    const { unmount } = await (async () => {
+      const s = scripted({ 'README.md': README }, { config: { relayUrl: 'wss://relay.test' } });
+      const r = render(<Reader source={s.source} />);
+      await screen.findByRole('button', { name: 'Sharing' });
+      return r;
+    })();
+    fireEvent.click(screen.getByRole('button', { name: 'Sharing' }));
+    fireEvent.click(screen.getByRole('menuitem', { name: 'End session' }));
+    await screen.findByRole('status');
+    unmount();
+    const s = scripted({ 'README.md': README }, { config: { relayUrl: 'wss://relay.test' } });
+    render(<Reader source={s.source} />);
+    expect((await screen.findByRole('status')).textContent).toBe('Sharing ended');
+  });
+
+  it('does not pop the menu open when a share returns after it ended', async () => {
+    current = LIVE;
+    await open('wss://relay.test');
+    fireEvent.click(await screen.findByRole('button', { name: 'Sharing' }));
+    expect(screen.getByRole('menu')).toBeTruthy();
+    act(() => pushShare({ ...IDLE, status: 'ended' }));
+    expect(screen.queryByRole('menu')).toBeNull();
+    act(() => pushShare(LIVE));
+    expect(screen.queryByRole('menu')).toBeNull();
   });
 });
