@@ -19,16 +19,20 @@ const SECRET: &[u8] = b"test secret";
 const PUBLIC: &str = "https://relay.test";
 const WAIT: Duration = Duration::from_secs(5);
 
-async fn start_relay() -> RelayStarted {
-    relay::start(RelayOptions {
-        host: "127.0.0.1".into(),
-        port: 0,
+fn options() -> RelayOptions {
+    RelayOptions {
         public_url: Some(PUBLIC.into()),
-        secret: SECRET.to_vec(),
         grace: Duration::from_millis(500),
-    })
-    .await
-    .expect("relay starts")
+        ..RelayOptions::new("127.0.0.1".into(), 0, SECRET.to_vec())
+    }
+}
+
+async fn start_with(opts: RelayOptions) -> RelayStarted {
+    relay::start(opts).await.expect("relay starts")
+}
+
+async fn start_relay() -> RelayStarted {
+    start_with(options()).await
 }
 
 fn text<T: serde::Serialize>(m: &T) -> Message {
@@ -144,12 +148,19 @@ async fn joined_viewer(port: u16, id: &str, host: &mut Ws, name: &str) -> (Ws, S
 }
 
 async fn http_get(port: u16, path: &str) -> (u16, String) {
+    http_get_with(port, path, "").await
+}
+
+/// `extra` is raw header lines, each ending in "\r\n".
+async fn http_get_with(port: u16, path: &str, extra: &str) -> (u16, String) {
     let mut s = tokio::net::TcpStream::connect(("127.0.0.1", port))
         .await
         .unwrap();
     s.write_all(
-        format!("GET {path} HTTP/1.1\r\nHost: 127.0.0.1:{port}\r\nConnection: close\r\n\r\n")
-            .as_bytes(),
+        format!(
+            "GET {path} HTTP/1.1\r\nHost: 127.0.0.1:{port}\r\n{extra}Connection: close\r\n\r\n"
+        )
+        .as_bytes(),
     )
     .await
     .unwrap();
@@ -544,5 +555,137 @@ async fn a_restarted_relay_accepts_the_same_host_key() {
     .await
     .unwrap();
     assert!(matches!(next_host(&mut host).await, RelayToHost::Shared { id: got, .. } if got == id));
+    r.stop().await;
+}
+
+#[tokio::test]
+async fn too_many_viewers_are_refused() {
+    let r = start_with(RelayOptions {
+        max_viewers: 2,
+        ..options()
+    })
+    .await;
+    let (mut host, shared) = host_share(r.port).await;
+    let id = id_of(&shared);
+    let (_v1, _) = joined_viewer(r.port, &id, &mut host, "Ann").await;
+    let (_v2, _) = joined_viewer(r.port, &id, &mut host, "Bea").await;
+    let mut v3 = viewer(r.port, &id).await;
+    hello(&mut v3, Some("Cal")).await;
+    let e = next_json(&mut v3).await.expect("an error");
+    assert_eq!(e["type"], "error");
+    assert_eq!(e["code"], "bad_request");
+    assert_eq!(e["message"], "this share is full");
+    assert!(next_json(&mut v3).await.is_none(), "closed");
+    r.stop().await;
+}
+
+#[tokio::test]
+async fn a_socket_that_says_nothing_is_closed() {
+    let r = start_with(RelayOptions {
+        first_frame_timeout: Duration::from_millis(200),
+        ..options()
+    })
+    .await;
+    let mut silent_host = connect(r.port, "/host").await;
+    closed(&mut silent_host).await;
+
+    let (_host, shared) = host_share(r.port).await;
+    let mut silent_viewer = viewer(r.port, &id_of(&shared)).await;
+    closed(&mut silent_viewer).await;
+    r.stop().await;
+}
+
+#[tokio::test]
+async fn an_oversized_viewer_message_closes_it() {
+    let r = start_relay().await;
+    let (mut host, shared) = host_share(r.port).await;
+    let (mut v, vid) = joined_viewer(r.port, &id_of(&shared), &mut host, "Ann").await;
+    let big = format!(
+        r#"{{"type":"read","path":"{}"}}"#,
+        "a".repeat(relay::MAX_VIEWER_FRAME)
+    );
+    let _ = v.send(Message::Text(big.into())).await;
+    closed(&mut v).await;
+    match next_host(&mut host).await {
+        RelayToHost::Left { viewer } => assert_eq!(viewer, vid),
+        other => panic!("the big message must not reach the host: {other:?}"),
+    }
+    r.stop().await;
+}
+
+#[tokio::test]
+async fn share_health_counts_unknown_ids_against_the_asker() {
+    let r = start_relay().await;
+    for _ in 0..10 {
+        assert_eq!(http_get(r.port, "/s/aaa-bbb-ccc/healthz").await.0, 404);
+    }
+    assert_eq!(http_get(r.port, "/s/aaa-bbb-ccc/healthz").await.0, 429);
+    // The same counter guards viewer joins.
+    match tokio_tungstenite::connect_async(format!("ws://127.0.0.1:{}/s/aaa-bbb-ccc/ws", r.port))
+        .await
+    {
+        Err(tokio_tungstenite::tungstenite::Error::Http(resp)) => {
+            assert_eq!(resp.status().as_u16(), 429)
+        }
+        other => panic!("expected 429: {:?}", other.map(|_| ())),
+    }
+    r.stop().await;
+}
+
+#[tokio::test]
+async fn a_spoofed_forwarded_for_is_ignored_unless_the_proxy_is_trusted() {
+    // Not trusted: every miss counts against the peer, whatever the header claims.
+    let r = start_relay().await;
+    for i in 0..10 {
+        let xff = format!("X-Forwarded-For: 10.0.0.{i}\r\n");
+        assert_eq!(
+            http_get_with(r.port, "/s/aaa-bbb-ccc/healthz", &xff)
+                .await
+                .0,
+            404
+        );
+    }
+    let xff = "X-Forwarded-For: 10.0.0.99\r\n";
+    assert_eq!(
+        http_get_with(r.port, "/s/aaa-bbb-ccc/healthz", xff).await.0,
+        429
+    );
+    r.stop().await;
+
+    // Trusted: the last hop (the proxy's own) is the address; earlier hops are ignored.
+    let r = start_with(RelayOptions {
+        trust_proxy: true,
+        ..options()
+    })
+    .await;
+    for i in 0..10 {
+        let xff = format!("X-Forwarded-For: 192.0.2.{i}, 10.0.0.1\r\n");
+        assert_eq!(
+            http_get_with(r.port, "/s/aaa-bbb-ccc/healthz", &xff)
+                .await
+                .0,
+            404
+        );
+    }
+    let blocked = "X-Forwarded-For: 192.0.2.200, 10.0.0.1\r\n";
+    assert_eq!(
+        http_get_with(r.port, "/s/aaa-bbb-ccc/healthz", blocked)
+            .await
+            .0,
+        429
+    );
+    let other = "X-Forwarded-For: 10.0.0.1, 10.0.0.2\r\n";
+    assert_eq!(
+        http_get_with(r.port, "/s/aaa-bbb-ccc/healthz", other)
+            .await
+            .0,
+        404,
+        "a different last hop is a different client"
+    );
+    assert_eq!(
+        http_get(r.port, "/s/aaa-bbb-ccc/healthz").await.0,
+        404,
+        "no header: the peer, which has no misses of its own"
+    );
     r.stop().await;
 }

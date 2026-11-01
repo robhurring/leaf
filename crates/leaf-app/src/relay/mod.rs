@@ -32,6 +32,13 @@ pub const PING_EVERY: Duration = Duration::from_secs(25);
 /// A host that hasn't answered a ping within this long is treated as dropped.
 pub const PONG_WITHIN: Duration = Duration::from_secs(10);
 pub const DEFAULT_GRACE: Duration = Duration::from_secs(60);
+/// A socket that sends nothing this long after connecting is closed.
+pub const FIRST_FRAME_TIMEOUT: Duration = Duration::from_secs(10);
+/// The largest message (and frame) a viewer may send.
+pub const MAX_VIEWER_FRAME: usize = 1024 * 1024;
+/// The largest message (and frame) a host may send: room for a file at leaf's default
+/// 2 MiB inline limit, base64'd, inside its envelope.
+pub const MAX_HOST_FRAME: usize = 4 * 1024 * 1024;
 
 pub struct RelayOptions {
     pub host: String,
@@ -40,6 +47,27 @@ pub struct RelayOptions {
     pub public_url: Option<String>,
     pub secret: Vec<u8>,
     pub grace: Duration,
+    /// Trust `X-Forwarded-For` (its last hop) for the client address: only behind a proxy
+    /// that appends it, as Heroku's router does.
+    pub trust_proxy: bool,
+    pub max_viewers: usize,
+    pub first_frame_timeout: Duration,
+}
+
+impl RelayOptions {
+    /// The defaults for everything but where to listen and the secret.
+    pub fn new(host: String, port: u16, secret: Vec<u8>) -> RelayOptions {
+        RelayOptions {
+            host,
+            port,
+            public_url: None,
+            secret,
+            grace: DEFAULT_GRACE,
+            trust_proxy: false,
+            max_viewers: share::MAX_VIEWERS,
+            first_frame_timeout: FIRST_FRAME_TIMEOUT,
+        }
+    }
 }
 
 pub struct RelayStarted {
@@ -76,6 +104,8 @@ pub fn urls(public_url: &str, id: &str) -> (String, String) {
 struct RelayState {
     relay: Arc<Relay>,
     shutdown: watch::Receiver<bool>,
+    trust_proxy: bool,
+    first_frame_timeout: Duration,
 }
 
 pub async fn start(opts: RelayOptions) -> Result<RelayStarted, String> {
@@ -88,11 +118,18 @@ pub async fn start(opts: RelayOptions) -> Result<RelayStarted, String> {
         .unwrap_or_else(|| format!("http://{}:{port}", opts.host))
         .trim_end_matches('/')
         .to_string();
-    let relay = Arc::new(Relay::new(opts.secret, opts.grace, public_url.clone()));
+    let relay = Arc::new(Relay::new(
+        opts.secret,
+        opts.grace,
+        public_url.clone(),
+        opts.max_viewers,
+    ));
     let (shutdown_tx, shutdown_rx) = watch::channel(false);
     let state = RelayState {
         relay: relay.clone(),
         shutdown: shutdown_rx,
+        trust_proxy: opts.trust_proxy,
+        first_frame_timeout: opts.first_frame_timeout,
     };
     let app = Router::new()
         .route("/healthz", get(crate::http::healthz))
@@ -145,12 +182,18 @@ pub async fn run(config: leaf_core::config::Config) -> i32 {
     let public_url = std::env::var("LEAF_RELAY_PUBLIC_URL")
         .ok()
         .filter(|s| !s.is_empty());
+    // As leaf's config reads booleans: anything but false/0/no/off/empty is on.
+    let trust_proxy = std::env::var("LEAF_RELAY_TRUST_PROXY").is_ok_and(|v| {
+        !matches!(
+            v.trim().to_ascii_lowercase().as_str(),
+            "false" | "0" | "no" | "off" | ""
+        )
+    });
     let started = match start(RelayOptions {
-        host: config.host.clone(),
-        port: config.port,
         public_url,
-        secret,
         grace,
+        trust_proxy,
+        ..RelayOptions::new(config.host.clone(), config.port, secret)
     })
     .await
     {
@@ -184,10 +227,22 @@ async fn share_page(Path(params): Path<Vec<(String, String)>>, uri: Uri) -> Resp
     crate::http::static_file_at(uri, &format!("/s/{id}")).await
 }
 
-async fn share_health(State(s): State<RelayState>, Path(id): Path<String>) -> Response {
+/// Live or in grace: 200. Unknown ids count against the asker, as viewer joins do.
+async fn share_health(
+    Path(id): Path<String>,
+    headers: HeaderMap,
+    ConnectInfo(peer): ConnectInfo<SocketAddr>,
+    State(s): State<RelayState>,
+) -> Response {
+    let ip = client_ip(&headers, peer, s.trust_proxy);
+    if !s.relay.limits.allow(ip) {
+        tracing::warn!(%ip, "share health refused: too many unknown shares");
+        return (StatusCode::TOO_MANY_REQUESTS, "too many tries").into_response();
+    }
     if s.relay.exists(&id) {
         (StatusCode::OK, "ok").into_response()
     } else {
+        s.relay.limits.failed(ip);
         (StatusCode::NOT_FOUND, "not found").into_response()
     }
 }
@@ -197,12 +252,18 @@ async fn share_raw() -> Response {
     (StatusCode::NOT_IMPLEMENTED, "not implemented").into_response()
 }
 
-/// The address limits count against: the first `X-Forwarded-For` hop (Heroku's router), else the peer.
-fn client_ip(headers: &HeaderMap, peer: SocketAddr) -> IpAddr {
+/// The address limits count against: the peer, or behind a trusted proxy the last
+/// `X-Forwarded-For` hop (the one the proxy appended; earlier hops are the client's say-so).
+pub fn client_ip(headers: &HeaderMap, peer: SocketAddr, trust_proxy: bool) -> IpAddr {
+    if !trust_proxy {
+        return peer.ip();
+    }
     headers
-        .get("x-forwarded-for")
+        .get_all("x-forwarded-for")
+        .iter()
+        .next_back()
         .and_then(|v| v.to_str().ok())
-        .and_then(|v| v.split(',').next())
+        .and_then(|v| v.rsplit(',').next())
         .and_then(|v| v.trim().parse().ok())
         .unwrap_or(peer.ip())
 }
@@ -222,7 +283,9 @@ fn same_origin(headers: &HeaderMap) -> bool {
 }
 
 async fn host_upgrade(ws: WebSocketUpgrade, State(s): State<RelayState>) -> Response {
-    ws.on_upgrade(move |socket| host_session(socket, s))
+    ws.max_message_size(MAX_HOST_FRAME)
+        .max_frame_size(MAX_HOST_FRAME)
+        .on_upgrade(move |socket| host_session(socket, s))
 }
 
 async fn viewer_upgrade(
@@ -236,7 +299,7 @@ async fn viewer_upgrade(
         tracing::warn!(origin = ?headers.get(header::ORIGIN), "viewer rejected: foreign origin");
         return (StatusCode::FORBIDDEN, "forbidden origin").into_response();
     }
-    let ip = client_ip(&headers, peer);
+    let ip = client_ip(&headers, peer, s.trust_proxy);
     if !s.relay.limits.allow(ip) {
         tracing::warn!(%ip, "viewer refused: too many unknown shares");
         return (StatusCode::TOO_MANY_REQUESTS, "too many tries").into_response();
@@ -248,21 +311,32 @@ async fn viewer_upgrade(
             let _ = socket.send(share::unknown_share_close()).await;
         });
     }
-    ws.on_upgrade(move |socket| viewer_session(socket, id, s))
+    ws.max_message_size(MAX_VIEWER_FRAME)
+        .max_frame_size(MAX_VIEWER_FRAME)
+        .on_upgrade(move |socket| viewer_session(socket, id, s))
 }
 
 fn json<T: serde::Serialize>(m: &T) -> Message {
     Message::Text(serde_json::to_string(m).unwrap_or_default().into())
 }
 
-/// The first text frame, or None when the socket closes or the relay stops first.
+/// The first text frame, or None when the socket closes, the relay stops, or nothing
+/// comes within `wait` (the socket is then closed).
 async fn first_text(
     socket: &mut WebSocket,
     shutdown: &mut watch::Receiver<bool>,
+    wait: Duration,
 ) -> Option<String> {
+    let deadline = tokio::time::sleep(wait);
+    tokio::pin!(deadline);
     loop {
         tokio::select! {
             _ = shutdown.changed() => return None,
+            _ = &mut deadline => {
+                tracing::info!("socket sent nothing; closed");
+                let _ = socket.send(Message::Close(None)).await;
+                return None;
+            }
             frame = socket.recv() => match frame {
                 Some(Ok(Message::Text(t))) => return Some(t.to_string()),
                 Some(Ok(Message::Close(_))) | Some(Err(_)) | None => return None,
@@ -285,7 +359,7 @@ async fn refuse_host(mut socket: WebSocket, code: &str, message: String) {
 
 async fn host_session(mut socket: WebSocket, s: RelayState) {
     let mut shutdown = s.shutdown.clone();
-    let Some(first) = first_text(&mut socket, &mut shutdown).await else {
+    let Some(first) = first_text(&mut socket, &mut shutdown, s.first_frame_timeout).await else {
         return;
     };
     let version = format!(
@@ -306,9 +380,20 @@ async fn host_session(mut socket: WebSocket, s: RelayState) {
         return refuse_host(socket, "version", version).await;
     }
     let conn = s.relay.new_conn();
-    let (tx, mut rx) = mpsc::unbounded_channel();
+    let (tx, mut rx) = mpsc::channel(share::QUEUE_FRAMES);
     let id = match s.relay.share(conn, tx, &name, mode, resume) {
-        Ok(id) => id,
+        Ok(a) => {
+            // `shared` and the replay go first; anything queued since comes after.
+            let mut ok = socket.send(a.shared).await.is_ok();
+            for frame in a.replay {
+                ok = ok && socket.send(Message::Text(frame.into())).await.is_ok();
+            }
+            if !ok {
+                s.relay.host_dropped(&a.id, conn);
+                return;
+            }
+            a.id
+        }
         Err(r) => return refuse_host(socket, r.code, r.message).await,
     };
 
@@ -358,7 +443,7 @@ async fn host_session(mut socket: WebSocket, s: RelayState) {
 
 async fn viewer_session(mut socket: WebSocket, id: String, s: RelayState) {
     let mut shutdown = s.shutdown.clone();
-    let Some(first) = first_text(&mut socket, &mut shutdown).await else {
+    let Some(first) = first_text(&mut socket, &mut shutdown, s.first_frame_timeout).await else {
         return;
     };
     let hello = serde_json::from_str::<Value>(&first)
@@ -393,10 +478,20 @@ async fn viewer_session(mut socket: WebSocket, id: String, s: RelayState) {
         .map(str::trim)
         .filter(|n| !n.is_empty())
         .map(str::to_string);
-    let (tx, mut rx) = mpsc::unbounded_channel();
-    let Some(vid) = s.relay.join(&id, name, hello, tx) else {
-        let _ = socket.send(share::unknown_share_close()).await;
-        return;
+    let (tx, mut rx) = mpsc::channel(share::QUEUE_FRAMES);
+    let vid = match s.relay.join(&id, name, hello, tx) {
+        Ok(vid) => vid,
+        Err(share::JoinRefused::Gone) => {
+            let _ = socket.send(share::unknown_share_close()).await;
+            return;
+        }
+        Err(share::JoinRefused::Full) => {
+            let msg = ServerMessage::error(ErrorCode::BadRequest, "this share is full", None)
+                .in_reply_to(reply_to.as_deref());
+            let _ = socket.send(json(&msg)).await;
+            let _ = socket.send(Message::Close(None)).await;
+            return;
+        }
     };
 
     let mut ping = tokio::time::interval_at(Instant::now() + PING_EVERY, PING_EVERY);
