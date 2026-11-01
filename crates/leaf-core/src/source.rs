@@ -69,6 +69,11 @@ pub trait Source: Send + Sync {
     async fn blame(&self, _path: &str) -> Result<Option<Blame>, SourceError> {
         Ok(None)
     }
+    /// True when `path` is hidden by the source's ignore rules: a transport serving
+    /// others (a shared tab) refuses it before asking. Sources without rules hide nothing.
+    fn hides(&self, _path: &str) -> bool {
+        false
+    }
     /// The file on disk for `path`, when this source has one: confined, not ignored, a file.
     /// Lets a transport stream bytes without reading them through `read`.
     async fn locate(&self, path: &str) -> Result<std::path::PathBuf, SourceError> {

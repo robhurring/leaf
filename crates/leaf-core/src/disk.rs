@@ -338,6 +338,11 @@ impl Source for DiskSource {
         Ok(self.git.blame(&abs, mtime).await)
     }
 
+    fn hides(&self, path: &str) -> bool {
+        let is_dir = std::fs::metadata(self.root_dir.join(path)).is_ok_and(|m| m.is_dir());
+        self.is_ignored(path, is_dir)
+    }
+
     async fn locate(&self, path: &str) -> Result<PathBuf, SourceError> {
         let abs = self.resolve(path)?;
         let not_found = || {

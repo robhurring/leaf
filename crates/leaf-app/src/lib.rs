@@ -11,6 +11,7 @@ pub mod raw;
 pub mod relay;
 pub mod serve;
 pub mod session;
+pub mod sharing;
 pub mod tabs;
 pub mod welcome;
 pub mod window;
