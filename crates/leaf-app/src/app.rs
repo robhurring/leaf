@@ -14,6 +14,7 @@ use tauri::{AppHandle, Emitter, EventTarget, Manager, Webview, Wry};
 
 use leaf_app::launch::{link_in_argv, parse_deep_link};
 use leaf_app::tabs::Tabs;
+use leaf_app::welcome;
 use leaf_app::window::Windows;
 use leaf_app::window_state::{Geometry, Rect, WindowStates};
 
@@ -148,6 +149,10 @@ async fn leaf_send(
 /// an editor), when its kind is one the person allows in Settings.
 #[tauri::command]
 async fn leaf_open_url(url: String, state: tauri::State<'_, AppState>) -> Result<(), String> {
+    if url == welcome::INSTALL_LINK {
+        install_cli().await;
+        return Ok(());
+    }
     let allowed: Vec<String> = match state.prefs.load().await.link_schemes {
         Some(list) => list,
         None => DEFAULT_LINK_SCHEMES.iter().map(|s| s.to_string()).collect(),
@@ -392,6 +397,54 @@ fn relaunch_with(url: &str) {
     }
 }
 
+/// Writes the welcome page (with `error` from a failed install) and, from the
+/// launcher, opens it. Returns the page's path.
+fn welcome_page(error: Option<String>) -> Option<PathBuf> {
+    let env: HashMap<String, String> = std::env::vars().collect();
+    let home = PathBuf::from(env.get("HOME").cloned().unwrap_or_default());
+    let cli = match welcome::find_cli(&home, |p| p.exists()) {
+        Some(at) => welcome::Cli::Installed(at),
+        None => welcome::Cli::Missing { error },
+    };
+    welcome::write(&leaf_core::config::default_config_dir(&env), &cli)
+        .map_err(|e| tracing::error!(error = %e, "could not write the welcome page"))
+        .ok()
+}
+
+fn show_welcome(error: Option<String>) {
+    if let Some(path) = welcome_page(error) {
+        relaunch_with(&path.to_string_lossy());
+    }
+}
+
+/// The welcome page's install link: links the command (macOS asks for a password),
+/// then rewrites the page, which the window showing it follows.
+async fn install_cli() {
+    let result = match std::env::current_exe() {
+        Ok(exe) => tokio::process::Command::new("/usr/bin/osascript")
+            .arg("-e")
+            .arg(welcome::install_script(&exe))
+            .output()
+            .await
+            .map_err(|e| e.to_string())
+            .and_then(|out| {
+                if out.status.success() {
+                    Ok(())
+                } else {
+                    // osascript says why, e.g. "User canceled. (-128)".
+                    let why = String::from_utf8_lossy(&out.stderr);
+                    let why = why.trim();
+                    Err(why.rsplit_once(": ").map_or(why, |(_, w)| w).to_string())
+                }
+            }),
+        Err(e) => Err(e.to_string()),
+    };
+    if let Err(e) = &result {
+        tracing::warn!(error = %e, "the leaf command didn't install");
+    }
+    welcome_page(result.err());
+}
+
 /// macOS starts the installed app to deliver a link when no leaf is running. That
 /// process only receives: it passes each link to `leaf <link>` (which starts the app,
 /// or hands off to one that started meanwhile) and quits.
@@ -407,18 +460,26 @@ pub fn receive_links() -> i32 {
     let mut app = app;
     #[cfg(target_os = "macos")]
     app.set_activation_policy(tauri::ActivationPolicy::Accessory);
-    // Opened without a link (from Finder, say): nothing to do.
+    // Opened without a link (from Finder or the Dock): the welcome page, so leaf
+    // doesn't look like it quit. A link arrives just after launch, well within this.
+    let linked = Arc::new(std::sync::atomic::AtomicBool::new(false));
     let handle = app.handle().clone();
+    let waited = linked.clone();
     std::thread::spawn(move || {
-        std::thread::sleep(std::time::Duration::from_secs(5));
+        std::thread::sleep(std::time::Duration::from_millis(750));
+        if !waited.swap(true, Ordering::SeqCst) {
+            show_welcome(None);
+        }
         handle.exit(0);
     });
-    app.run(|app, event| {
+    app.run(move |app, event| {
         // Only macOS hands a running app the links it was opened with.
         #[cfg(target_os = "macos")]
         if let tauri::RunEvent::Opened { urls } = event {
-            for url in urls.iter().filter(|u| u.scheme() == "leaf") {
-                relaunch_with(url.as_str());
+            if !linked.swap(true, Ordering::SeqCst) {
+                for url in urls.iter().filter(|u| u.scheme() == "leaf") {
+                    relaunch_with(url.as_str());
+                }
             }
             app.exit(0);
         }

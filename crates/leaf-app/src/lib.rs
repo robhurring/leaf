@@ -10,6 +10,7 @@ pub mod log;
 pub mod serve;
 pub mod session;
 pub mod tabs;
+pub mod welcome;
 pub mod window;
 pub mod window_state;
 pub mod ws;
