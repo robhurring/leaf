@@ -1,11 +1,5 @@
 import { create } from 'zustand';
-import {
-  shareEnd,
-  shareResume,
-  shareStart,
-  shareState,
-  type TabShare,
-} from '../source/TauriSource.js';
+import { shareEnd, shareResume, shareStart, shareState, type TabShare } from './bridge.js';
 
 export type Copied = { which: 'app' | 'web'; ok: boolean } | null;
 

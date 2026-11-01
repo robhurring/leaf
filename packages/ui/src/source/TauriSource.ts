@@ -7,7 +7,6 @@ import {
   PROTOCOL_VERSION,
   parseServerMessage,
   type ClientMessage,
-  type Peer,
   type ServerMessage,
 } from '@leaf/protocol';
 import { Listeners, type DocumentSource, type SourceStatus } from './DocumentSource.js';
@@ -149,41 +148,4 @@ export function openExternalLinks(
   };
   root.addEventListener('click', onClick);
   return () => root.removeEventListener('click', onClick);
-}
-
-/** What this tab shares: idle when it isn't; `resumable` is a share its closed tab left. */
-export type TabShare = {
-  id: string;
-  webUrl: string;
-  appUrl: string;
-  status: 'idle' | 'live' | 'reconnecting' | 'ended';
-  viewers: Peer[];
-  resumable?: string;
-};
-
-export function shareState(): Promise<TabShare> {
-  return invoke<TabShare>('leaf_share_state');
-}
-export function shareStart(): Promise<TabShare> {
-  return invoke<TabShare>('leaf_share_start');
-}
-export function shareResume(): Promise<TabShare> {
-  return invoke<TabShare>('leaf_share_resume');
-}
-export function shareEnd(): Promise<void> {
-  return invoke<void>('leaf_share_end');
-}
-
-/** Hears every change to this tab's share (viewers, status); returns a function that stops it. */
-export function onShare(fn: (s: TabShare) => void): () => void {
-  let off: UnlistenFn | null = null;
-  let stopped = false;
-  void listen<TabShare>(`leaf://share/${tauriWindowLabel()}`, (e) => fn(e.payload)).then((u) => {
-    if (stopped) u();
-    else off = u;
-  });
-  return () => {
-    stopped = true;
-    off?.();
-  };
 }

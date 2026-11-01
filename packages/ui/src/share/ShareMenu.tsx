@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { Check, Share, X } from '../icons/index.js';
-import { inTab, onShare } from '../source/TauriSource.js';
+import { inTab } from '../source/TauriSource.js';
+import { onShare } from './bridge.js';
 import { useDocuments } from '../store/documents.js';
 import { useShare } from './store.js';
 
