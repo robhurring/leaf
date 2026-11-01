@@ -2,7 +2,8 @@
 // while disconnected, and reconnects with backoff. Every couple of seconds (and on
 // check(), at each navigation) it asks the server's /healthz: a socket can look open
 // long after the server went away, and a server that is back should not wait out
-// the backoff.
+// the backoff. A share that is over (ended, full, or on another protocol) stops it:
+// asking again would only be refused again.
 import {
   PROTOCOL_VERSION,
   parseServerMessage,
@@ -25,6 +26,17 @@ export const DEFAULT_BACKOFF = [500, 1000, 2000];
 const HEARTBEAT_MS = 2000;
 /** An answer slower than this counts as none. */
 const PROBE_TIMEOUT_MS = 1500;
+
+/** A message after which this socket's server will never take us back: a share that
+ *  ended, or a relay refusing the join (full, or a protocol mismatch). */
+function isFinal(msg: ServerMessage): boolean {
+  if (msg.type === 'shareStatus') return msg.state === 'ended';
+  return (
+    msg.type === 'error' &&
+    !msg.path &&
+    /^this share (is full|runs leaf protocol)/.test(msg.message ?? '')
+  );
+}
 
 export class WsSource implements DocumentSource {
   private socket: WebSocket | null = null;
@@ -128,6 +140,7 @@ export class WsSource implements DocumentSource {
       }
       if (this.messages.size === 0) this.backlog.push(parsed);
       else this.messages.emit(parsed);
+      if (isFinal(parsed)) this.close();
     });
     socket.addEventListener('close', () => {
       // A socket already let go of (drop, reconnectNow) is not the live one.

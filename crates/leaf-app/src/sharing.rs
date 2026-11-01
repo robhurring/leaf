@@ -625,12 +625,15 @@ fn to_viewer(viewer: &str, msg: Value) -> Message {
     })
 }
 
-/// A path that leaves the root: `..` anywhere, or absolute.
+/// A path that leaves the root: `..` anywhere, or absolute (a drive letter included).
 fn escapes(path: &str) -> bool {
+    let b = path.as_bytes();
+    let drive =
+        b.len() >= 3 && b[0].is_ascii_alphabetic() && b[1] == b':' && matches!(b[2], b'/' | b'\\');
     path.starts_with('/')
         || path.starts_with('\\')
         || path.split(['/', '\\']).any(|c| c == "..")
-        || path.get(1..2) == Some(":")
+        || drive
 }
 
 fn path_of(msg: &ClientMessage) -> Option<&str> {
@@ -675,7 +678,8 @@ async fn serve_viewer(
     }
 }
 
-/// The replies to one viewer message, and whether it reached outside the share.
+/// The replies to one viewer message, and whether it reached outside the share (an
+/// escaping path; an ignored one is only not found).
 async fn answer(
     engine: &Engine,
     mode: ShareMode,
@@ -723,13 +727,15 @@ async fn answer(
             .split('/')
             .filter(|c| !c.is_empty() && *c != ".")
             .collect();
+        // Ignored reads like missing: no expel, since the page would only reconnect and
+        // ask again, and the reader itself asks for ignored data files.
         if engine.source().hides(&clean.join("/")) {
             let reply = refuse(
                 ErrorCode::NotFound,
                 &format!("no such file: {path}"),
                 Some(path),
             );
-            return (vec![reply], true);
+            return (vec![reply], false);
         }
     }
     let mut forbidden = false;
@@ -840,10 +846,11 @@ mod tests {
             "\\x",
             "a\\..\\b",
             "C:/x",
+            "c:\\x",
         ] {
             assert!(escapes(p), "{p}");
         }
-        for p in ["", "README.md", "pics/a.png", "a..b.md"] {
+        for p in ["", "README.md", "pics/a.png", "a..b.md", "a:notes.md"] {
             assert!(!escapes(p), "{p}");
         }
     }

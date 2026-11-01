@@ -201,4 +201,52 @@ describe('WsSource', () => {
   it('the default backoff never waits more than 2s between tries', () => {
     expect(Math.max(...DEFAULT_BACKOFF)).toBeLessThanOrEqual(2000);
   });
+  describe('a share that is over stops the page asking', () => {
+    const over: [string, unknown][] = [
+      ['shareStatus ended', { type: 'shareStatus', state: 'ended', reason: 'host' }],
+      [
+        'a full share',
+        { type: 'error', code: 'bad_request', message: 'this share is full', inReplyTo: 'h' },
+      ],
+      [
+        'a protocol mismatch',
+        {
+          type: 'error',
+          code: 'bad_request',
+          message: 'this share runs leaf protocol 2; reload',
+          inReplyTo: 'h',
+        },
+      ],
+    ];
+    it.each(over)('after %s: no more hellos, no more health probes', async (_, msg) => {
+      const { src, fetchImpl } = probed(() => false);
+      const got: string[] = [];
+      src.onMessage((m) => got.push(m.type));
+      const s = FakeWebSocket.instances[0]!;
+      s.open();
+      s.message(welcome);
+      s.message(msg);
+      // The store still hears it, so the notice can show.
+      expect(got).toEqual(['welcome', (msg as { type: string }).type]);
+      s.close();
+      const probes = fetchImpl.mock.calls.length;
+      await vi.advanceTimersByTimeAsync(30_000);
+      src.check();
+      await vi.advanceTimersByTimeAsync(0);
+      expect(FakeWebSocket.instances).toHaveLength(1);
+      expect(fetchImpl.mock.calls.length).toBe(probes);
+      expect(src.status).toBe('closed');
+    });
+
+    it('an error about a path is not fatal', async () => {
+      const src = make();
+      const s = FakeWebSocket.instances[0]!;
+      s.open();
+      s.message({ type: 'error', code: 'not_found', message: 'no such file: a.md', path: 'a.md' });
+      s.close();
+      vi.advanceTimersByTime(10);
+      expect(FakeWebSocket.instances).toHaveLength(2);
+      src.close();
+    });
+  });
 });

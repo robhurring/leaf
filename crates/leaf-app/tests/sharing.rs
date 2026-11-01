@@ -291,30 +291,82 @@ async fn a_path_outside_the_share_ends_the_viewer() {
     let h = share(&r, &f.engine).await;
     let before = f.engine.client_count();
 
-    // SECRET.md: the same ignored file on a case-insensitive volume (macOS's default).
-    let insensitive = f.root().join("SECRET.md").exists();
-    let paths: &[&str] = if insensitive {
-        &["../x.md", "secret.md", "SECRET.md"]
-    } else {
-        &["../x.md", "secret.md"]
-    };
-    for &path in paths {
-        let (mut v, _) = viewer(r.port, &h.id).await;
-        let err = read(&mut v, path, "x").await;
-        assert_eq!(err["type"], "error", "{path}: {err}");
-        let ended = next_of(&mut v, "shareStatus").await;
-        assert_eq!(ended["state"], "ended", "{path}");
-        assert_eq!(ended["reason"], "forbidden-path", "{path}");
-        closes(&mut v).await;
-    }
-    // Their engine sessions are gone too.
+    let (mut v, _) = viewer(r.port, &h.id).await;
+    let err = read(&mut v, "../x.md", "x").await;
+    assert_eq!(err["type"], "error", "{err}");
+    let ended = next_of(&mut v, "shareStatus").await;
+    assert_eq!(ended["state"], "ended");
+    assert_eq!(ended["reason"], "forbidden-path");
+    closes(&mut v).await;
+    // Its engine session is gone too.
     tokio::time::timeout(WAIT, async {
         while f.engine.client_count() != before {
             tokio::time::sleep(Duration::from_millis(20)).await;
         }
     })
     .await
-    .expect("viewer sessions disconnected");
+    .expect("viewer session disconnected");
+    h.end();
+    r.stop().await;
+}
+
+#[tokio::test]
+async fn an_ignored_path_is_not_found_and_the_viewer_stays() {
+    let f = folder();
+    let r = relay::start(options(0)).await.unwrap();
+    let h = share(&r, &f.engine).await;
+
+    // SECRET.md: the same ignored file on a case-insensitive volume (macOS's default).
+    let insensitive = f.root().join("SECRET.md").exists();
+    let paths: &[&str] = if insensitive {
+        &["secret.md", "SECRET.md"]
+    } else {
+        &["secret.md"]
+    };
+    let (mut v, _) = viewer(r.port, &h.id).await;
+    for (i, &path) in paths.iter().enumerate() {
+        send(
+            &mut v,
+            json!({"type": "read", "path": path, "id": format!("r{i}")}),
+        )
+        .await;
+        send(
+            &mut v,
+            json!({"type": "subscribe", "path": path, "id": format!("s{i}")}),
+        )
+        .await;
+    }
+    // A read after them all: everything before its reply is what the ignored asks got.
+    send(
+        &mut v,
+        json!({"type": "read", "path": "README.md", "id": "after"}),
+    )
+    .await;
+    let mut errors = 0;
+    loop {
+        let m = next_json(&mut v).await.expect("the viewer stays connected");
+        assert_ne!(
+            m["type"], "shareStatus",
+            "an ignored path must not end the viewer: {m}"
+        );
+        assert!(
+            !m.to_string().contains("# secret"),
+            "the ignored file's content must never arrive: {m}"
+        );
+        if m["inReplyTo"] == "after" {
+            assert_eq!(m["type"], "file", "{m}");
+            break;
+        }
+        if m["type"] == "error" {
+            assert_eq!(m["code"], "not_found", "{m}");
+            errors += 1;
+        }
+    }
+    assert_eq!(
+        errors,
+        paths.len() * 2,
+        "each read and subscribe is refused"
+    );
     h.end();
     r.stop().await;
 }
