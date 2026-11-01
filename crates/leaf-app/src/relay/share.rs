@@ -34,10 +34,14 @@ pub const QUEUE_FRAMES: usize = 256;
 pub const MAX_VIEWERS: usize = 100;
 /// Raw fetches one share runs at once; the next is refused.
 pub const MAX_FETCHES: usize = 8;
-/// Chunks of a fetch's body waiting for its HTTP client. The host link has no flow
-/// control, so a client that falls this far behind the host is cut off (it asks again
-/// with a `Range`), rather than stalling the host link for everyone.
-pub const FETCH_CHUNKS: usize = 32;
+/// Chunks of a fetch's body waiting for its HTTP client, at most. The host is asked to
+/// `pause` well before this; a host that keeps sending anyway is cut off here (`cancel`)
+/// rather than stalling the host link for everyone.
+pub const FETCH_CHUNKS: usize = 64;
+/// Chunks waiting when the relay asks the host to `pause` a fetch.
+pub const PAUSE_AT: usize = 24;
+/// Chunks waiting, at most, when the relay lets a paused fetch `resume`.
+pub const RESUME_AT: usize = 8;
 
 /// Peer colors: twelve hues that read on light and dark pages (Tailwind's 500s).
 pub const PALETTE: [&str; 12] = [
@@ -126,12 +130,14 @@ pub enum FetchRefused {
 }
 
 /// A started fetch, for the HTTP handler: the head comes on `head`, then the body chunks
-/// on `body`. When `body` closes, `complete` says whether the host finished it.
+/// on `body`. When `body` closes, `complete` says whether the host finished it. While
+/// `paused`, the reader calls `fetch_drained` once it is down to `RESUME_AT` chunks.
 pub struct Started {
     pub req: u32,
     pub head: oneshot::Receiver<Head>,
     pub body: mpsc::Receiver<Bytes>,
     pub complete: Arc<AtomicBool>,
+    pub paused: Arc<AtomicBool>,
 }
 
 /// One raw fetch in flight. Dropping it drops the body's sender, which ends the body;
@@ -140,6 +146,8 @@ struct Fetch {
     head: Option<oneshot::Sender<Head>>,
     body: Sender<Bytes>,
     complete: Arc<AtomicBool>,
+    /// The host was told to `pause`; set under the lock, read by the body's reader.
+    paused: Arc<AtomicBool>,
 }
 
 struct Viewer {
@@ -404,6 +412,8 @@ impl Relay {
                 share.host_conn = conn;
                 share.info.host = host;
                 share.info.mode = mode;
+                // The new host knows nothing of these: their clients get an error.
+                share.fetches.clear();
                 let mut queued: Vec<(String, VecDeque<String>)> = share.buffered.drain().collect();
                 queued.sort_by_key(|(v, _)| viewer_seq(v));
                 replay = queued.into_iter().flat_map(|(_, q)| q).collect();
@@ -654,12 +664,14 @@ impl Relay {
         let (head_tx, head) = oneshot::channel();
         let (body_tx, body) = mpsc::channel(FETCH_CHUNKS);
         let complete = Arc::new(AtomicBool::new(false));
+        let paused = Arc::new(AtomicBool::new(false));
         share.fetches.insert(
             req,
             Fetch {
                 head: Some(head_tx),
                 body: body_tx,
                 complete: complete.clone(),
+                paused: paused.clone(),
             },
         );
         tracing::debug!(share = %id, req, %path, ?range, "raw fetch");
@@ -670,6 +682,7 @@ impl Relay {
             head,
             body,
             complete,
+            paused,
         })
     }
 
@@ -701,8 +714,17 @@ impl Relay {
             share.fetches.remove(&req);
             return;
         }
+        // Pause before this chunk goes in, so the reader that takes it sees the flag.
+        let waiting = FETCH_CHUNKS - fetch.body.capacity() + 1;
+        if waiting >= PAUSE_AT && !fetch.paused.swap(true, Ordering::AcqRel) {
+            tracing::debug!(share = %id, req, waiting, "raw client behind; host paused");
+            share.fetch_message(&RelayToHost::Pause { req });
+        }
+        let Some(fetch) = share.fetches.get(&req) else {
+            return;
+        };
         match fetch.body.try_send(bytes) {
-            Ok(()) => {}
+            Ok(()) => self.settle(id, share, Vec::new()),
             Err(e) => {
                 if matches!(e, TrySendError::Full(_)) {
                     tracing::warn!(share = %id, req, "raw client fell behind; fetch cut off");
@@ -711,6 +733,21 @@ impl Relay {
                 share.fetch_message(&RelayToHost::Cancel { req });
                 self.settle(id, share, Vec::new());
             }
+        }
+    }
+
+    /// A paused fetch's reader is down to `RESUME_AT` chunks: the host may go on.
+    pub fn fetch_drained(self: &Arc<Self>, id: &str, req: u32) {
+        let mut shares = self.lock();
+        if let Some(share) = shares.get_mut(id)
+            && share
+                .fetches
+                .get(&req)
+                .is_some_and(|f| f.paused.swap(false, Ordering::AcqRel))
+        {
+            tracing::debug!(share = %id, req, "raw client caught up; host resumed");
+            share.fetch_message(&RelayToHost::Resume { req });
+            self.settle(id, share, Vec::new());
         }
     }
 
@@ -889,7 +926,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn a_raw_client_that_falls_behind_is_cut_off_and_the_host_told() {
+    async fn a_host_that_ignores_pause_is_cut_off_and_the_host_told() {
         let r = relay();
         let (htx, mut hrx) = mpsc::channel(QUEUE_FRAMES);
         let id = r
@@ -904,13 +941,45 @@ mod tests {
         let host: Vec<String> = std::iter::from_fn(|| hrx.try_recv().ok())
             .map(|m| kind(&m))
             .collect();
-        assert_eq!(host, ["fetch", "cancel"]);
+        assert_eq!(host, ["fetch", "pause", "cancel"]);
         let mut body = f.body;
         for _ in 0..FETCH_CHUNKS {
             assert!(body.recv().await.is_some());
         }
         assert!(body.recv().await.is_none());
         assert!(!f.complete.load(Ordering::Acquire));
+        r.shutdown();
+    }
+
+    #[tokio::test]
+    async fn a_fetch_pauses_at_its_mark_and_resumes_once_drained() {
+        let r = relay();
+        let (htx, mut hrx) = mpsc::channel(QUEUE_FRAMES);
+        let id = r
+            .share(1, htx, "Rob", ShareMode::ReadOnly, None)
+            .ok()
+            .unwrap()
+            .id;
+        let mut f = r.start_fetch(&id, "v.mp4".into(), None).ok().unwrap();
+        assert_eq!(kind(&hrx.try_recv().unwrap()), "fetch");
+        for _ in 1..PAUSE_AT {
+            r.fetch_bytes(&id, 1, f.req, Bytes::from_static(b"x"));
+        }
+        assert!(hrx.try_recv().is_err(), "no pause below the mark");
+        r.fetch_bytes(&id, 1, f.req, Bytes::from_static(b"x"));
+        assert_eq!(kind(&hrx.try_recv().unwrap()), "pause");
+        assert!(f.paused.load(Ordering::Acquire));
+        r.fetch_bytes(&id, 1, f.req, Bytes::from_static(b"x"));
+        assert!(hrx.try_recv().is_err(), "pause is sent once");
+        while f.body.len() > RESUME_AT {
+            f.body.recv().await.unwrap();
+        }
+        r.fetch_drained(&id, f.req);
+        r.fetch_drained(&id, f.req);
+        let host: Vec<String> = std::iter::from_fn(|| hrx.try_recv().ok())
+            .map(|m| kind(&m))
+            .collect();
+        assert_eq!(host, ["resume"], "resume is sent once");
         r.shutdown();
     }
 

@@ -112,6 +112,16 @@ pub enum RelayToHost {
     Cancel {
         req: u32,
     },
+    /// Stop sending `req`'s bytes for now: its client has fallen behind.
+    #[serde(rename_all = "camelCase")]
+    Pause {
+        req: u32,
+    },
+    /// Go on sending `req`'s bytes after a `pause`.
+    #[serde(rename_all = "camelCase")]
+    Resume {
+        req: u32,
+    },
     Ping,
     /// Codes: "version", "bad-key", "unknown-share".
     #[serde(rename_all = "camelCase")]
@@ -188,6 +198,8 @@ mod tests {
                 range: Some("bytes=0-".into()),
             },
             RelayToHost::Cancel { req: 7 },
+            RelayToHost::Pause { req: 7 },
+            RelayToHost::Resume { req: 7 },
             RelayToHost::Ping,
             RelayToHost::Error {
                 code: "bad-key".into(),

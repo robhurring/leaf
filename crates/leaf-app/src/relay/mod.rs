@@ -43,15 +43,17 @@ pub const MAX_VIEWER_FRAME: usize = 1024 * 1024;
 pub const MAX_HOST_FRAME: usize = 4 * 1024 * 1024;
 /// How long a raw fetch waits for the host's `fetched` before answering 504.
 pub const FETCH_HEAD_TIMEOUT: Duration = Duration::from_secs(15);
-/// The host's reply headers a raw response carries; any others are dropped.
-const PASSED_HEADERS: [header::HeaderName; 7] = [
+/// How long a raw body may wait for the host's next frame before it ends with an error.
+pub const FETCH_IDLE_TIMEOUT: Duration = Duration::from_secs(30);
+/// The host's reply headers a raw response carries; any others are dropped. The relay
+/// sets `X-Content-Type-Options` and `Content-Security-Policy` itself: these bytes are
+/// served on the relay's origin, which also runs the viewer page.
+const PASSED_HEADERS: [header::HeaderName; 5] = [
     header::CONTENT_TYPE,
     header::CONTENT_RANGE,
     header::CONTENT_LENGTH,
     header::ACCEPT_RANGES,
     header::CACHE_CONTROL,
-    header::X_CONTENT_TYPE_OPTIONS,
-    header::CONTENT_SECURITY_POLICY,
 ];
 
 pub struct RelayOptions {
@@ -66,6 +68,8 @@ pub struct RelayOptions {
     pub trust_proxy: bool,
     pub max_viewers: usize,
     pub first_frame_timeout: Duration,
+    /// A raw body the host sends nothing for in this long ends with an error.
+    pub fetch_idle_timeout: Duration,
 }
 
 impl RelayOptions {
@@ -80,6 +84,7 @@ impl RelayOptions {
             trust_proxy: false,
             max_viewers: share::MAX_VIEWERS,
             first_frame_timeout: FIRST_FRAME_TIMEOUT,
+            fetch_idle_timeout: FETCH_IDLE_TIMEOUT,
         }
     }
 }
@@ -120,6 +125,7 @@ struct RelayState {
     shutdown: watch::Receiver<bool>,
     trust_proxy: bool,
     first_frame_timeout: Duration,
+    fetch_idle_timeout: Duration,
 }
 
 pub async fn start(opts: RelayOptions) -> Result<RelayStarted, String> {
@@ -144,6 +150,7 @@ pub async fn start(opts: RelayOptions) -> Result<RelayStarted, String> {
         shutdown: shutdown_rx,
         trust_proxy: opts.trust_proxy,
         first_frame_timeout: opts.first_frame_timeout,
+        fetch_idle_timeout: opts.fetch_idle_timeout,
     };
     let app = Router::new()
         .route("/healthz", get(crate::http::healthz))
@@ -292,6 +299,7 @@ async fn share_raw(
         .get(header::RANGE)
         .and_then(|v| v.to_str().ok())
         .map(str::to_string);
+    let path_mime = leaf_core::classify::classify(std::path::Path::new(&path)).mime;
     let started = match s.relay.start_fetch(&id, path, range) {
         Ok(started) => started,
         Err(share::FetchRefused::Gone) => {
@@ -323,15 +331,24 @@ async fn share_raw(
             return (StatusCode::GATEWAY_TIMEOUT, "the host did not answer").into_response();
         }
     };
-    let complete = started.complete;
+    let (complete, paused, idle) = (started.complete, started.paused, s.fetch_idle_timeout);
     let body = futures_util::stream::unfold(Some((started.body, guard)), move |state| {
-        let complete = complete.clone();
+        let (complete, paused) = (complete.clone(), paused.clone());
         async move {
             let (mut rx, guard) = state?;
-            match rx.recv().await {
-                Some(bytes) => Some((Ok(bytes), Some((rx, guard)))),
-                None if complete.load(Ordering::Acquire) => None,
-                None => Some((Err(std::io::Error::other("the host stopped sending")), None)),
+            match tokio::time::timeout(idle, rx.recv()).await {
+                Ok(Some(bytes)) => {
+                    if paused.load(Ordering::Acquire) && rx.len() <= share::RESUME_AT {
+                        guard.relay.fetch_drained(&guard.id, guard.req);
+                    }
+                    Some((Ok(bytes), Some((rx, guard))))
+                }
+                Ok(None) if complete.load(Ordering::Acquire) => None,
+                Ok(None) => Some((Err(std::io::Error::other("the host stopped sending")), None)),
+                Err(_) => {
+                    tracing::warn!(share = %guard.id, req = guard.req, "host went quiet mid-body");
+                    Some((Err(std::io::Error::other("the host went quiet")), None))
+                }
             }
         }
     });
@@ -345,6 +362,29 @@ async fn share_raw(
         {
             response.headers_mut().insert(name.clone(), value);
         }
+    }
+    let host_mime = response
+        .headers()
+        .get(header::CONTENT_TYPE)
+        .and_then(|v| v.to_str().ok())
+        .map(|v| {
+            v.split(';')
+                .next()
+                .unwrap_or("")
+                .trim()
+                .to_ascii_lowercase()
+        })
+        .unwrap_or_default();
+    let headers = response.headers_mut();
+    headers.insert(
+        header::X_CONTENT_TYPE_OPTIONS,
+        header::HeaderValue::from_static("nosniff"),
+    );
+    if crate::http::scriptable(&host_mime) || crate::http::scriptable(&path_mime) {
+        headers.insert(
+            header::CONTENT_SECURITY_POLICY,
+            header::HeaderValue::from_static("sandbox"),
+        );
     }
     response
 }

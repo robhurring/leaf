@@ -855,3 +855,262 @@ async fn raw_on_a_share_in_grace_says_retry() {
     assert_eq!(reply.header("retry-after"), Some("5"));
     r.stop().await;
 }
+
+/// A host whose messages arrive on a channel, so the test can send while it listens.
+fn split_host(
+    host: Ws,
+) -> (
+    futures_util::stream::SplitSink<Ws, Message>,
+    tokio::sync::mpsc::UnboundedReceiver<RelayToHost>,
+) {
+    let (sink, mut stream) = host.split();
+    let (tx, rx) = tokio::sync::mpsc::unbounded_channel();
+    tokio::spawn(async move {
+        while let Some(Ok(m)) = stream.next().await {
+            if let Message::Text(t) = m
+                && let Ok(msg) = serde_json::from_str::<RelayToHost>(&t)
+                && tx.send(msg).is_err()
+            {
+                break;
+            }
+        }
+    });
+    (sink, rx)
+}
+
+async fn next_from(rx: &mut tokio::sync::mpsc::UnboundedReceiver<RelayToHost>) -> RelayToHost {
+    loop {
+        match tokio::time::timeout(WAIT, rx.recv()).await {
+            Ok(Some(RelayToHost::Ping)) => continue,
+            Ok(Some(m)) => return m,
+            Ok(None) => panic!("host link closed"),
+            Err(_) => panic!("timed out waiting for a host message"),
+        }
+    }
+}
+
+async fn fetch_req(host: &mut Ws) -> u32 {
+    match next_host(host).await {
+        RelayToHost::Fetch { req, .. } => req,
+        other => panic!("expected fetch: {other:?}"),
+    }
+}
+
+#[tokio::test]
+async fn a_resumed_host_ends_the_old_fetches_and_takes_new_ones() {
+    let r = start_relay().await;
+    let (mut host, shared) = host_share(r.port).await;
+    let RelayToHost::Shared { id, host_key, .. } = shared else {
+        unreachable!()
+    };
+    let port = r.port;
+    let path = format!("/s/{id}/raw/a.png");
+    let pending = tokio::spawn(async move { http_reply(port, &path, "").await });
+    fetch_req(&mut host).await;
+    drop(host);
+    let failed = tokio::time::timeout(Duration::from_secs(2), pending)
+        .await
+        .expect("the waiting fetch fails promptly, not after the head timeout")
+        .unwrap();
+    assert_eq!(failed.status, 502);
+
+    let mut host = connect(r.port, "/host").await;
+    host.send(text(&share_msg(
+        PROTOCOL_VERSION,
+        Some(Resume {
+            id: id.clone(),
+            host_key,
+        }),
+    )))
+    .await
+    .unwrap();
+    assert!(matches!(
+        next_host(&mut host).await,
+        RelayToHost::Shared { .. }
+    ));
+    let path = format!("/s/{id}/raw/b.png");
+    let get = tokio::spawn(async move { http_reply(port, &path, "").await });
+    let req = fetch_req(&mut host).await;
+    host.send(text(&HostToRelay::Fetched {
+        req,
+        status: 200,
+        headers: vec![("Content-Type".into(), "image/png".into())],
+    }))
+    .await
+    .unwrap();
+    host.send(chunk(req, b"png")).await.unwrap();
+    host.send(chunk(req, b"")).await.unwrap();
+    let reply = get.await.unwrap();
+    assert_eq!((reply.status, reply.body.as_slice()), (200, &b"png"[..]));
+    r.stop().await;
+}
+
+/// The host answers one fetch for `path` with `headers` and an empty body.
+async fn served_with(path: &str, headers: Vec<(String, String)>) -> HttpReply {
+    let r = start_relay().await;
+    let (mut host, shared) = host_share(r.port).await;
+    let id = id_of(&shared);
+    let port = r.port;
+    let url = format!("/s/{id}/raw/{path}");
+    let get = tokio::spawn(async move { http_reply(port, &url, "").await });
+    let req = fetch_req(&mut host).await;
+    host.send(text(&HostToRelay::Fetched {
+        req,
+        status: 200,
+        headers,
+    }))
+    .await
+    .unwrap();
+    host.send(chunk(req, b"")).await.unwrap();
+    let reply = get.await.unwrap();
+    r.stop().await;
+    reply
+}
+
+#[tokio::test]
+async fn raw_responses_are_never_sniffed_and_script_is_sandboxed() {
+    // HTML the host labels plainly, with no protection of its own.
+    let reply = served_with(
+        "notes.txt",
+        vec![("Content-Type".into(), "text/html".into())],
+    )
+    .await;
+    assert_eq!(reply.header("x-content-type-options"), Some("nosniff"));
+    assert_eq!(reply.header("content-security-policy"), Some("sandbox"));
+    // A scriptable path is sandboxed whatever the host calls it; the host's own
+    // values for these two headers are not used.
+    let reply = served_with(
+        "page.svg",
+        vec![
+            ("Content-Type".into(), "image/png".into()),
+            ("Content-Security-Policy".into(), "script-src *".into()),
+            ("X-Content-Type-Options".into(), "sniff-away".into()),
+        ],
+    )
+    .await;
+    assert_eq!(reply.header("x-content-type-options"), Some("nosniff"));
+    assert_eq!(reply.header("content-security-policy"), Some("sandbox"));
+    // A plain image keeps no host CSP and needs none.
+    let reply = served_with(
+        "a.png",
+        vec![
+            ("Content-Type".into(), "image/png".into()),
+            ("Content-Security-Policy".into(), "script-src *".into()),
+        ],
+    )
+    .await;
+    assert_eq!(reply.header("x-content-type-options"), Some("nosniff"));
+    assert_eq!(reply.header("content-security-policy"), None);
+}
+
+#[tokio::test]
+async fn a_viewer_that_stops_reading_pauses_the_host_then_resumes_it() {
+    let r = start_relay().await;
+    let (host, shared) = host_share(r.port).await;
+    let id = id_of(&shared);
+    let (mut sink, mut from_relay) = split_host(host);
+    let mut client = tokio::net::TcpStream::connect(("127.0.0.1", r.port))
+        .await
+        .unwrap();
+    client
+        .write_all(
+            format!(
+                "GET /s/{id}/raw/clip.mp4 HTTP/1.1\r\nHost: 127.0.0.1:{}\r\nConnection: close\r\n\r\n",
+                r.port
+            )
+            .as_bytes(),
+        )
+        .await
+        .unwrap();
+    let req = match next_from(&mut from_relay).await {
+        RelayToHost::Fetch { req, .. } => req,
+        other => panic!("expected fetch: {other:?}"),
+    };
+    sink.send(text(&HostToRelay::Fetched {
+        req,
+        status: 200,
+        headers: vec![("Content-Type".into(), "video/mp4".into())],
+    }))
+    .await
+    .unwrap();
+    // The client reads nothing: once the socket's buffers fill, chunks back up at the
+    // relay, and it asks the host to pause.
+    let piece = vec![7u8; leaf_protocol::relay::CHUNK_BYTES];
+    let mut sent = 0;
+    let paused = loop {
+        assert!(sent < 200, "no pause after {sent} chunks");
+        sink.send(chunk(req, &piece)).await.unwrap();
+        sent += 1;
+        tokio::time::sleep(Duration::from_millis(5)).await;
+        match from_relay.try_recv() {
+            Ok(RelayToHost::Ping) | Err(_) => continue,
+            Ok(m) => break m,
+        }
+    };
+    assert_eq!(paused, RelayToHost::Pause { req });
+    assert!(sent >= 24, "paused after only {sent} chunks");
+    // The client reads: the relay drains and lets the host go on.
+    let reader = tokio::spawn(async move {
+        let mut buf = vec![0u8; 1 << 16];
+        let mut total = 0usize;
+        loop {
+            match client.read(&mut buf).await {
+                Ok(0) | Err(_) => break total,
+                Ok(n) => total += n,
+            }
+        }
+    });
+    assert_eq!(
+        next_from(&mut from_relay).await,
+        RelayToHost::Resume { req }
+    );
+    sink.send(chunk(req, b"")).await.unwrap();
+    let total = tokio::time::timeout(WAIT, reader).await.unwrap().unwrap();
+    assert!(total >= sent * piece.len(), "read {total} of {sent} chunks");
+    r.stop().await;
+}
+
+#[tokio::test]
+async fn a_host_silent_mid_body_ends_the_fetch() {
+    let r = start_with(RelayOptions {
+        fetch_idle_timeout: Duration::from_millis(200),
+        ..options()
+    })
+    .await;
+    let (mut host, shared) = host_share(r.port).await;
+    let id = id_of(&shared);
+    let mut client = tokio::net::TcpStream::connect(("127.0.0.1", r.port))
+        .await
+        .unwrap();
+    client
+        .write_all(
+            format!(
+                "GET /s/{id}/raw/clip.mp4 HTTP/1.1\r\nHost: 127.0.0.1:{}\r\nConnection: close\r\n\r\n",
+                r.port
+            )
+            .as_bytes(),
+        )
+        .await
+        .unwrap();
+    let req = fetch_req(&mut host).await;
+    host.send(text(&HostToRelay::Fetched {
+        req,
+        status: 200,
+        headers: vec![("Content-Type".into(), "video/mp4".into())],
+    }))
+    .await
+    .unwrap();
+    host.send(chunk(req, b"012")).await.unwrap();
+    assert_eq!(next_host(&mut host).await, RelayToHost::Cancel { req });
+    // The client's response is cut short: no chunked terminator.
+    let mut buf = Vec::new();
+    tokio::time::timeout(WAIT, client.read_to_end(&mut buf))
+        .await
+        .unwrap()
+        .unwrap();
+    assert!(
+        !buf.ends_with(b"0\r\n\r\n"),
+        "the body must not look complete"
+    );
+    r.stop().await;
+}
