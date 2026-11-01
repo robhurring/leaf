@@ -84,7 +84,7 @@ impl Windows {
             };
             let Built {
                 engine, watcher, ..
-            } = build_engine(&config, Some(false)).map_err(|e| e.0)?;
+            } = build_engine(&config, Some(crate::raw::RAW_BASE)).map_err(|e| e.0)?;
             let forwarder = {
                 let mut pushes = engine.pushes();
                 let inner = self.inner.clone();
@@ -141,6 +141,19 @@ impl Windows {
             Some((engine, sid)) => engine.handle(sid, msg).await,
             None => vec![],
         }
+    }
+
+    /// Where `path` is on disk, for window `label`: inside the folder it shows, or an error.
+    pub async fn locate(&self, label: &str, path: &str) -> Result<PathBuf, String> {
+        let engine = {
+            let inner = self.lock();
+            inner
+                .windows
+                .get(label)
+                .and_then(|(f, _)| inner.folders.get(f).map(|fo| fo.engine.clone()))
+        };
+        let engine = engine.ok_or_else(|| format!("no window {label}"))?;
+        engine.source().locate(path).await.map_err(|e| e.message)
     }
 
     /// The window went away: end its session; the last window on a folder releases the engine.

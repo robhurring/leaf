@@ -7,6 +7,7 @@ pub mod idle;
 pub mod instances;
 pub mod launch;
 pub mod log;
+pub mod raw;
 pub mod serve;
 pub mod session;
 pub mod tabs;

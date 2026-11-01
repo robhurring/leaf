@@ -74,7 +74,7 @@ pub async fn healthz() -> &'static str {
 }
 
 /// Types that could run script if served same-origin get a sandbox.
-fn scriptable(mime: &str) -> bool {
+pub(crate) fn scriptable(mime: &str) -> bool {
     matches!(
         mime,
         "text/html" | "application/xhtml+xml" | "image/svg+xml" | "text/xml" | "application/xml"
@@ -161,7 +161,7 @@ pub async fn static_file(uri: Uri) -> Response {
         .into_response()
 }
 
-fn percent_decode(s: &str) -> String {
+pub(crate) fn percent_decode(s: &str) -> String {
     let bytes = s.as_bytes();
     let mut out = Vec::with_capacity(bytes.len());
     let mut i = 0;

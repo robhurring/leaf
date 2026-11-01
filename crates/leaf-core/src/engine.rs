@@ -26,8 +26,8 @@ pub struct EngineConfig {
     pub mention_url: Option<String>,
     pub topic_url: Option<String>,
     pub max_entries: usize,
-    /// Overrides the source's `rawUrls` (a window has no HTTP path, whatever the source says).
-    pub raw_urls: Option<bool>,
+    /// Where file bytes are served instead of the source's `/raw/` (the app's own URLs).
+    pub raw_base: Option<String>,
 }
 
 #[derive(Default)]
@@ -55,7 +55,7 @@ pub struct Engine {
     pushes: broadcast::Sender<(SessionId, ServerMessage)>,
 }
 
-fn raw_url(path: &str) -> String {
+fn raw_url(base: &str, path: &str) -> String {
     let encoded: Vec<String> = path
         .split('/')
         .map(|seg| {
@@ -69,11 +69,11 @@ fn raw_url(path: &str) -> String {
                 .collect::<String>()
         })
         .collect();
-    format!("/raw/{}", encoded.join("/"))
+    format!("{base}{}", encoded.join("/"))
 }
 
-fn file_message(f: FileData) -> ServerMessage {
-    let url = raw_url(&f.path);
+fn file_message(base: &str, f: FileData) -> ServerMessage {
+    let url = raw_url(base, &f.path);
     ServerMessage::File {
         path: f.path,
         kind: f.kind,
@@ -247,8 +247,9 @@ impl Engine {
                     },
                     capabilities: {
                         let mut c = self.source.capabilities();
-                        if self.config.raw_urls.is_some() {
-                            c.raw_urls = self.config.raw_urls;
+                        if let Some(base) = &self.config.raw_base {
+                            c.raw_urls = Some(true);
+                            c.raw_base = Some(base.clone());
                         }
                         c
                     },
@@ -275,7 +276,8 @@ impl Engine {
             ClientMessage::Read { path, .. } => match self.source.read(&path).await {
                 Ok(f) => {
                     tracing::info!(path = %path, "opened");
-                    vec![file_message(f)]
+                    let base = self.config.raw_base.as_deref().unwrap_or("/raw/");
+                    vec![file_message(base, f)]
                 }
                 Err(e) => vec![error_message(e)],
             },

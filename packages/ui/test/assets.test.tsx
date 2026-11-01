@@ -32,6 +32,28 @@ describe('assets over the socket', () => {
     expect(sent.filter((m: ClientMessage) => m.type === 'read' && m.path === 'a.png')).toEqual([]);
   });
 
+  it('with a raw base (the app), images point at it, any size', async () => {
+    const { source, sent } = scripted(
+      { 'doc.md': '# Pic\n\n![a](./my%20pics/a.png)\n', 'my pics/a.png': '' },
+      {
+        capabilities: {
+          watch: true,
+          write: false,
+          collaborate: false,
+          rawUrls: true,
+          rawBase: 'leaf-raw://localhost/',
+        },
+      },
+    );
+    history.replaceState(null, '', '/doc.md');
+    const { container } = render(<Reader source={source} />);
+    await waitFor(() => expect(container.querySelector('img.leaf-image')).toBeTruthy());
+    expect(container.querySelector('img.leaf-image')!.getAttribute('src')).toBe(
+      'leaf-raw://localhost/my%20pics/a.png',
+    );
+    expect(sent.filter((m: ClientMessage) => m.type === 'read')).toHaveLength(1);
+  });
+
   it('without raw URLs, the image is read over the socket and shown from its bytes', async () => {
     const { source, sent } = scripted(
       { 'doc.md': '# Pic\n\n![a](./a.png)\n', 'a.png': { base64: PNG, mime: 'image/png' } },

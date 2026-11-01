@@ -79,7 +79,7 @@ pub struct Built {
     pub watcher: Option<Watcher>,
 }
 
-pub fn build_engine(config: &Config, raw_urls: Option<bool>) -> Result<Built, ServeError> {
+pub fn build_engine(config: &Config, raw_base: Option<&str>) -> Result<Built, ServeError> {
     let source = Arc::new(
         DiskSource::new(DiskOptions {
             target: config.target.clone(),
@@ -103,7 +103,7 @@ pub fn build_engine(config: &Config, raw_urls: Option<bool>) -> Result<Built, Se
             mention_url: config.mention_url.clone(),
             topic_url: config.topic_url.clone(),
             max_entries: config.max_entries,
-            raw_urls,
+            raw_base: raw_base.map(str::to_string),
         },
     );
 

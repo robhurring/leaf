@@ -37,6 +37,9 @@ pub struct Capabilities {
     /// The server also serves file bytes at `/raw/<path>` over HTTP.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub raw_urls: Option<bool>,
+    /// Where those bytes are, when not `/raw/` (the app's `leaf-raw://localhost/`).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub raw_base: Option<String>,
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, Default)]

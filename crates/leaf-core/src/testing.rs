@@ -41,6 +41,7 @@ impl Source for FakeSource {
             write: false,
             collaborate: false,
             raw_urls: None,
+            raw_base: None,
         }
     }
     async fn list(&self, path: &str) -> Result<Vec<Entry>, SourceError> {

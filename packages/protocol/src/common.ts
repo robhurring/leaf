@@ -18,6 +18,8 @@ export const Capabilities = z.object({
   collaborate: z.boolean(),
   /** The server also serves file bytes at `/raw/<path>` over HTTP. Absent: fetch assets over the socket. */
   rawUrls: z.boolean().optional(),
+  /** Where those bytes are, when not `/raw/` (the app's `leaf-raw://localhost/`). */
+  rawBase: z.string().optional(),
 });
 export type Capabilities = z.infer<typeof Capabilities>;
 

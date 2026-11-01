@@ -65,6 +65,9 @@
             },
             "rawUrls": {
               "type": "boolean"
+            },
+            "rawBase": {
+              "type": "string"
             }
           },
           "required": [

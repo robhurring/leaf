@@ -116,15 +116,16 @@ export function Reader(props: ReaderProps) {
   // Assets: the server's /raw URLs when it has them, else bytes over the socket.
   const assetUrls = useAssets((s) => s.urls);
   const rawUrls = docs.capabilities?.rawUrls === true;
+  const rawBase = docs.capabilities?.rawBase;
   const assetResolver = useCallback<AssetResolver>(
     (path) => {
-      if (rawUrls) return rawUrl(path);
+      if (rawUrls) return rawUrl(path, rawBase);
       const url = assetUrls[path];
       if (url) return url;
       useAssets.getState().request(path);
       return null;
     },
-    [rawUrls, assetUrls],
+    [rawUrls, rawBase, assetUrls],
   );
 
   const setTreeOpen = (v: boolean) => (props.onTreeOpenChange ?? ui.setTreeOpen)(v);

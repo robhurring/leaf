@@ -13,6 +13,7 @@ use tauri::menu::{Menu, MenuBuilder, MenuItemBuilder, SubmenuBuilder};
 use tauri::{AppHandle, Emitter, EventTarget, Manager, Webview, Wry};
 
 use leaf_app::launch::{link_in_argv, parse_deep_link};
+use leaf_app::raw;
 use leaf_app::tabs::Tabs;
 use leaf_app::welcome;
 use leaf_app::window::Windows;
@@ -494,6 +495,44 @@ pub fn run(config: Config, link: Option<String>, welcome: bool) -> i32 {
             }
         }))
         .plugin(tauri_plugin_dialog::init())
+        // A tab's images and media, any size, straight from disk (see raw.rs).
+        .register_asynchronous_uri_scheme_protocol(raw::RAW_SCHEME, |ctx, request, responder| {
+            let app = ctx.app_handle().clone();
+            let label = ctx.webview_label().to_string();
+            let range = request
+                .headers()
+                .get("range")
+                .and_then(|v| v.to_str().ok())
+                .map(str::to_string);
+            let path = raw::path_of(request.uri().path());
+            let runtime = app.state::<AppState>().runtime.clone();
+            runtime.spawn(async move {
+                let state = app.state::<AppState>();
+                let reply = match path {
+                    Some(path) => match state.windows.locate(&label, &path).await {
+                        Ok(abs) => raw::respond(&abs, &path, range.as_deref()).await,
+                        Err(_) => raw::Reply {
+                            status: 404,
+                            headers: vec![("Content-Type", "text/plain".into())],
+                            body: b"not found".to_vec(),
+                        },
+                    },
+                    None => raw::Reply {
+                        status: 400,
+                        headers: vec![],
+                        body: vec![],
+                    },
+                };
+                let mut response = tauri::http::Response::builder().status(reply.status);
+                for (k, v) in reply.headers {
+                    response = response.header(k, v);
+                }
+                match response.body(reply.body) {
+                    Ok(r) => responder.respond(r),
+                    Err(e) => tracing::warn!(error = %e, "could not answer a leaf-raw request"),
+                }
+            });
+        })
         .invoke_handler(tauri::generate_handler![
             leaf_send,
             leaf_ready,

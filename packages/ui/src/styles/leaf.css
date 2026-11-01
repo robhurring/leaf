@@ -1353,6 +1353,17 @@ html[data-resizing] .leaf-resizer::after {
   font-weight: 600;
   word-break: break-all;
 }
+.leaf-binary-note {
+  margin: 6px 0 0;
+  color: var(--leaf-text-2);
+}
+.leaf-load-failed {
+  max-width: 32em;
+  margin: 15vh auto;
+  padding: 0 16px;
+  text-align: center;
+  color: var(--leaf-text-2);
+}
 .leaf-binary-meta {
   display: grid;
   grid-template-columns: auto 1fr;

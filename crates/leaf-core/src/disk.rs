@@ -204,6 +204,7 @@ impl Source for DiskSource {
             write: false,
             collaborate: false,
             raw_urls: Some(true),
+            raw_base: None,
         }
     }
 

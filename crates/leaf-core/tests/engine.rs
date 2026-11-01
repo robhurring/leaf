@@ -24,7 +24,7 @@ async fn engine() -> (Arc<Engine>, tempfile::TempDir) {
         mention_url: Some("https://x.com/{username}".into()),
         topic_url: None,
         max_entries: 10,
-        raw_urls: None,
+        raw_base: None,
     };
     (Engine::new(source, prefs, config), d)
 }

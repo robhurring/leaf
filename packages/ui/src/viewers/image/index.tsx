@@ -4,6 +4,7 @@
 import { useState } from 'react';
 import type { Viewer, ViewerProps } from '../types.js';
 import { useFileUrl } from '../fileUrl.js';
+import { LoadFailed } from '../binary/index.js';
 
 function Image({ file }: ViewerProps) {
   const name = file.path.slice(file.path.lastIndexOf('/') + 1);
@@ -11,11 +12,21 @@ function Image({ file }: ViewerProps) {
   // Busy until the picture is in: the Stage waits for it to center it at 1:1, rather
   // than measuring the alt text in its place.
   const [loaded, setLoaded] = useState<string | null>(null);
+  const [failed, setFailed] = useState<string | null>(null);
   const done = () => setLoaded(url);
+  if (url && failed === url) return <LoadFailed name={name} />;
   return (
     <div className="leaf-image-view" aria-busy={!!url && loaded !== url}>
       <div className="leaf-image-stage">
-        {url && <img className="leaf-image" src={url} alt={name} onLoad={done} onError={done} />}
+        {url && (
+          <img
+            className="leaf-image"
+            src={url}
+            alt={name}
+            onLoad={done}
+            onError={() => (done(), setFailed(url))}
+          />
+        )}
       </div>
     </div>
   );

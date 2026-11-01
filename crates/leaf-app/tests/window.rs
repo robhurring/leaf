@@ -48,7 +48,15 @@ async fn windows_are_sessions_sharing_an_engine_per_folder() {
         .await;
     match &welcome[0] {
         ServerMessage::Welcome { capabilities, .. } => {
-            assert_eq!(capabilities.raw_urls, Some(false), "no /raw in a window")
+            assert_eq!(
+                capabilities.raw_urls,
+                Some(true),
+                "windows load files by URL"
+            );
+            assert_eq!(
+                capabilities.raw_base.as_deref(),
+                Some(leaf_app::raw::RAW_BASE)
+            );
         }
         other => panic!("{other:?}"),
     }
@@ -86,6 +94,19 @@ async fn windows_are_sessions_sharing_an_engine_per_folder() {
             ..
         }
     ));
+    match &png[0] {
+        ServerMessage::File { url, .. } => {
+            assert_eq!(url, &format!("{}pic.png", leaf_app::raw::RAW_BASE))
+        }
+        other => panic!("{other:?}"),
+    }
+    // The window's files, by path: inside its folder only.
+    assert_eq!(
+        windows.locate("w1", "pic.png").await.unwrap(),
+        r.join("pic.png")
+    );
+    assert!(windows.locate("w1", "../outside.png").await.is_err());
+    assert!(windows.locate("nobody", "pic.png").await.is_err());
 
     std::fs::write(r.join("README.md"), "# hi again\n").unwrap();
     let mut seen = false;

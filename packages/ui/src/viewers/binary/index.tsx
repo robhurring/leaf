@@ -2,6 +2,23 @@
 import type { Viewer, ViewerProps } from '../types.js';
 import { formatBytes, formatDate } from './format.js';
 
+/** Text the source sent no content for: over the size it sends inline. */
+function tooLarge(file: ViewerProps['file']): boolean {
+  return (
+    file.encoding === 'none' &&
+    (file.mime.startsWith('text/') || ['markdown', 'code', 'csv'].includes(file.kind))
+  );
+}
+
+/** A file that should have shown and didn't: said in place of an empty frame. */
+export function LoadFailed({ name }: { name: string }) {
+  return (
+    <div className="leaf-load-failed" role="alert">
+      Couldn’t load {name}. It may have moved, or be in a format this system can’t show.
+    </div>
+  );
+}
+
 export function BinaryCard({ file }: ViewerProps) {
   const name = file.path.slice(file.path.lastIndexOf('/') + 1);
   return (
@@ -20,6 +37,7 @@ export function BinaryCard({ file }: ViewerProps) {
         <path d="M14 3v5h5" />
       </svg>
       <div className="leaf-binary-name">{name}</div>
+      {tooLarge(file) && <p className="leaf-binary-note">Too large to show here</p>}
       <dl className="leaf-binary-meta">
         <dt>Size</dt>
         <dd>{formatBytes(file.size)}</dd>
