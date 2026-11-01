@@ -127,6 +127,8 @@ export const useDocuments = create<DocumentsState>((set, get) => {
           config: msg.config,
           capabilities: msg.capabilities,
           share: msg.share ?? null,
+          // A (re)join welcome means the share is live, whatever the last socket heard.
+          ...(msg.share ? { shareStatus: 'live' as const, shareReason: null } : {}),
         });
         // A server that stores preferences wins over localStorage; from then on, changes flow back.
         if (msg.preferences) {

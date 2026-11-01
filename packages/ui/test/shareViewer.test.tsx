@@ -76,6 +76,28 @@ describe('viewing a share', () => {
     await waitFor(async () => expect((await banner()).textContent).toContain('Rob’s share'));
   });
 
+  it('a_rejoin_welcome_clears_reconnecting', async () => {
+    const s = await open();
+    act(() => s.emit({ type: 'shareStatus', state: 'reconnecting' }));
+    await waitFor(async () => expect((await banner()).textContent).toBe('Reconnecting to Rob…'));
+    // The page reconnected after the host was back: the relay sends no shareStatus to a
+    // viewer joining a live share, only the welcome.
+    act(() =>
+      s.emit({
+        type: 'welcome',
+        protocol: 1,
+        root: { kind: 'dir', name: 'x' },
+        config: {},
+        capabilities: { watch: true, write: false, collaborate: false },
+        participant: { id: 'local', name: 'You' },
+        share: SHARE,
+      }),
+    );
+    await waitFor(async () => expect((await banner()).textContent).toContain('Rob’s share'));
+    expect(useDocuments.getState().shareStatus).toBe('live');
+    expect(useDocuments.getState().shareReason).toBeNull();
+  });
+
   it('ended_replaces_the_document', async () => {
     const s = await open();
     fireEvent.keyDown(window, { key: 'k', metaKey: true });
