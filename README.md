@@ -7,11 +7,11 @@ It's one binary for macOS and Linux. `leaf open` puts a window on your dock and 
 ## Try it
 
 ```sh
-brew install --cask robhurring/tap/leaf   # macOS; or from a checkout: bin/setup && bin/install
-leaf open docs/examples                   # the tour: every kind of file leaf reads, one page each
+brew install --cask robhurring/tap/leaf   # macOS (other ways under Install)
+leaf open ~/notes                         # any folder or file
 ```
 
-[`docs/examples`](docs/examples/README.md) is the living demo. Start at its README and click through: markdown, diagrams, slides, notebooks, charts, maps, animations, and a couple of small games.
+From a checkout, `leaf open docs/examples` is the tour: every kind of file leaf reads, one page each. [`docs/examples`](docs/examples/README.md) is the living demo. Start at its README and click through: markdown, diagrams, slides, notebooks, charts, maps, animations, and a couple of small games.
 
 <table>
   <tr>
@@ -60,10 +60,12 @@ leaf open docs/examples                   # the tour: every kind of file leaf re
 
 ## Install
 
-**macOS, with Homebrew:** installs **leaf reader** in Applications and `leaf` in your terminal.
+**macOS, with Homebrew** (recommended): installs **leaf reader** in Applications and `leaf` in your terminal. Each release updates [the tap](https://github.com/robhurring/homebrew-tap).
 
 ```sh
 brew install --cask robhurring/tap/leaf
+brew upgrade --cask leaf                  # a newer release
+brew uninstall --cask leaf                # add --zap to remove ~/.config/leaf too
 ```
 
 **macOS, by hand:** download the `.dmg` from [Releases](https://github.com/robhurring/leaf/releases) and drag **leaf reader** to Applications. It runs on Apple Silicon and Intel. To get `leaf` in your terminal, link the binary inside the app:
@@ -74,7 +76,7 @@ ln -s "/Applications/leaf reader.app/Contents/MacOS/leaf" /usr/local/bin/leaf
 
 Builds that aren't notarized yet are stopped the first time you open them: open **System Settings > Privacy & Security** and choose **Open Anyway**.
 
-**From a checkout** (macOS or Linux), with Rust and Node 22 or newer:
+**From a checkout** (macOS, and the only way on Linux for now), with Rust and Node 22 or newer:
 
 ```sh
 bin/setup                  # dependencies
