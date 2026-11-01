@@ -126,9 +126,66 @@ The same reader runs in any browser: it's what people you share with will see.
 leaf open --browser docs/  # in your browser; the server stops when the tab closes
 leaf serve docs/           # a server that stays up, on 127.0.0.1:4321 (ctrl-c stops it)
 leaf serve docs/ -l debug  # same, with every message on the wire
+leaf relay start           # a relay for sharing (see Sharing)
 ```
 
 `serve` is for a folder on another machine (`--host 0.0.0.0` on a dev box or a server with no desktop, read from your laptop) and for development: `bin/dev` and the browser tests run it.
+
+## Sharing
+
+Share a tab and others read it with you, live: they see what you open, the page follows your edits, and they can't change anything. Sharing goes through a **relay**, a small server you run (below); the app reaches it with `LEAF_RELAY_URL`.
+
+```sh
+LEAF_RELAY_URL=https://my-relay.herokuapp.com leaf open docs/
+```
+
+Or put `LEAF_RELAY_URL` in your `.env` or pass `--relay-url`. With a relay set, the window gains a Share menu (without one there is no Share button). **Share this tab** starts a session for the tab you're on, then the menu offers:
+
+- **Copy app link**: a `leaf://relay/<relay-host>/s/<id>` link. It opens in leaf once `leaf connect` ships, in the next release.
+- **Copy web link**: `https://<relay>/s/<id>`, which opens the reader in any browser, with a banner naming the host, who's here, and what the host is reading.
+- **End session**: stops sharing and disconnects everyone.
+
+A shared tab wears a mark in the tab row (in the title row when the window has one tab).
+
+What viewers can and can't do:
+
+- They browse the tab's tree on their own: open other files in it without moving you, and the other way round.
+- It's read-only. Nothing they do changes your files.
+- Code runs only when they click Run: live blocks and notebook outputs in a share don't start by themselves.
+- Files your ignore rules skip, and anything outside the tab's folder, stay private.
+
+Close the tab or the window by accident and you have 60 seconds (`LEAF_RELAY_GRACE`) to come back before the session ends for everyone; reopening resumes it.
+
+### Running a relay
+
+```sh
+LEAF_RELAY_PUBLIC_URL=http://localhost:4321 leaf relay start   # listens on $PORT (default 4321)
+```
+
+Then `LEAF_RELAY_URL=http://localhost:4321 leaf open docs/` to share through it. As a container:
+
+```sh
+docker build -t leaf-relay . && docker run --rm -e PORT=8080 -p 8080:8080 leaf-relay
+```
+
+| Variable                 | Default | What it does                                                                                  |
+| ------------------------ | ------- | --------------------------------------------------------------------------------------------- |
+| `PORT`                   | `4321`  | the port the relay listens on, on all interfaces                                              |
+| `LEAF_RELAY_SECRET`      | random  | signs host tokens; set it so hosts keep their links across restarts (the relay warns without) |
+| `LEAF_RELAY_PUBLIC_URL`  | unset   | the relay's own address, the base of the links it hands out                                   |
+| `LEAF_RELAY_GRACE`       | `60`    | seconds a session survives its host disconnecting                                             |
+| `LEAF_RELAY_TRUST_PROXY` | unset   | truthy behind a proxy (Heroku's router): the rate limit uses the real client address          |
+
+On Heroku, which runs the `Dockerfile` through the container stack (`heroku.yml`):
+
+```sh
+heroku create
+heroku stack:set container
+heroku config:set LEAF_RELAY_SECRET=$(openssl rand -hex 32) LEAF_RELAY_TRUST_PROXY=1 LEAF_RELAY_PUBLIC_URL=https://<app>.herokuapp.com
+git push heroku main
+```
+
+The `Procfile` (`web: leaf relay start`) is for platforms that build from source instead.
 
 ## What you get
 

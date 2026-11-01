@@ -1,0 +1,13 @@
+target
+node_modules
+**/node_modules
+dist
+**/dist
+.git
+.superpowers
+.env
+test-results
+playwright-report
+*.tgz
+crates/leaf-app/gen
+.DS_Store
