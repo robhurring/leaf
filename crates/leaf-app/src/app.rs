@@ -397,8 +397,7 @@ fn relaunch_with(url: &str) {
     }
 }
 
-/// Writes the welcome page (with `error` from a failed install) and, from the
-/// launcher, opens it. Returns the page's path.
+/// Writes the welcome page (with `error` from a failed install); returns its path.
 fn welcome_page(error: Option<String>) -> Option<PathBuf> {
     let env: HashMap<String, String> = std::env::vars().collect();
     let home = PathBuf::from(env.get("HOME").cloned().unwrap_or_default());
@@ -437,12 +436,6 @@ fn login_path(env: &HashMap<String, String>) -> Option<String> {
     welcome::path_from_probe(&out)
 }
 
-fn show_welcome(error: Option<String>) {
-    if let Some(path) = welcome_page(error) {
-        relaunch_with(&path.to_string_lossy());
-    }
-}
-
 /// The welcome page's install link: links the command (macOS asks for a password),
 /// then rewrites the page, which the window showing it follows.
 async fn install_cli() {
@@ -471,50 +464,6 @@ async fn install_cli() {
     welcome_page(result.err());
 }
 
-/// macOS starts the installed app to deliver a link when no leaf is running. That
-/// process only receives: it passes each link to `leaf <link>` (which starts the app,
-/// or hands off to one that started meanwhile) and quits.
-pub fn receive_links() -> i32 {
-    let app = match tauri::Builder::default().build(context()) {
-        Ok(a) => a,
-        Err(e) => {
-            eprintln!("leaf: the app failed: {e}");
-            return 1;
-        }
-    };
-    #[cfg(target_os = "macos")]
-    let mut app = app;
-    #[cfg(target_os = "macos")]
-    app.set_activation_policy(tauri::ActivationPolicy::Accessory);
-    // Opened without a link (from Finder or the Dock): the welcome page, so leaf
-    // doesn't look like it quit. A link arrives just after launch, well within this.
-    let linked = Arc::new(std::sync::atomic::AtomicBool::new(false));
-    let handle = app.handle().clone();
-    let waited = linked.clone();
-    std::thread::spawn(move || {
-        std::thread::sleep(std::time::Duration::from_millis(750));
-        if !waited.swap(true, Ordering::SeqCst) {
-            show_welcome(None);
-        }
-        handle.exit(0);
-    });
-    app.run(move |app, event| {
-        // Only macOS hands a running app the links it was opened with.
-        #[cfg(target_os = "macos")]
-        if let tauri::RunEvent::Opened { urls } = event {
-            if !linked.swap(true, Ordering::SeqCst) {
-                for url in urls.iter().filter(|u| u.scheme() == "leaf") {
-                    relaunch_with(url.as_str());
-                }
-            }
-            app.exit(0);
-        }
-        #[cfg(not(target_os = "macos"))]
-        let _ = (app, event);
-    });
-    0
-}
-
 // The app's config and assets, embedded once (the macro may appear only once per binary).
 fn context() -> tauri::Context<Wry> {
     tauri::generate_context!()
@@ -524,7 +473,7 @@ fn context() -> tauri::Context<Wry> {
 /// multi-thread tokio runtime: `run` blocks this thread for the event loop while
 /// commands (`leaf_send`) run on the runtime's workers; a current-thread runtime
 /// would deadlock them.
-pub fn run(config: Config, link: Option<String>) -> i32 {
+pub fn run(config: Config, link: Option<String>, welcome: bool) -> i32 {
     let runtime = tokio::runtime::Handle::current();
     tauri::async_runtime::set(runtime.clone());
     let first = config.target.clone();
@@ -620,6 +569,21 @@ pub fn run(config: Config, link: Option<String>) -> i32 {
             tabbed::restore_session(&handle);
             match &link {
                 Some(url) => open_link(&handle, url),
+                // Started by macOS: a link it's delivering arrives just after launch
+                // (and opens itself); with none, and no tabs reopened, the welcome page.
+                None if welcome => {
+                    let handle = handle.clone();
+                    runtime.spawn(async move {
+                        tokio::time::sleep(std::time::Duration::from_millis(750)).await;
+                        let page = tokio::task::spawn_blocking(|| welcome_page(None)).await;
+                        let shown = handle.windows().keys().any(|l| l.starts_with('w'));
+                        match page {
+                            Ok(Some(page)) if !shown => open_window(&handle, &page),
+                            _ if !shown => handle.exit(0),
+                            _ => {}
+                        }
+                    });
+                }
                 None => open_window(&handle, &first),
             }
             drop(starting);

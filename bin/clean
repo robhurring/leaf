@@ -1,0 +1,32 @@
+#!/usr/bin/env bash
+set -euo pipefail
+cd "$(dirname "$0")/.."
+
+usage() {
+  echo "usage: bin/clean [--all]    delete what builds and tests leave behind: target/ (Rust, which grows"
+  echo "  by gigabytes), the UI's dist/, release packages, and test reports. The next bin/build starts"
+  echo "  from scratch (a few minutes). The installed app keeps working; the \`leaf\` link from"
+  echo "  bin/install points into target/, so it works again after that build."
+  echo "  --all  node_modules too (run bin/setup after)"
+}
+
+all=false
+case "${1:-}" in
+  -h|--help) usage; exit 0 ;;
+  --all) all=true ;;
+  "") ;;
+  *) usage >&2; exit 1 ;;
+esac
+
+paths=(target dist packages/*/dist packages/*/test-results packages/*/playwright-report packages/*/tsconfig.tsbuildinfo)
+$all && paths+=(node_modules)
+
+existing=()
+for p in "${paths[@]}"; do [[ -e "$p" ]] && existing+=("$p"); done
+[[ ${#existing[@]} -gt 0 ]] || { echo "nothing to clean"; exit 0; }
+
+freed="$(du -sch "${existing[@]}" | tail -1 | cut -f1)"
+rm -rf "${existing[@]}"
+echo "freed $freed: ${existing[*]}"
+if $all; then echo "next: bin/setup, then bin/build"; else echo "next: bin/build"; fi
+exit 0

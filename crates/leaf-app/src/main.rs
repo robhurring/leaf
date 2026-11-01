@@ -212,9 +212,11 @@ async fn main() {
         // Old macOS passes a process serial number to apps it starts.
         .filter(|a| !a.starts_with("-psn_"))
         .collect();
-    // macOS started the installed app to deliver a link: receive it and pass it on.
-    if argv.is_empty() && leaf_app::launch::running_from_app_bundle() {
-        std::process::exit(app::receive_links());
+    // The installed app started by macOS, from Finder or the Dock, or to deliver a link:
+    // it is the app, and shows the link if one comes, else the welcome page.
+    let welcome = argv.is_empty() && leaf_app::launch::running_from_app_bundle();
+    if welcome {
+        argv.push("__app".into());
     }
     // Internal: this process is the app itself (spawned by `leaf open`).
     let as_app = argv.first().is_some_and(|a| a == "__app");
@@ -283,7 +285,7 @@ async fn main() {
         Route::Serve => run_server(config, sources).await,
         Route::AppForeground => {
             leaf_app::log::init(config.log_level, config.log_format);
-            app::run(config, link.map(|(url, _)| url))
+            app::run(config, link.map(|(url, _)| url), welcome)
         }
         Route::Browser => run_command(config, sources, argv, link.map(|(_, l)| l.route())).await,
         Route::LaunchApp => launch_app(&config, &argv, link.as_ref().map(|(url, _)| url.as_str())),
