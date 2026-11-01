@@ -2,8 +2,7 @@
 // viewer asks. The choice lasts for this page load and is keyed by the block, not saved.
 import { useEffect, useState, type ReactNode } from 'react';
 import { useDocuments } from '../store/documents.js';
-
-const allowed = new Set<string>();
+import { hasRun, markRun } from './ran.js';
 
 export type RunGateProps = {
   /** What would run, for the placeholder's accessible name. */
@@ -19,8 +18,8 @@ export type RunGateProps = {
 
 export default function RunGate({ label, children, gateKey, height, onRun }: RunGateProps) {
   const share = useDocuments((s) => s.share);
-  const [ran, setRan] = useState(() => allowed.has(gateKey));
-  const open = !share || ran || allowed.has(gateKey);
+  const [ran, setRan] = useState(() => hasRun(gateKey));
+  const open = !share || ran || hasRun(gateKey);
   useEffect(() => {
     if (open) onRun?.();
   }, [open, onRun]);
@@ -37,7 +36,7 @@ export default function RunGate({ label, children, gateKey, height, onRun }: Run
         type="button"
         className="leaf-button"
         onClick={() => {
-          allowed.add(gateKey);
+          markRun(gateKey);
           setRan(true);
         }}
       >

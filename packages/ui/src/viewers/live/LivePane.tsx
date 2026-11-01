@@ -1,13 +1,14 @@
 // A live animation pane: a three or canvas block running in a sandboxed frame. It runs
 // only while it is on screen, the window is showing, it isn't paused, and the same
 // block isn't open in the Stage; errors show under it.
-import { lazy, Suspense, useEffect, useMemo, useRef, useState } from 'react';
+import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { ViewerProps } from '../types.js';
 import { DiagramError } from '../diagramError.js';
 import { contentHash } from '../hash.js';
 import { useAppearance } from '../appearance.js';
 import { useStage } from '../../store/stage.js';
 import { useDocuments } from '../../store/documents.js';
+import { hasRun } from '../../share/ran.js';
 import { Pause, Play, Restart, StepFrame } from '../../icons/index.js';
 import {
   buildSrcdoc,
@@ -47,9 +48,12 @@ export function LivePane(props: ViewerProps & { fill?: boolean }) {
   const hash = contentHash(code);
   const theme = useAppearance(props.appearance);
   const shared = useDocuments((s) => s.share !== null);
-  // In a share the frame doesn't exist until the viewer clicks Run, so nothing is late yet.
-  const [started, setStarted] = useState(false);
-  const waiting = shared && !started;
+  // In a share the frame doesn't exist until the viewer runs this block's code, so
+  // nothing can be late yet. The gate says when it has run (which re-renders the pane).
+  const gateKey = `${docPath}:${hash}`;
+  const [, setRunTick] = useState(0);
+  const onRun = useCallback(() => setRunTick((n) => n + 1), []);
+  const waiting = shared && !hasRun(gateKey);
 
   const frame = useRef<HTMLIFrameElement>(null);
   const [userPaused, setUserPaused] = useState(prefersReducedMotion);
@@ -217,12 +221,7 @@ export function LivePane(props: ViewerProps & { fill?: boolean }) {
       <div className="leaf-live-view" style={height ? { height } : undefined}>
         {shared && iframe ? (
           <Suspense fallback={null}>
-            <RunGate
-              label={`${kind} animation`}
-              gateKey={`${docPath}:${hash}`}
-              height={height}
-              onRun={() => setStarted(true)}
-            >
+            <RunGate label={`${kind} animation`} gateKey={gateKey} height={height} onRun={onRun}>
               {iframe}
             </RunGate>
           </Suspense>

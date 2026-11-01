@@ -12,6 +12,7 @@ import type { ViewerProps } from '../types.js';
 import { DiagramError } from '../diagramError.js';
 import { Markdown } from '../../components/Markdown.js';
 import { SourceView } from '../../components/SourceView.js';
+import { contentHash } from '../hash.js';
 import { useDocuments } from '../../store/documents.js';
 import { useDataFile } from '../../data/useDataFile.js';
 import { FRAME_CSP } from '../live/frame.js';
@@ -72,7 +73,7 @@ function OutputView({ out, docPath, gateKey }: { out: Output; docPath: string; g
     case 'image':
       return <img className="leaf-nb-image" src={out.src} alt="Output" />;
     case 'html':
-      return <HtmlOutput html={out.html} gateKey={gateKey} />;
+      return <HtmlOutput html={out.html} gateKey={`${gateKey}:${contentHash(out.html)}`} />;
     case 'markdown':
       return <Markdown source={out.text} docPath={docPath} />;
     case 'error':
@@ -87,11 +88,13 @@ function OutputView({ out, docPath, gateKey }: { out: Output; docPath: string; g
 function CellView(props: {
   cell: Cell;
   index: number;
+  /** Tells this fence's cells from another's in the same document. */
+  scope: string;
   language: string;
   showCode: boolean;
   docPath: string;
 }) {
-  const { cell, index, language, showCode, docPath } = props;
+  const { cell, index, scope, language, showCode, docPath } = props;
   const [collapsed, setCollapsed] = useState(false);
   if (cell.type === 'markdown')
     return (
@@ -136,12 +139,7 @@ function CellView(props: {
               </span>
             ) : (
               cell.outputs.map((o, i) => (
-                <OutputView
-                  key={i}
-                  out={o}
-                  docPath={docPath}
-                  gateKey={`${docPath}:${index}:${i}`}
-                />
+                <OutputView key={i} out={o} docPath={docPath} gateKey={`${scope}:${index}:${i}`} />
               ))
             )}
           </div>
@@ -203,6 +201,7 @@ export default function NotebookView(props: ViewerProps) {
           key={i}
           cell={cell}
           index={i}
+          scope={`${docPath}:${contentHash(text ?? '')}`}
           language={nb.language}
           showCode={showCode}
           docPath={docPath}
