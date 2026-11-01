@@ -3452,3 +3452,54 @@ html[data-tab] {
   color: var(--leaf-accent);
   background: var(--leaf-accent-soft);
 }
+
+/* ---------- share menu ---------- */
+.leaf-share .leaf-tool {
+  position: relative;
+}
+.leaf-share .leaf-tool[aria-label='Sharing'] {
+  color: var(--leaf-accent);
+}
+.leaf-share .leaf-tool[data-status='reconnecting'] {
+  opacity: 0.6;
+}
+.leaf-share-badge {
+  position: absolute;
+  top: -2px;
+  right: -2px;
+  min-width: 14px;
+  height: 14px;
+  padding: 0 3px;
+  border-radius: 7px;
+  background: var(--leaf-accent);
+  color: var(--leaf-surface);
+  font: 600 9px/14px var(--leaf-font-ui);
+  text-align: center;
+}
+.leaf-share-viewer {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 4px 10px;
+  color: var(--leaf-text-2);
+}
+.leaf-share-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+}
+.leaf-share-note {
+  position: absolute;
+  right: 0;
+  top: 32px;
+  padding: 4px 10px;
+  border-radius: var(--leaf-radius-sm);
+  background: var(--leaf-surface);
+  border: 1px solid var(--leaf-line);
+  font: 12px var(--leaf-font-ui);
+  white-space: nowrap;
+  z-index: 30;
+}
+.leaf-share-note[role='alert'] {
+  color: #e5484d;
+}

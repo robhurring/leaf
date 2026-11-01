@@ -39,6 +39,7 @@ import { createPortal } from 'react-dom';
 import { isMarp } from '../viewers/deck/detect.js';
 import { useDeckMode } from '../store/deckMode.js';
 import { Check, Code, Copy, File, Slides, X } from '../icons/index.js';
+import { ShareMenu } from '../share/ShareMenu.js';
 import { SourceView } from './SourceView.js';
 
 const SpeakerView = lazy(() => import('../viewers/deck/SpeakerView.js'));
@@ -552,6 +553,7 @@ export function Reader(props: ReaderProps) {
                   />
                 )}
                 <BlameShownContext.Provider value={blameShown}>
+                  {toolsEl && createPortal(<ShareMenu />, toolsEl)}
                   {marp &&
                     toolsEl &&
                     createPortal(

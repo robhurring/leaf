@@ -1,6 +1,7 @@
 import type {
   BlameHunk,
   Capabilities,
+  Config,
   ClientMessage,
   GitInfo,
   RootInfo,
@@ -12,6 +13,8 @@ type Binary = { base64: string; mime: string };
 type Opts = {
   root?: RootInfo;
   capabilities?: Capabilities;
+  /** The welcome's config (relayUrl, …). */
+  config?: Config;
   /** Last-commit info per path, as a file in a git repository has. */
   git?: Record<string, GitInfo>;
   /** Blame per path; paths without it answer with no hunks. */
@@ -37,7 +40,7 @@ export function scripted(
             type: 'welcome',
             protocol: 1,
             root,
-            config: {},
+            config: opts.config ?? {},
             capabilities,
             participant: { id: 'local', name: 'You' },
           });
