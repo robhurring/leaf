@@ -11,12 +11,16 @@ import type {
   Entry,
   ErrorMessage,
   FileMessage,
+  PresenceMessage,
   RootInfo,
+  ShareInfo,
+  ShareState,
   TextHit,
   ServerMessage,
 } from '@leaf/protocol';
 import type { DocumentSource, SourceStatus } from '../source/DocumentSource.js';
 import type { Heading } from '../render/headings.js';
+import { NAME_KEY } from '../share/path.js';
 
 export type DocumentsState = {
   status: SourceStatus;
@@ -39,6 +43,11 @@ export type DocumentsState = {
   frontmatter?: Record<string, unknown>;
   /** Git blame per path, once asked for: who last changed each line. */
   blame: Record<string, { hunks: BlameHunk[]; repoUrl?: string }>;
+  /** A relay's share this page views, with who is here and how the share is doing. */
+  share: ShareInfo | null;
+  presence: PresenceMessage | null;
+  shareStatus: ShareState | null;
+  shareReason: string | null;
 
   /** Asks for `path`'s blame; it's asked again whenever the file changes. */
   requestBlame(path: string): void;
@@ -87,6 +96,10 @@ const initial = () => ({
   headings: [] as Heading[],
   frontmatter: undefined,
   blame: {} as Record<string, { hunks: BlameHunk[]; repoUrl?: string }>,
+  share: null,
+  presence: null,
+  shareStatus: null,
+  shareReason: null,
 });
 
 const isUnder = (path: string, dir: string) =>
@@ -109,7 +122,12 @@ export const useDocuments = create<DocumentsState>((set, get) => {
   const onMessage = (msg: ServerMessage) => {
     switch (msg.type) {
       case 'welcome':
-        set({ root: msg.root, config: msg.config, capabilities: msg.capabilities });
+        set({
+          root: msg.root,
+          config: msg.config,
+          capabilities: msg.capabilities,
+          share: msg.share ?? null,
+        });
         // A server that stores preferences wins over localStorage; from then on, changes flow back.
         if (msg.preferences) {
           applyRemotePreferences(msg.preferences);
@@ -183,6 +201,19 @@ export const useDocuments = create<DocumentsState>((set, get) => {
       case 'textMatches':
         // Only the newest query's answer counts; older replies can arrive late.
         if (msg.q === textQuery) set({ textHits: msg.hits });
+        return;
+      case 'presence':
+        set({ presence: msg });
+        // The relay names a viewer who came without one; keep that name for next time.
+        try {
+          const me = msg.viewers.find((v) => v.id === msg.you);
+          if (me && !localStorage.getItem(NAME_KEY)) localStorage.setItem(NAME_KEY, me.name);
+        } catch {
+          // No storage: the relay names us again next time.
+        }
+        return;
+      case 'shareStatus':
+        set({ shareStatus: msg.state, shareReason: msg.reason ?? null });
         return;
       case 'error': {
         if (msg.path) {

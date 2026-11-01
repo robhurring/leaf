@@ -3508,3 +3508,18 @@ html[data-tab] {
 .leaf-share-note[role='alert'] {
   color: #e5484d;
 }
+
+/* ---------- a share's viewer ---------- */
+.leaf-share-banner {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 16px;
+  border-bottom: 1px solid var(--leaf-line);
+  font: 12px var(--leaf-font-ui);
+  color: var(--leaf-text-2);
+}
+.leaf-share-banner a {
+  margin-left: auto;
+  color: var(--leaf-accent);
+}

@@ -3,6 +3,7 @@ import type {
   Capabilities,
   Config,
   ClientMessage,
+  ShareInfo,
   GitInfo,
   RootInfo,
   ServerMessage,
@@ -19,6 +20,8 @@ type Opts = {
   git?: Record<string, GitInfo>;
   /** Blame per path; paths without it answer with no hunks. */
   blame?: Record<string, BlameHunk[]>;
+  /** The welcome's share, as a relay sends to a viewer. */
+  share?: ShareInfo;
 };
 
 /** A DocumentSource over an in-memory file map, recording everything the UI sends. */
@@ -43,6 +46,7 @@ export function scripted(
             config: opts.config ?? {},
             capabilities,
             participant: { id: 'local', name: 'You' },
+            ...(opts.share ? { share: opts.share } : {}),
           });
         case 'list': {
           const dir = msg.path ?? '';

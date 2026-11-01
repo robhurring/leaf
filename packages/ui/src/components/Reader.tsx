@@ -42,6 +42,7 @@ import { Check, Code, Copy, File, Slides, X } from '../icons/index.js';
 import { SourceView } from './SourceView.js';
 
 const ShareMenu = lazy(() => import('../share/ShareMenu.js'));
+const ShareBanner = lazy(() => import('../share/ShareBanner.js'));
 const SpeakerView = lazy(() => import('../viewers/deck/SpeakerView.js'));
 /** A deck's speaker window, opened with ?speaker. Read once, before the router rewrites the address. */
 const SPEAKER_WINDOW =
@@ -112,6 +113,9 @@ export function Reader(props: ReaderProps) {
   // In a tab of an app window the window's chrome holds the title row.
   const tabbed = inTab();
   const shareable = tabbed && !!docs.config?.relayUrl;
+  // Viewing a relay's share in a browser; once it ends, only the notice is left.
+  const viewing = !tabbed && !!docs.share;
+  const ended = viewing && docs.shareStatus === 'ended';
   const theme = props.theme ?? ui.theme;
   const appearance = props.appearance ?? ui.appearance;
   const resolved = useResolvedAppearance(appearance);
@@ -192,6 +196,7 @@ export function Reader(props: ReaderProps) {
 
   // A folder gets a tree unless it holds a single file (nothing to choose between).
   const treeAvailable =
+    !ended &&
     docs.root?.kind === 'dir' &&
     (rootEntries?.length ?? 0) > 0 &&
     !(rootEntries?.length === 1 && rootEntries[0]?.kind === 'file');
@@ -388,7 +393,7 @@ export function Reader(props: ReaderProps) {
   const blameShown = blameOn ? { width: ui.blameWidth } : null;
 
   // Only markdown has an outline; other files hide it without touching the saved setting.
-  const outlineAvailable = !file || isMarkdown;
+  const outlineAvailable = !ended && (!file || isMarkdown);
   const outlineOn = outlineAvailable && outlineOpen;
   const treeShown = usePresence(treeAvailable && treeOpen);
   const outlineShown = usePresence(outlineOn);
@@ -454,7 +459,7 @@ export function Reader(props: ReaderProps) {
       </AppearanceContext.Provider>
     );
 
-  const gotoBox = goto && (
+  const gotoBox = !ended && goto && (
     <GoTo
       mode={goto}
       headings={docs.headings}
@@ -477,6 +482,13 @@ export function Reader(props: ReaderProps) {
       onTab={selectTab}
     />
   );
+
+  const shareBanner = (end: boolean) =>
+    viewing && (
+      <Suspense fallback={null}>
+        <ShareBanner path={path} base={base} onOpen={navigate} ended={end} />
+      </Suspense>
+    );
 
   return (
     <AppearanceContext.Provider value={resolved}>
@@ -527,7 +539,8 @@ export function Reader(props: ReaderProps) {
             {treeShown && <Tree state={treeShown} onOpen={(p) => navigate(p)} />}
             {treeAvailable && treeOpen && <Resizer side="tree" />}
             <div className="leaf-doc-col">
-              {file && (
+              {!ended && shareBanner(false)}
+              {file && !ended && (
                 <Properties
                   file={file}
                   frontmatter={docs.frontmatter}
@@ -618,7 +631,9 @@ export function Reader(props: ReaderProps) {
                   <DocToolsContext.Provider value={file && !isMarkdown ? toolsEl : null}>
                     <main className="leaf-main" ref={mainRef}>
                       <ErrorBoundary label="document" resetKey={`${path}:${file?.mtime ?? ''}`}>
-                        {markdownSource && file ? (
+                        {ended ? (
+                          shareBanner(true)
+                        ) : markdownSource && file ? (
                           <div className="leaf-main-inner">
                             <SourceView code={file.content ?? ''} lang="markdown" label="md" />
                           </div>

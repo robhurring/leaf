@@ -17,6 +17,8 @@ export type WsSourceOptions = {
   /** How often to ask /healthz; 0 turns it off. */
   heartbeatMs?: number;
   fetchImpl?: typeof fetch;
+  /** Who this viewer is, sent in every hello (a share's viewer). */
+  name?: string;
 };
 
 export const DEFAULT_BACKOFF = [500, 1000, 2000];
@@ -39,6 +41,7 @@ export class WsSource implements DocumentSource {
   private readonly backoff: number[];
   private readonly fetchImpl: typeof fetch | undefined;
   private readonly healthUrl: string;
+  private readonly name: string | undefined;
   private heartbeat: ReturnType<typeof setInterval> | undefined;
   private probing = false;
   status: SourceStatus = 'connecting';
@@ -51,6 +54,7 @@ export class WsSource implements DocumentSource {
     this.backoff = opts.backoffMs ?? DEFAULT_BACKOFF;
     this.fetchImpl =
       opts.fetchImpl ?? (typeof fetch === 'function' ? fetch.bind(globalThis) : undefined);
+    this.name = opts.name;
     this.healthUrl = url.replace(/^ws/, 'http').replace(/\/ws$/, '/healthz');
     this.connect();
     const every = opts.heartbeatMs ?? HEARTBEAT_MS;
@@ -109,7 +113,7 @@ export class WsSource implements DocumentSource {
     socket.addEventListener('open', () => {
       if (this.socket !== socket) return;
       this.attempt = 0;
-      socket.send(JSON.stringify({ type: 'hello', protocol: PROTOCOL_VERSION }));
+      socket.send(JSON.stringify({ type: 'hello', protocol: PROTOCOL_VERSION, name: this.name }));
       for (const m of this.queue.splice(0)) socket.send(JSON.stringify(m));
       this.setStatus('open');
     });
