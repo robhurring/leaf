@@ -1,6 +1,6 @@
 {
   "name": "@leaf/protocol",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "type": "module",
   "description": "leaf document protocol: zod schemas for every WebSocket message",
   "main": "./dist/index.js",
