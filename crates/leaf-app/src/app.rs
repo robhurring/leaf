@@ -402,13 +402,39 @@ fn relaunch_with(url: &str) {
 fn welcome_page(error: Option<String>) -> Option<PathBuf> {
     let env: HashMap<String, String> = std::env::vars().collect();
     let home = PathBuf::from(env.get("HOME").cloned().unwrap_or_default());
-    let cli = match welcome::find_cli(&home, |p| p.exists()) {
+    let path = login_path(&env);
+    let cli = match welcome::find_cli(path.as_deref(), &home, |p| p.exists()) {
         Some(at) => welcome::Cli::Installed(at),
         None => welcome::Cli::Missing { error },
     };
     welcome::write(&leaf_core::config::default_config_dir(&env), &cli)
         .map_err(|e| tracing::error!(error = %e, "could not write the welcome page"))
         .ok()
+}
+
+/// The `$PATH` a terminal has: an app started from Finder gets only the system's, so
+/// ask the person's login shell (interactive too, as zsh sets PATH in .zshrc).
+fn login_path(env: &HashMap<String, String>) -> Option<String> {
+    let shell = env.get("SHELL").map_or("/bin/zsh", String::as_str);
+    let mut child = std::process::Command::new(shell)
+        .args(["-ilc", welcome::PATH_PROBE])
+        .stdin(std::process::Stdio::null())
+        .stdout(std::process::Stdio::piped())
+        .stderr(std::process::Stdio::null())
+        .spawn()
+        .ok()?;
+    // A shell whose startup waits on something mustn't hold up the page.
+    let deadline = std::time::Instant::now() + std::time::Duration::from_secs(3);
+    while child.try_wait().ok()?.is_none() {
+        if std::time::Instant::now() > deadline {
+            let _ = child.kill();
+            return None;
+        }
+        std::thread::sleep(std::time::Duration::from_millis(20));
+    }
+    let mut out = String::new();
+    std::io::Read::read_to_string(&mut child.stdout.take()?, &mut out).ok()?;
+    welcome::path_from_probe(&out)
 }
 
 fn show_welcome(error: Option<String>) {

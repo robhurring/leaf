@@ -19,17 +19,36 @@ pub enum Cli {
     },
 }
 
-/// The first `leaf` in the places installs put it: the install link, Homebrew, and
-/// `bin/install` (the app's own PATH is too short to search).
-pub fn find_cli(home: &Path, exists: impl Fn(&Path) -> bool) -> Option<PathBuf> {
-    [
-        PathBuf::from(CLI_PATH),
-        PathBuf::from("/opt/homebrew/bin/leaf"),
-        home.join(".local/bin/leaf"),
-        home.join("bin/leaf"),
-    ]
-    .into_iter()
-    .find(|p| exists(p))
+/// The first `leaf` on `path` (a `$PATH` value). Without one, the places installs put
+/// it: the install link, Homebrew, and `bin/install`.
+pub fn find_cli(
+    path: Option<&str>,
+    home: &Path,
+    exists: impl Fn(&Path) -> bool,
+) -> Option<PathBuf> {
+    let dirs: Vec<PathBuf> = match path {
+        Some(p) => std::env::split_paths(p).collect(),
+        None => vec![
+            PathBuf::from("/usr/local/bin"),
+            PathBuf::from("/opt/homebrew/bin"),
+            home.join(".local/bin"),
+            home.join("bin"),
+        ],
+    };
+    dirs.into_iter().map(|d| d.join("leaf")).find(|p| exists(p))
+}
+
+/// What a login shell runs to print its `$PATH` after a marker, past anything its
+/// startup files print.
+pub const PATH_PROBE: &str = r#"printf '\n__LEAF_PATH__%s\n' "$PATH""#;
+
+/// The `$PATH` in a login shell's output from `PATH_PROBE`.
+pub fn path_from_probe(out: &str) -> Option<String> {
+    out.lines()
+        .rev()
+        .find_map(|l| l.strip_prefix("__LEAF_PATH__"))
+        .filter(|p| !p.is_empty())
+        .map(str::to_string)
 }
 
 /// The AppleScript that links `exe` as the command, asking for an admin password.
@@ -124,18 +143,35 @@ mod tests {
     }
 
     #[test]
-    fn the_command_is_found_where_installs_put_it() {
+    fn the_command_is_found_on_the_path() {
+        let home = Path::new("/Users/me");
+        let at = |hit: &'static str| move |p: &Path| p == Path::new(hit);
+        let path = Some("/usr/bin:/Users/me/tools:/opt/homebrew/bin");
+        assert_eq!(
+            find_cli(path, home, at("/Users/me/tools/leaf")),
+            Some(PathBuf::from("/Users/me/tools/leaf"))
+        );
+        // On the path is what counts: one in ~/.local/bin that isn't on it doesn't.
+        assert_eq!(find_cli(path, home, at("/Users/me/.local/bin/leaf")), None);
+        assert_eq!(find_cli(path, home, |_| false), None);
+    }
+
+    #[test]
+    fn without_a_path_the_usual_places_count() {
         let home = Path::new("/Users/me");
         let at = |hit: &'static str| move |p: &Path| p == Path::new(hit);
         assert_eq!(
-            find_cli(home, at("/opt/homebrew/bin/leaf")),
-            Some(PathBuf::from("/opt/homebrew/bin/leaf"))
-        );
-        assert_eq!(
-            find_cli(home, at("/Users/me/.local/bin/leaf")),
+            find_cli(None, home, at("/Users/me/.local/bin/leaf")),
             Some(PathBuf::from("/Users/me/.local/bin/leaf"))
         );
-        assert_eq!(find_cli(home, |_| false), None);
+    }
+
+    #[test]
+    fn the_path_is_read_past_what_a_shell_prints_first() {
+        let out = "Last login: today\nwelcome!\n__LEAF_PATH__/usr/bin:/bin\n";
+        assert_eq!(path_from_probe(out).as_deref(), Some("/usr/bin:/bin"));
+        assert_eq!(path_from_probe("no marker"), None);
+        assert_eq!(path_from_probe("__LEAF_PATH__\n"), None);
     }
 
     #[test]
