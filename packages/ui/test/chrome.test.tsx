@@ -8,6 +8,7 @@ const tab = (
   path: string,
   active = false,
   kind: 'folder' | 'file' = 'folder',
+  shared = false,
 ): TabInfo => ({
   id,
   label: path,
@@ -15,6 +16,7 @@ const tab = (
   kind,
   name: path.split('/').pop()!,
   active,
+  shared,
 });
 
 function fakeBridge(tabs: TabInfo[], shown: TabState | null = null) {
@@ -159,5 +161,17 @@ describe('the window chrome', () => {
     const { bridge } = await mount([tab('t1', '~/a', true), tab('t2', '~/b')]);
     fireEvent.click(screen.getByRole('button', { name: /leaf/ }));
     expect(bridge.command).toHaveBeenCalledWith('scrollTop');
+  });
+
+  it('a_shared_tab_wears_the_mark', async () => {
+    await mount([tab('t1', '~/a', true), tab('t2', '~/b', false, 'folder', true)]);
+    expect(within(screen.getByRole('tablist')).getAllByLabelText('Shared')).toHaveLength(1);
+    expect(screen.getAllByLabelText('Shared')).toHaveLength(1);
+  });
+
+  it('a_lone_shared_tab_marks_the_title_row', async () => {
+    await mount([tab('t1', '~/a', true, 'folder', true)]);
+    expect(screen.queryByRole('tablist')).toBeNull();
+    expect(within(screen.getByRole('banner')).getAllByLabelText('Shared')).toHaveLength(1);
   });
 });

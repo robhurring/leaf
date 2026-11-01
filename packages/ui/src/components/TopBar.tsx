@@ -4,6 +4,7 @@ import {
   Numbering,
   Outline as OutlineIcon,
   Search,
+  Share,
   Sidebar,
 } from '../icons/index.js';
 import type { SourceStatus } from '../source/DocumentSource.js';
@@ -42,6 +43,8 @@ export type TopBarProps = {
   onAppearanceMenu?(): void;
   /** Extra handlers for the leaf mark: in a one-tab window it drags the tab. */
   brand?: React.HTMLAttributes<HTMLButtonElement>;
+  /** The tab is being shared: a mark beside the leaf mark. */
+  shared?: boolean;
   canGoBack?: boolean;
   canGoForward?: boolean;
   onBack?(): void;
@@ -70,6 +73,11 @@ export function TopBar(p: TopBarProps) {
           <LeafMark size={20} className="leaf-mark" />
           <span className="leaf-wordmark">leaf</span>
         </button>
+        {p.shared && (
+          <span className="leaf-shared-mark" role="img" aria-label="Shared" title="Shared">
+            <Share size={14} />
+          </span>
+        )}
         {p.onBack && (
           <div className="leaf-history" role="group" aria-label="History">
             <IconButton

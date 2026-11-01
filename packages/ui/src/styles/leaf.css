@@ -3382,6 +3382,11 @@ html[data-resizing] .leaf-blame-resizer::after {
   flex: none;
   opacity: 0.75;
 }
+.leaf-shared-mark {
+  flex: none;
+  display: inline-flex;
+  color: var(--leaf-text-2);
+}
 .leaf-tab-label {
   flex: 1;
   min-width: 0;

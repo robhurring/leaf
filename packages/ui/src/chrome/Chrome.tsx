@@ -71,6 +71,7 @@ export function Chrome({ bridge, fits }: { bridge: Bridge; fits?: (s: string) =>
         onAppearanceMenu={() => bridge.appearanceMenu()}
         onSearch={send('openPalette')}
         onTitle={send('scrollTop')}
+        shared={only?.shared === true}
         brand={only ? tabDragHandlers(bridge, only, 'mark') : undefined}
       />
       {(tabs.length > 1 || here !== null) && (

@@ -14,6 +14,8 @@ export type TabInfo = {
   /** The root's file name, for its icon. */
   name: string;
   active: boolean;
+  /** The tab is being shared. */
+  shared: boolean;
 };
 
 /** What the active tab's reader shows in the title row. */
