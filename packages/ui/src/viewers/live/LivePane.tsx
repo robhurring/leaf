@@ -1,12 +1,13 @@
 // A live animation pane: a three or canvas block running in a sandboxed frame. It runs
 // only while it is on screen, the window is showing, it isn't paused, and the same
 // block isn't open in the Stage; errors show under it.
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { lazy, Suspense, useEffect, useMemo, useRef, useState } from 'react';
 import type { ViewerProps } from '../types.js';
 import { DiagramError } from '../diagramError.js';
 import { contentHash } from '../hash.js';
 import { useAppearance } from '../appearance.js';
 import { useStage } from '../../store/stage.js';
+import { useDocuments } from '../../store/documents.js';
 import { Pause, Play, Restart, StepFrame } from '../../icons/index.js';
 import {
   buildSrcdoc,
@@ -22,6 +23,9 @@ import { useHold } from './useHold.js';
 
 /** How long a loaded frame has to say it's ready before the pane calls it a failure. */
 const START_TIMEOUT_MS = 12_000;
+
+// Only loaded for a shared document, where the pane waits for a click.
+const RunGate = lazy(() => import('../../share/RunGate.js'));
 
 const HARNESS = harness.toString();
 
@@ -42,6 +46,10 @@ export function LivePane(props: ViewerProps & { fill?: boolean }) {
   const kind = kindOf(file.path);
   const hash = contentHash(code);
   const theme = useAppearance(props.appearance);
+  const shared = useDocuments((s) => s.share !== null);
+  // In a share the frame doesn't exist until the viewer clicks Run, so nothing is late yet.
+  const [started, setStarted] = useState(false);
+  const waiting = shared && !started;
 
   const frame = useRef<HTMLIFrameElement>(null);
   const [userPaused, setUserPaused] = useState(prefersReducedMotion);
@@ -126,7 +134,7 @@ export function LivePane(props: ViewerProps & { fill?: boolean }) {
   // A pane that isn't running 12 seconds after it starts (a browser that can't start
   // WebGL can hang before its frame even loads) shows as an error, not loading forever.
   useEffect(() => {
-    if (ready || failure) return;
+    if (ready || failure || waiting) return;
     const t = setTimeout(
       () =>
         hear({
@@ -142,7 +150,7 @@ export function LivePane(props: ViewerProps & { fill?: boolean }) {
     return () => clearTimeout(t);
     // Counted from the pane's start, not from three.js arriving.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [ready, failure, hash, generation]);
+  }, [ready, failure, hash, generation, waiting]);
 
   useEffect(() => {
     if (loaded) send({ leaf: 'live', type: 'theme', theme });
@@ -184,6 +192,20 @@ export function LivePane(props: ViewerProps & { fill?: boolean }) {
   const state = failure ? 'error' : !ready ? 'loading' : running ? 'running' : 'paused';
   const height = fill ? undefined : paneHeight(props.meta);
 
+  const iframe = srcdoc !== null && !now.left && (
+    <iframe
+      key={generation}
+      ref={frame}
+      title={`${kind} animation`}
+      sandbox="allow-scripts"
+      srcDoc={srcdoc}
+      style={height ? { height } : undefined}
+      onLoad={() =>
+        // A second load means the block navigated its frame somewhere else.
+        hear(loaded ? { failure: { message: LEFT }, left: true } : { loaded: true })
+      }
+    />
+  );
   return (
     <div
       ref={host}
@@ -193,19 +215,19 @@ export function LivePane(props: ViewerProps & { fill?: boolean }) {
       data-fill={fill ? '' : undefined}
     >
       <div className="leaf-live-view" style={height ? { height } : undefined}>
-        {srcdoc !== null && !now.left && (
-          <iframe
-            key={generation}
-            ref={frame}
-            title={`${kind} animation`}
-            sandbox="allow-scripts"
-            srcDoc={srcdoc}
-            style={height ? { height } : undefined}
-            onLoad={() =>
-              // A second load means the block navigated its frame somewhere else.
-              hear(loaded ? { failure: { message: LEFT }, left: true } : { loaded: true })
-            }
-          />
+        {shared && iframe ? (
+          <Suspense fallback={null}>
+            <RunGate
+              label={`${kind} animation`}
+              gateKey={`${docPath}:${hash}`}
+              height={height}
+              onRun={() => setStarted(true)}
+            >
+              {iframe}
+            </RunGate>
+          </Suspense>
+        ) : (
+          iframe
         )}
         <div className="leaf-live-controls" role="group" aria-label="Animation">
           <button

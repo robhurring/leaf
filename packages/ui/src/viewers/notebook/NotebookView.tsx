@@ -3,7 +3,7 @@
 // hidden to read it as a report; any cell's output collapses. HTML outputs (a pandas
 // table, a widget's markup) run sealed off like a live pane: scripts, no network.
 // There's no kernel: outputs are the ones saved in the notebook.
-import { useContext, useEffect, useMemo, useRef, useState } from 'react';
+import { lazy, Suspense, useContext, useEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { BlockToolsContext } from '../../components/BlockFrame.js';
 import { DocToolsContext } from '../../components/Properties.js';
@@ -12,12 +12,17 @@ import type { ViewerProps } from '../types.js';
 import { DiagramError } from '../diagramError.js';
 import { Markdown } from '../../components/Markdown.js';
 import { SourceView } from '../../components/SourceView.js';
+import { useDocuments } from '../../store/documents.js';
 import { useDataFile } from '../../data/useDataFile.js';
 import { FRAME_CSP } from '../live/frame.js';
 import { parseNotebook, type Cell, type Output } from './parse.js';
 
 /** An HTML output in a sandboxed frame that tells us its height. */
-function HtmlOutput({ html }: { html: string }) {
+// Only loaded for a shared document, where HTML outputs wait for a click.
+const RunGate = lazy(() => import('../../share/RunGate.js'));
+
+function HtmlOutput({ html, gateKey }: { html: string; gateKey: string }) {
+  const shared = useDocuments((s) => s.share !== null);
   const frame = useRef<HTMLIFrameElement>(null);
   const [height, setHeight] = useState(60);
   const srcdoc = useMemo(
@@ -38,7 +43,7 @@ function HtmlOutput({ html }: { html: string }) {
     window.addEventListener('message', onMessage);
     return () => window.removeEventListener('message', onMessage);
   }, []);
-  return (
+  const iframe = (
     <iframe
       ref={frame}
       className="leaf-nb-html"
@@ -48,9 +53,17 @@ function HtmlOutput({ html }: { html: string }) {
       style={{ height }}
     />
   );
+  if (!shared) return iframe;
+  return (
+    <Suspense fallback={null}>
+      <RunGate label="Output" gateKey={gateKey} height={height}>
+        {iframe}
+      </RunGate>
+    </Suspense>
+  );
 }
 
-function OutputView({ out, docPath }: { out: Output; docPath: string }) {
+function OutputView({ out, docPath, gateKey }: { out: Output; docPath: string; gateKey: string }) {
   switch (out.kind) {
     case 'stream':
       return <pre className={`leaf-nb-stream leaf-nb-${out.name}`}>{out.text}</pre>;
@@ -59,7 +72,7 @@ function OutputView({ out, docPath }: { out: Output; docPath: string }) {
     case 'image':
       return <img className="leaf-nb-image" src={out.src} alt="Output" />;
     case 'html':
-      return <HtmlOutput html={out.html} />;
+      return <HtmlOutput html={out.html} gateKey={gateKey} />;
     case 'markdown':
       return <Markdown source={out.text} docPath={docPath} />;
     case 'error':
@@ -71,8 +84,14 @@ function OutputView({ out, docPath }: { out: Output; docPath: string }) {
   }
 }
 
-function CellView(props: { cell: Cell; language: string; showCode: boolean; docPath: string }) {
-  const { cell, language, showCode, docPath } = props;
+function CellView(props: {
+  cell: Cell;
+  index: number;
+  language: string;
+  showCode: boolean;
+  docPath: string;
+}) {
+  const { cell, index, language, showCode, docPath } = props;
   const [collapsed, setCollapsed] = useState(false);
   if (cell.type === 'markdown')
     return (
@@ -116,7 +135,14 @@ function CellView(props: { cell: Cell; language: string; showCode: boolean; docP
                 {cell.outputs.length} output{cell.outputs.length === 1 ? '' : 's'} hidden
               </span>
             ) : (
-              cell.outputs.map((o, i) => <OutputView key={i} out={o} docPath={docPath} />)
+              cell.outputs.map((o, i) => (
+                <OutputView
+                  key={i}
+                  out={o}
+                  docPath={docPath}
+                  gateKey={`${docPath}:${index}:${i}`}
+                />
+              ))
             )}
           </div>
         </div>
@@ -176,6 +202,7 @@ export default function NotebookView(props: ViewerProps) {
         <CellView
           key={i}
           cell={cell}
+          index={i}
           language={nb.language}
           showCode={showCode}
           docPath={docPath}

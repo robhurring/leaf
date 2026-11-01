@@ -2834,6 +2834,25 @@ html[data-resizing] .leaf-blame-resizer::after {
   overflow: hidden;
   border-radius: var(--leaf-radius-sm);
 }
+.leaf-run-gate {
+  box-sizing: border-box;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  width: 100%;
+  min-height: 72px;
+  padding: 12px;
+  border: 1px dashed var(--leaf-line);
+  border-radius: var(--leaf-radius-sm);
+  font: 13px/1.4 var(--leaf-font-ui);
+  color: var(--leaf-text-2);
+  text-align: center;
+}
+.leaf-live .leaf-run-gate {
+  height: 100%;
+}
 .leaf-live iframe {
   display: block;
   width: 100%;
