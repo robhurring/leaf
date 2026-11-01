@@ -1,7 +1,16 @@
 // A live animation pane: a three or canvas block running in a sandboxed frame. It runs
 // only while it is on screen, the window is showing, it isn't paused, and the same
 // block isn't open in the Stage; errors show under it.
-import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import {
+  lazy,
+  Suspense,
+  useCallback,
+  useEffect,
+  useLayoutEffect,
+  useMemo,
+  useRef,
+  useState,
+} from 'react';
 import type { ViewerProps } from '../types.js';
 import { DiagramError } from '../diagramError.js';
 import { contentHash } from '../hash.js';
@@ -160,7 +169,10 @@ export function LivePane(props: ViewerProps & { fill?: boolean }) {
     if (loaded) send({ leaf: 'live', type: 'theme', theme });
   }, [loaded, theme]);
 
-  useEffect(() => {
+  // Listening starts in the commit that puts the frame on the page, not an effect a task
+  // later: a srcdoc frame can run and post `ready` in between (Linux WebKit does, for a
+  // pane that loads lazily), and that message would be lost.
+  useLayoutEffect(() => {
     const onMessage = (e: MessageEvent) => {
       if (!frame.current || e.source !== frame.current.contentWindow) return;
       if (!isFromFrame(e.data)) return;
