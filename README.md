@@ -90,10 +90,10 @@ With Rust and Node 22 or newer:
 git clone https://github.com/robhurring/leaf && cd leaf
 bin/setup                  # dependencies, .env, and the browsers the tests use
 bin/install                # builds, then links `leaf` into ~/.local/bin
-bin/build                  # after a pull: rebuilds, and the linked `leaf` picks it up
+bin/build                  # after a pull: rebuilds `leaf` and (macOS) the app
 ```
 
-On macOS `bin/install` also puts `leaf reader.app` in `~/Applications` so `leaf://` links open in leaf; `bin/install --uninstall` removes both. Its icon follows light and dark mode; `LEAF_ICON=vein-arrow` or `LEAF_ICON=page` before `bin/install` (or `bin/build`) picks one of the other two designs.
+On macOS `bin/build` (and so `bin/install`) also builds `leaf reader.app` in `~/Applications`, so Finder and `leaf://` links open what you just built (`LEAF_BUNDLE=0 bin/build` leaves it alone); `bin/install --uninstall` removes both. Its icon follows light and dark mode; `LEAF_ICON=vein-arrow` or `LEAF_ICON=page` before `bin/install` (or `bin/build`) picks one of the other two designs.
 
 ## Use
 

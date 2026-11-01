@@ -26,10 +26,9 @@ case "${1:-}" in
   *) usage >&2; exit 1 ;;
 esac
 
-bin/build
+LEAF_BUNDLE=1 bin/build
 d="$(pick_bin_dir)"
 mkdir -p "$d"
 ln -sfn "$(pwd)/target/release/leaf" "$d/leaf"
 echo "installed: $d/leaf -> $(pwd)/target/release/leaf (a live link; rebuild with bin/build)"
-# macOS: the app that leaf:// links open in.
-bin/bundle
+# macOS: bin/build made the app that leaf:// links open in (~/Applications/leaf reader.app).

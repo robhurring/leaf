@@ -2,7 +2,11 @@
 set -euo pipefail
 cd "$(dirname "$0")/.."
 
-usage() { echo "usage: bin/build    build the protocol, the ui, and the leaf binary (target/release/leaf); refresh an installed leaf link"; }
+usage() {
+  echo "usage: bin/build    build the protocol, the ui, and the leaf binary (target/release/leaf); refresh an"
+  echo "  installed leaf link, and (macOS) build ~/Applications/leaf reader.app from it (see bin/bundle)."
+  echo "  LEAF_BUNDLE=0 skips the app: a build to check, that leaves the installed one alone."
+}
 [[ "${1:-}" == "--help" || "${1:-}" == "-h" ]] && { usage; exit 0; }
 
 npm run build --if-present -w @leaf/protocol
@@ -22,8 +26,9 @@ if link="$(command -v leaf 2>/dev/null)" && [[ -L "$link" ]]; then
     echo "relinked $link -> $(pwd)/target/release/leaf"
   fi
 fi
-# An installed app (bin/install, macOS) runs a copy of the binary: refresh it.
-if [[ -d "${LEAF_APP:-$HOME/Applications/leaf reader.app}" ]]; then
+# The app (macOS) runs a copy of the binary, so every build makes it again: what Finder
+# and leaf:// links open is always what was just built.
+if [[ "$(uname)" == "Darwin" && "${LEAF_BUNDLE:-1}" != 0 ]]; then
   bin/bundle
 fi
 echo "built target/release/leaf"
