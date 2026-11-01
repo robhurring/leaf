@@ -133,7 +133,7 @@ leaf relay start           # a relay for sharing (see Sharing)
 
 ## Sharing
 
-Share a tab and others read it with you, live: they see what you open, the page follows your edits, and they can't change anything. Sharing goes through a **relay**, a small server you run (below); the app reaches it with `LEAF_RELAY_URL`.
+Share a tab and others read it with you, live: they land where you are and browse the tab on their own, the page follows your edits, and they can't change anything. Sharing goes through a **relay**, a small server you run (below); the app reaches it with `LEAF_RELAY_URL`.
 
 ```sh
 LEAF_RELAY_URL=https://my-relay.herokuapp.com leaf open docs/
@@ -154,7 +154,7 @@ What viewers can and can't do:
 - Code runs only when they click Run: live blocks and notebook outputs in a share don't start by themselves.
 - Files your ignore rules skip, and anything outside the tab's folder, stay private.
 
-Close the tab or the window by accident and you have 60 seconds (`LEAF_RELAY_GRACE`) to come back before the session ends for everyone; reopening resumes it.
+Close the tab or the window by accident and you have 60 seconds (`LEAF_RELAY_GRACE`) to come back before the session ends for everyone; for those 60 seconds the Share menu offers **Resume sharing**.
 
 ### Running a relay
 
