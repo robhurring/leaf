@@ -7,16 +7,18 @@
 //! (its share goes into grace).
 
 use std::collections::{HashMap, VecDeque};
-use std::sync::atomic::{AtomicU64, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::{Arc, Mutex, MutexGuard};
 use std::time::Duration;
 
+use axum::body::Bytes;
 use axum::extract::ws::{CloseFrame, Message};
 use leaf_protocol::relay::{Peer, RelayToHost, Resume, ShareInfo, ShareMode};
 use leaf_protocol::{ServerMessage, ShareState};
 use serde_json::Value;
-use tokio::sync::mpsc::Sender;
 use tokio::sync::mpsc::error::TrySendError;
+use tokio::sync::mpsc::{self, Sender};
+use tokio::sync::oneshot;
 use tokio::task::JoinHandle;
 
 use super::limits::Limits;
@@ -30,6 +32,12 @@ pub const BUFFER_PER_VIEWER: usize = 64;
 pub const QUEUE_FRAMES: usize = 256;
 /// Viewers one share takes; the next is refused.
 pub const MAX_VIEWERS: usize = 100;
+/// Raw fetches one share runs at once; the next is refused.
+pub const MAX_FETCHES: usize = 8;
+/// Chunks of a fetch's body waiting for its HTTP client. The host link has no flow
+/// control, so a client that falls this far behind the host is cut off (it asks again
+/// with a `Range`), rather than stalling the host link for everyone.
+pub const FETCH_CHUNKS: usize = 32;
 
 /// Peer colors: twelve hues that read on light and dark pages (Tailwind's 500s).
 pub const PALETTE: [&str; 12] = [
@@ -103,6 +111,37 @@ pub enum JoinRefused {
     Full,
 }
 
+/// What the host says a fetch's reply is: its status and headers.
+pub type Head = (u16, Vec<(String, String)>);
+
+/// Why a raw fetch wasn't started.
+#[derive(Debug, PartialEq, Eq)]
+pub enum FetchRefused {
+    /// No such share (or it ended).
+    Gone,
+    /// The host is away; the share is in grace.
+    Away,
+    /// The share already runs `MAX_FETCHES`.
+    Busy,
+}
+
+/// A started fetch, for the HTTP handler: the head comes on `head`, then the body chunks
+/// on `body`. When `body` closes, `complete` says whether the host finished it.
+pub struct Started {
+    pub req: u32,
+    pub head: oneshot::Receiver<Head>,
+    pub body: mpsc::Receiver<Bytes>,
+    pub complete: Arc<AtomicBool>,
+}
+
+/// One raw fetch in flight. Dropping it drops the body's sender, which ends the body;
+/// unless `complete` was set first, the HTTP client sees an error.
+struct Fetch {
+    head: Option<oneshot::Sender<Head>>,
+    body: Sender<Bytes>,
+    complete: Arc<AtomicBool>,
+}
+
 struct Viewer {
     seq: u64,
     peer: Peer,
@@ -121,6 +160,9 @@ pub struct Share {
     info: ShareInfo,
     host_path: Option<String>,
     grace_timer: Option<JoinHandle<()>>,
+    /// Raw fetches waiting on the host, by `req`.
+    fetches: HashMap<u32, Fetch>,
+    next_req: u32,
 }
 
 impl Share {
@@ -145,6 +187,16 @@ impl Share {
             q.pop_front();
         }
         q.push_back(frame);
+    }
+
+    /// Sends the host a fetch's `Fetch` or `Cancel`. A full queue marks the host behind;
+    /// the share goes into grace when the change settles, which ends every fetch anyway.
+    fn fetch_message(&mut self, msg: &RelayToHost) {
+        if let Some(tx) = &self.host
+            && !offer(tx, text(msg))
+        {
+            self.host_full = true;
+        }
     }
 
     fn peers(&self) -> Vec<Peer> {
@@ -283,6 +335,8 @@ impl Relay {
     /// Returns the viewers whose queues were full.
     fn begin_grace(self: &Arc<Self>, id: &str, share: &mut Share) -> Vec<String> {
         share.host = None;
+        // A returning host knows nothing of these: their clients get an error.
+        share.fetches.clear();
         let relay = Arc::clone(self);
         let grace = self.grace;
         let key = id.to_string();
@@ -377,6 +431,8 @@ impl Relay {
                         },
                         host_path: None,
                         grace_timer: None,
+                        fetches: HashMap::new(),
+                        next_req: 1,
                     },
                 );
                 tracing::info!(share = %id, "shared");
@@ -572,6 +628,105 @@ impl Relay {
         }
     }
 
+    /// A viewer's `GET /s/{id}/raw/{path}`: asks the host for the bytes.
+    pub fn start_fetch(
+        self: &Arc<Self>,
+        id: &str,
+        path: String,
+        range: Option<String>,
+    ) -> Result<Started, FetchRefused> {
+        let mut shares = self.lock();
+        let share = shares.get_mut(id).ok_or(FetchRefused::Gone)?;
+        if share.host.is_none() {
+            return Err(FetchRefused::Away);
+        }
+        if share.fetches.len() >= MAX_FETCHES {
+            tracing::warn!(share = %id, "raw fetch refused: too many at once");
+            return Err(FetchRefused::Busy);
+        }
+        let req = loop {
+            let req = share.next_req;
+            share.next_req = share.next_req.wrapping_add(1);
+            if !share.fetches.contains_key(&req) {
+                break req;
+            }
+        };
+        let (head_tx, head) = oneshot::channel();
+        let (body_tx, body) = mpsc::channel(FETCH_CHUNKS);
+        let complete = Arc::new(AtomicBool::new(false));
+        share.fetches.insert(
+            req,
+            Fetch {
+                head: Some(head_tx),
+                body: body_tx,
+                complete: complete.clone(),
+            },
+        );
+        tracing::debug!(share = %id, req, %path, ?range, "raw fetch");
+        share.fetch_message(&RelayToHost::Fetch { req, path, range });
+        self.settle(id, share, Vec::new());
+        Ok(Started {
+            req,
+            head,
+            body,
+            complete,
+        })
+    }
+
+    /// The host's `fetched`: the status and headers for `req`'s reply.
+    pub fn fetched(&self, id: &str, conn: u64, req: u32, head: Head) {
+        let mut shares = self.lock();
+        if let Some(fetch) = shares
+            .get_mut(id)
+            .filter(|s| s.host_conn == conn)
+            .and_then(|s| s.fetches.get_mut(&req))
+            && let Some(tx) = fetch.head.take()
+        {
+            let _ = tx.send(head);
+        }
+    }
+
+    /// A binary frame from the host: bytes for `req`'s body, or (empty) its end. Frames
+    /// for a `req` that isn't open (a cancelled fetch's tail) are dropped.
+    pub fn fetch_bytes(self: &Arc<Self>, id: &str, conn: u64, req: u32, bytes: Bytes) {
+        let mut shares = self.lock();
+        let Some(share) = shares.get_mut(id).filter(|s| s.host_conn == conn) else {
+            return;
+        };
+        let Some(fetch) = share.fetches.get(&req) else {
+            return;
+        };
+        if bytes.is_empty() {
+            fetch.complete.store(true, Ordering::Release);
+            share.fetches.remove(&req);
+            return;
+        }
+        match fetch.body.try_send(bytes) {
+            Ok(()) => {}
+            Err(e) => {
+                if matches!(e, TrySendError::Full(_)) {
+                    tracing::warn!(share = %id, req, "raw client fell behind; fetch cut off");
+                }
+                share.fetches.remove(&req);
+                share.fetch_message(&RelayToHost::Cancel { req });
+                self.settle(id, share, Vec::new());
+            }
+        }
+    }
+
+    /// The HTTP side of `req` is done with it (its client left, or it gave up waiting).
+    /// If the host hadn't finished, it hears `cancel`.
+    pub fn cancel_fetch(self: &Arc<Self>, id: &str, req: u32) {
+        let mut shares = self.lock();
+        if let Some(share) = shares.get_mut(id)
+            && share.fetches.remove(&req).is_some()
+        {
+            tracing::debug!(share = %id, req, "raw fetch cancelled");
+            share.fetch_message(&RelayToHost::Cancel { req });
+            self.settle(id, share, Vec::new());
+        }
+    }
+
     /// The relay is stopping: forget every share and cancel the grace timers.
     pub fn shutdown(&self) {
         for (_, mut share) in self.lock().drain() {
@@ -684,6 +839,78 @@ mod tests {
             .unwrap();
         assert_eq!(a.replay.len(), 1);
         assert!(a.replay[0].contains("\"hello\""), "{:?}", a.replay);
+        r.shutdown();
+    }
+
+    #[tokio::test]
+    async fn fetches_are_capped_and_end_with_the_host() {
+        let r = relay();
+        let (htx, mut hrx) = mpsc::channel(QUEUE_FRAMES);
+        let id = r
+            .share(1, htx, "Rob", ShareMode::ReadOnly, None)
+            .ok()
+            .unwrap()
+            .id;
+        let mut open: Vec<Started> = (0..MAX_FETCHES)
+            .map(|_| r.start_fetch(&id, "a.png".into(), None).ok().unwrap())
+            .collect();
+        assert_eq!(
+            r.start_fetch(&id, "a.png".into(), None).err(),
+            Some(FetchRefused::Busy)
+        );
+        assert_eq!(kind(&hrx.try_recv().unwrap()), "fetch");
+
+        // One finishes: its body ends cleanly and makes room.
+        let done = open.remove(0);
+        r.fetched(&id, 1, done.req, (200, vec![]));
+        r.fetch_bytes(&id, 1, done.req, Bytes::from_static(b"ab"));
+        r.fetch_bytes(&id, 1, done.req, Bytes::new());
+        let mut body = done.body;
+        assert_eq!(body.try_recv().unwrap(), &b"ab"[..]);
+        assert!(body.recv().await.is_none());
+        assert!(done.complete.load(Ordering::Acquire));
+        assert_eq!(done.head.await.unwrap().0, 200);
+        let extra = r.start_fetch(&id, "b.png".into(), None).ok().unwrap();
+        open.push(extra);
+
+        // The host drops: every open fetch ends unfinished.
+        r.host_dropped(&id, 1);
+        for f in open {
+            let mut body = f.body;
+            assert!(body.recv().await.is_none());
+            assert!(!f.complete.load(Ordering::Acquire));
+            assert!(f.head.await.is_err());
+        }
+        assert_eq!(
+            r.start_fetch(&id, "a.png".into(), None).err(),
+            Some(FetchRefused::Away)
+        );
+        r.shutdown();
+    }
+
+    #[tokio::test]
+    async fn a_raw_client_that_falls_behind_is_cut_off_and_the_host_told() {
+        let r = relay();
+        let (htx, mut hrx) = mpsc::channel(QUEUE_FRAMES);
+        let id = r
+            .share(1, htx, "Rob", ShareMode::ReadOnly, None)
+            .ok()
+            .unwrap()
+            .id;
+        let f = r.start_fetch(&id, "v.mp4".into(), None).ok().unwrap();
+        for _ in 0..=FETCH_CHUNKS {
+            r.fetch_bytes(&id, 1, f.req, Bytes::from_static(b"x"));
+        }
+        let host: Vec<String> = std::iter::from_fn(|| hrx.try_recv().ok())
+            .map(|m| kind(&m))
+            .collect();
+        assert_eq!(host, ["fetch", "cancel"]);
+        let mut body = f.body;
+        for _ in 0..FETCH_CHUNKS {
+            assert!(body.recv().await.is_some());
+        }
+        assert!(body.recv().await.is_none());
+        assert!(!f.complete.load(Ordering::Acquire));
         r.shutdown();
     }
 

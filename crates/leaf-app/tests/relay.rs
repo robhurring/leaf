@@ -215,7 +215,7 @@ async fn the_relay_serves_the_page_and_share_health() {
         assert_eq!(status, 200, "{path}");
         assert!(body.contains("id=\"root\""), "{path} serves the page");
     }
-    assert_eq!(http_get(r.port, &format!("/s/{id}/raw/a.png")).await.0, 501);
+    assert_eq!(http_get(r.port, "/s/aaa-bbb-ccc/raw/a.png").await.0, 404);
     r.stop().await;
 }
 
@@ -687,5 +687,171 @@ async fn a_spoofed_forwarded_for_is_ignored_unless_the_proxy_is_trusted() {
         404,
         "no header: the peer, which has no misses of its own"
     );
+    r.stop().await;
+}
+
+/// A response as an HTTP/1.1 client reads it: status, headers, and the body with any
+/// chunked framing taken off.
+struct HttpReply {
+    status: u16,
+    headers: Vec<(String, String)>,
+    body: Vec<u8>,
+}
+
+impl HttpReply {
+    fn header(&self, name: &str) -> Option<&str> {
+        self.headers
+            .iter()
+            .find(|(k, _)| k.eq_ignore_ascii_case(name))
+            .map(|(_, v)| v.as_str())
+    }
+}
+
+async fn http_reply(port: u16, path: &str, extra: &str) -> HttpReply {
+    let mut s = tokio::net::TcpStream::connect(("127.0.0.1", port))
+        .await
+        .unwrap();
+    s.write_all(
+        format!(
+            "GET {path} HTTP/1.1\r\nHost: 127.0.0.1:{port}\r\n{extra}Connection: close\r\n\r\n"
+        )
+        .as_bytes(),
+    )
+    .await
+    .unwrap();
+    let mut buf = Vec::new();
+    tokio::time::timeout(WAIT, s.read_to_end(&mut buf))
+        .await
+        .expect("a response")
+        .unwrap();
+    let split = buf
+        .windows(4)
+        .position(|w| w == b"\r\n\r\n")
+        .expect("a head");
+    let head = String::from_utf8_lossy(&buf[..split]).into_owned();
+    let mut lines = head.split("\r\n");
+    let status = lines.next().unwrap().split_whitespace().nth(1).unwrap();
+    let headers: Vec<(String, String)> = lines
+        .filter_map(|l| l.split_once(':'))
+        .map(|(k, v)| (k.trim().to_string(), v.trim().to_string()))
+        .collect();
+    let mut rest = &buf[split + 4..];
+    let chunked = headers
+        .iter()
+        .any(|(k, v)| k.eq_ignore_ascii_case("transfer-encoding") && v.contains("chunked"));
+    let body = if chunked {
+        let mut body = Vec::new();
+        loop {
+            let eol = rest.windows(2).position(|w| w == b"\r\n").unwrap();
+            let size =
+                usize::from_str_radix(std::str::from_utf8(&rest[..eol]).unwrap(), 16).unwrap();
+            rest = &rest[eol + 2..];
+            if size == 0 {
+                break body;
+            }
+            body.extend_from_slice(&rest[..size]);
+            rest = &rest[size + 2..];
+        }
+    } else {
+        rest.to_vec()
+    };
+    HttpReply {
+        status: status.parse().unwrap(),
+        headers,
+        body,
+    }
+}
+
+fn chunk(req: u32, bytes: &[u8]) -> Message {
+    let mut frame = req.to_be_bytes().to_vec();
+    frame.extend_from_slice(bytes);
+    Message::Binary(frame.into())
+}
+
+#[tokio::test]
+async fn a_raw_request_is_served_by_the_host_in_frames() {
+    let r = start_relay().await;
+    let (mut host, shared) = host_share(r.port).await;
+    let id = id_of(&shared);
+    let port = r.port;
+    let path = format!("/s/{id}/raw/pics/a.png");
+    let get = tokio::spawn(async move { http_reply(port, &path, "Range: bytes=0-5\r\n").await });
+    let req = match next_host(&mut host).await {
+        RelayToHost::Fetch { req, path, range } => {
+            assert_eq!(path, "pics/a.png");
+            assert_eq!(range.as_deref(), Some("bytes=0-5"));
+            req
+        }
+        other => panic!("expected fetch: {other:?}"),
+    };
+    host.send(text(&HostToRelay::Fetched {
+        req,
+        status: 206,
+        headers: vec![
+            ("Content-Type".into(), "image/png".into()),
+            ("Content-Range".into(), "bytes 0-5/10".into()),
+        ],
+    }))
+    .await
+    .unwrap();
+    for bytes in [&b"012"[..], b"345", b""] {
+        host.send(chunk(req, bytes)).await.unwrap();
+    }
+    let reply = get.await.unwrap();
+    assert_eq!(reply.status, 206);
+    assert_eq!(reply.header("content-type"), Some("image/png"));
+    assert_eq!(reply.header("content-range"), Some("bytes 0-5/10"));
+    assert_eq!(reply.body, b"012345");
+    r.stop().await;
+}
+
+#[tokio::test]
+async fn a_viewer_gone_mid_fetch_cancels_it() {
+    let r = start_relay().await;
+    let (mut host, shared) = host_share(r.port).await;
+    let id = id_of(&shared);
+    let mut s = tokio::net::TcpStream::connect(("127.0.0.1", r.port))
+        .await
+        .unwrap();
+    s.write_all(
+        format!(
+            "GET /s/{id}/raw/clip.mp4 HTTP/1.1\r\nHost: 127.0.0.1:{}\r\n\r\n",
+            r.port
+        )
+        .as_bytes(),
+    )
+    .await
+    .unwrap();
+    let RelayToHost::Fetch { req, .. } = next_host(&mut host).await else {
+        panic!("expected fetch")
+    };
+    drop(s);
+    let cancel = tokio::time::timeout(Duration::from_secs(1), next_host(&mut host))
+        .await
+        .expect("cancel within 1 s");
+    assert_eq!(cancel, RelayToHost::Cancel { req });
+    // The cancelled fetch's tail is dropped quietly; the link carries on.
+    host.send(chunk(req, b"late")).await.unwrap();
+    assert_eq!(
+        http_get(r.port, &format!("/s/{id}/healthz")).await,
+        (200, "ok".into())
+    );
+    r.stop().await;
+}
+
+#[tokio::test]
+async fn raw_on_a_share_in_grace_says_retry() {
+    let r = start_relay().await;
+    let (mut host, shared) = host_share(r.port).await;
+    let id = id_of(&shared);
+    let (mut v, _) = joined_viewer(r.port, &id, &mut host, "Ann").await;
+    drop(host);
+    assert_eq!(
+        next_of(&mut v, "shareStatus").await["state"],
+        "reconnecting"
+    );
+    let reply = http_reply(r.port, &format!("/s/{id}/raw/a.png"), "").await;
+    assert_eq!(reply.status, 503);
+    assert_eq!(reply.header("retry-after"), Some("5"));
     r.stop().await;
 }

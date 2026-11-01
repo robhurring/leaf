@@ -10,9 +10,11 @@ pub mod words;
 
 use std::net::{IpAddr, SocketAddr};
 use std::sync::Arc;
+use std::sync::atomic::Ordering;
 use std::time::Duration;
 
 use axum::Router;
+use axum::body::Body;
 use axum::extract::ws::{Message, WebSocket, WebSocketUpgrade};
 use axum::extract::{ConnectInfo, Path, State};
 use axum::http::{HeaderMap, StatusCode, Uri, header};
@@ -39,6 +41,18 @@ pub const MAX_VIEWER_FRAME: usize = 1024 * 1024;
 /// The largest message (and frame) a host may send: room for a file at leaf's default
 /// 2 MiB inline limit, base64'd, inside its envelope.
 pub const MAX_HOST_FRAME: usize = 4 * 1024 * 1024;
+/// How long a raw fetch waits for the host's `fetched` before answering 504.
+pub const FETCH_HEAD_TIMEOUT: Duration = Duration::from_secs(15);
+/// The host's reply headers a raw response carries; any others are dropped.
+const PASSED_HEADERS: [header::HeaderName; 7] = [
+    header::CONTENT_TYPE,
+    header::CONTENT_RANGE,
+    header::CONTENT_LENGTH,
+    header::ACCEPT_RANGES,
+    header::CACHE_CONTROL,
+    header::X_CONTENT_TYPE_OPTIONS,
+    header::CONTENT_SECURITY_POLICY,
+];
 
 pub struct RelayOptions {
     pub host: String,
@@ -247,9 +261,92 @@ async fn share_health(
     }
 }
 
-/// File bytes through the host: the next step fills this in.
-async fn share_raw() -> Response {
-    (StatusCode::NOT_IMPLEMENTED, "not implemented").into_response()
+/// A raw fetch's HTTP side. Dropped (the client left, the head never came, or the
+/// body is done), it frees the fetch and tells the host if it hadn't finished.
+struct FetchGuard {
+    relay: Arc<Relay>,
+    id: String,
+    req: u32,
+}
+
+impl Drop for FetchGuard {
+    fn drop(&mut self) {
+        self.relay.cancel_fetch(&self.id, self.req);
+    }
+}
+
+/// File bytes through the host: it answers `fetch` with `fetched` and then the body in
+/// binary frames, which stream out as they come.
+async fn share_raw(
+    Path((id, path)): Path<(String, String)>,
+    headers: HeaderMap,
+    ConnectInfo(peer): ConnectInfo<SocketAddr>,
+    State(s): State<RelayState>,
+) -> Response {
+    let ip = client_ip(&headers, peer, s.trust_proxy);
+    if !s.relay.limits.allow(ip) {
+        tracing::warn!(%ip, "raw refused: too many unknown shares");
+        return (StatusCode::TOO_MANY_REQUESTS, "too many tries").into_response();
+    }
+    let range = headers
+        .get(header::RANGE)
+        .and_then(|v| v.to_str().ok())
+        .map(str::to_string);
+    let started = match s.relay.start_fetch(&id, path, range) {
+        Ok(started) => started,
+        Err(share::FetchRefused::Gone) => {
+            s.relay.limits.failed(ip);
+            return (StatusCode::NOT_FOUND, "not found").into_response();
+        }
+        Err(share::FetchRefused::Away) => {
+            return (
+                StatusCode::SERVICE_UNAVAILABLE,
+                [(header::RETRY_AFTER, "5")],
+                "the host is reconnecting",
+            )
+                .into_response();
+        }
+        Err(share::FetchRefused::Busy) => {
+            return (StatusCode::TOO_MANY_REQUESTS, "too many files at once").into_response();
+        }
+    };
+    let guard = FetchGuard {
+        relay: s.relay.clone(),
+        id,
+        req: started.req,
+    };
+    let (status, head) = match tokio::time::timeout(FETCH_HEAD_TIMEOUT, started.head).await {
+        Ok(Ok(head)) => head,
+        Ok(Err(_)) => return (StatusCode::BAD_GATEWAY, "the host went away").into_response(),
+        Err(_) => {
+            tracing::warn!(share = %guard.id, req = guard.req, "host did not answer a fetch");
+            return (StatusCode::GATEWAY_TIMEOUT, "the host did not answer").into_response();
+        }
+    };
+    let complete = started.complete;
+    let body = futures_util::stream::unfold(Some((started.body, guard)), move |state| {
+        let complete = complete.clone();
+        async move {
+            let (mut rx, guard) = state?;
+            match rx.recv().await {
+                Some(bytes) => Some((Ok(bytes), Some((rx, guard)))),
+                None if complete.load(Ordering::Acquire) => None,
+                None => Some((Err(std::io::Error::other("the host stopped sending")), None)),
+            }
+        }
+    });
+    let mut response = Response::new(Body::from_stream(body));
+    *response.status_mut() = StatusCode::from_u16(status).unwrap_or(StatusCode::BAD_GATEWAY);
+    for (name, value) in head {
+        if let Some(name) = PASSED_HEADERS
+            .iter()
+            .find(|n| n.as_str().eq_ignore_ascii_case(&name))
+            && let Ok(value) = header::HeaderValue::from_str(&value)
+        {
+            response.headers_mut().insert(name.clone(), value);
+        }
+    }
+    response
 }
 
 /// The address limits count against: the peer, or behind a trusted proxy the last
@@ -421,11 +518,19 @@ async fn host_session(mut socket: WebSocket, s: RelayState) {
             frame = socket.recv() => {
                 let t = match frame {
                     Some(Ok(Message::Text(t))) => t,
+                    Some(Ok(Message::Binary(b))) => {
+                        if b.len() >= 4 {
+                            let req = u32::from_be_bytes([b[0], b[1], b[2], b[3]]);
+                            s.relay.fetch_bytes(&id, conn, req, b.slice(4..));
+                        }
+                        continue;
+                    }
                     Some(Ok(Message::Close(_))) | Some(Err(_)) | None => break,
                     Some(Ok(_)) => continue,
                 };
                 match serde_json::from_str::<HostToRelay>(&t) {
                     Ok(HostToRelay::ToViewer { viewer, msg }) => s.relay.to_viewer(&id, conn, &viewer, msg),
+                    Ok(HostToRelay::Fetched { req, status, headers }) => s.relay.fetched(&id, conn, req, (status, headers)),
                     Ok(HostToRelay::Path { path }) => s.relay.path(&id, conn, path),
                     Ok(HostToRelay::End) => s.relay.end(&id, conn),
                     Ok(HostToRelay::Pong) => pong_due = None,
