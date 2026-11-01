@@ -181,10 +181,12 @@ async fn a_host_gets_an_id_and_urls() {
         host_key,
         web_url,
         app_url,
+        viewers,
     } = shared
     else {
         unreachable!()
     };
+    assert!(viewers.is_empty(), "a new share has no viewers");
     assert!(words::is_id(&id), "{id}");
     assert_eq!(web_url, format!("https://relay.test/s/{id}"));
     assert_eq!(app_url, format!("leaf://relay/relay.test/s/{id}"));
@@ -512,23 +514,57 @@ async fn a_host_resumes_within_grace_with_its_key_and_buffered_messages_replay()
     assert_eq!(next_of(&mut v, "shareStatus").await["state"], "live");
     next_of(&mut v, "presence").await;
 
-    // A second host can't take a live share, even with the key.
-    let mut thief = connect(r.port, "/host").await;
-    thief
-        .send(text(&share_msg(
-            PROTOCOL_VERSION,
-            Some(Resume {
-                id: id.clone(),
-                host_key,
-            }),
-        )))
-        .await
-        .unwrap();
-    assert!(
-        matches!(next_host(&mut thief).await, RelayToHost::Error { code, .. } if code == "bad-key")
-    );
-
     // The grace timer was cancelled: well past the grace period the share is still live.
+    tokio::time::sleep(Duration::from_millis(800)).await;
+    assert_eq!(http_get(r.port, &format!("/s/{id}/healthz")).await.0, 200);
+    r.stop().await;
+}
+
+#[tokio::test]
+async fn a_host_back_on_a_new_link_replaces_its_old_one() {
+    let r = start_relay().await;
+    let (mut old, shared) = host_share(r.port).await;
+    let RelayToHost::Shared { id, host_key, .. } = shared else {
+        unreachable!()
+    };
+    let (mut v, vid) = joined_viewer(r.port, &id, &mut old, "Ann").await;
+
+    // The old link is still open as far as the relay knows (a network change on the host).
+    let mut host = connect(r.port, "/host").await;
+    host.send(text(&share_msg(
+        PROTOCOL_VERSION,
+        Some(Resume {
+            id: id.clone(),
+            host_key,
+        }),
+    )))
+    .await
+    .unwrap();
+    match next_host(&mut host).await {
+        RelayToHost::Shared {
+            id: got, viewers, ..
+        } => {
+            assert_eq!(got, id);
+            let ids: Vec<&str> = viewers.iter().map(|p| p.id.as_str()).collect();
+            assert_eq!(ids, [vid.as_str()], "the share's viewers come with it");
+        }
+        other => panic!("{other:?}"),
+    }
+    closed(&mut old).await;
+
+    v.send(Message::Text(
+        r#"{"type":"read","path":"a.md","id":"r"}"#.into(),
+    ))
+    .await
+    .unwrap();
+    match next_host(&mut host).await {
+        RelayToHost::FromViewer { viewer, msg } => {
+            assert_eq!(viewer, vid);
+            assert_eq!(msg["type"], "read");
+        }
+        other => panic!("{other:?}"),
+    }
+    // The old link's drop doesn't put the share into grace.
     tokio::time::sleep(Duration::from_millis(800)).await;
     assert_eq!(http_get(r.port, &format!("/s/{id}/healthz")).await.0, 200);
     r.stop().await;

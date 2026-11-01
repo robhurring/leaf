@@ -31,8 +31,14 @@ fn options(port: u16) -> RelayOptions {
 struct Folder {
     engine: Arc<Engine>,
     cfg: tempfile::TempDir,
-    _root: tempfile::TempDir,
+    root: tempfile::TempDir,
     _watcher: Option<leaf_core::watch::Watcher>,
+}
+
+impl Folder {
+    fn root(&self) -> std::path::PathBuf {
+        self.root.path().canonicalize().unwrap()
+    }
 }
 
 fn folder() -> Folder {
@@ -55,7 +61,7 @@ fn folder() -> Folder {
     Folder {
         engine: built.engine,
         cfg,
-        _root: root,
+        root,
         _watcher: built.watcher,
     }
 }
@@ -285,7 +291,14 @@ async fn a_path_outside_the_share_ends_the_viewer() {
     let h = share(&r, &f.engine).await;
     let before = f.engine.client_count();
 
-    for path in ["../x.md", "secret.md"] {
+    // SECRET.md: the same ignored file on a case-insensitive volume (macOS's default).
+    let insensitive = f.root().join("SECRET.md").exists();
+    let paths: &[&str] = if insensitive {
+        &["../x.md", "secret.md", "SECRET.md"]
+    } else {
+        &["../x.md", "secret.md"]
+    };
+    for &path in paths {
         let (mut v, _) = viewer(r.port, &h.id).await;
         let err = read(&mut v, path, "x").await;
         assert_eq!(err["type"], "error", "{path}: {err}");
@@ -317,8 +330,10 @@ async fn a_raw_fetch_streams_from_disk() {
     assert_eq!((status, body.as_slice()), (200, &b"0123456789"[..]));
     let (status, body) = http_get(r.port, &raw, "Range: bytes=8-\r\n").await;
     assert_eq!((status, body.as_slice()), (206, &b"89"[..]));
-    let (status, _) = http_get(r.port, &format!("/s/{}/raw/secret.md", h.id), "").await;
-    assert_eq!(status, 404, "ignored files aren't served");
+    for name in ["secret.md", "SECRET.md", "Secret.MD"] {
+        let (status, _) = http_get(r.port, &format!("/s/{}/raw/{name}", h.id), "").await;
+        assert_eq!(status, 404, "ignored files aren't served: {name}");
+    }
     let (status, _) = http_get(r.port, &format!("/s/{}/raw/nope.png", h.id), "").await;
     assert_eq!(status, 404);
     h.end();
@@ -355,12 +370,30 @@ async fn the_host_reconnects_and_keeps_its_id() {
     let port = r.port;
     let url = r.url.clone();
     let h = share(&r, &f.engine).await;
+    let before = f.engine.client_count();
+    // A viewer that won't come back: the restarted relay forgets it.
+    let (_gone, _) = viewer(r.port, &h.id).await;
+    let mut viewers = h.viewers.clone();
+    tokio::time::timeout(WAIT, viewers.wait_for(|p| p.len() == 1))
+        .await
+        .expect("the viewer shows")
+        .unwrap();
+    assert_eq!(f.engine.client_count(), before + 1);
 
     r.stop().await;
     status_becomes(&h, LinkStatus::Reconnecting, WAIT).await;
     let r = relay::start(options(port)).await.unwrap();
     assert_eq!(r.url, url);
     status_becomes(&h, LinkStatus::Connected, Duration::from_secs(3)).await;
+    tokio::time::timeout(WAIT, viewers.wait_for(|p| p.is_empty()))
+        .await
+        .expect("the forgotten viewer is dropped")
+        .unwrap();
+    assert_eq!(
+        f.engine.client_count(),
+        before,
+        "its engine session is gone"
+    );
 
     let (mut v, welcome) = viewer(r.port, &h.id).await;
     assert_eq!(welcome["share"]["id"], h.id);

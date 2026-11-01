@@ -31,6 +31,8 @@ pub struct DiskSource {
     target_rel: String,
     ignorer: Ignorer,
     git: GitInfoProvider,
+    /// The root through symlinks, for naming files by their real path.
+    root_real: Option<PathBuf>,
 }
 
 fn name_of(rel: &str) -> &str {
@@ -90,8 +92,10 @@ impl DiskSource {
         };
         let ignorer = Ignorer::new(&root_dir, &opts.ignore, opts.gitignore);
         let git = GitInfoProvider::new(&root_dir);
+        let root_real = root_dir.canonicalize().ok();
         Ok(DiskSource {
             opts,
+            root_real,
             root_dir,
             root_kind,
             target_rel,
@@ -110,6 +114,31 @@ impl DiskSource {
             return false;
         }
         self.ignorer.ignores(rel, is_dir)
+    }
+
+    /// The file's own path under the root, as the disk names it: on a case- or
+    /// normalization-insensitive volume, or through an in-root symlink, the name asked
+    /// for can differ from the one the ignore rules see. None when it doesn't exist.
+    fn real_rel(&self, rel: &str) -> Option<String> {
+        let root = self.root_real.as_ref()?;
+        let real = resolve_inside(&self.root_dir, rel)
+            .ok()?
+            .canonicalize()
+            .ok()?;
+        let inside = real.strip_prefix(root).ok()?;
+        let parts: Vec<String> = inside
+            .components()
+            .map(|c| c.as_os_str().to_string_lossy().into_owned())
+            .collect();
+        Some(parts.join("/"))
+    }
+
+    /// Hidden by the ignore rules, under the name asked for or the file's real one.
+    fn hidden(&self, rel: &str, is_dir: bool) -> bool {
+        self.is_ignored(rel, is_dir)
+            || self
+                .real_rel(rel)
+                .is_some_and(|real| real != rel && self.is_ignored(&real, is_dir))
     }
 
     fn resolve(&self, rel: &str) -> Result<PathBuf, SourceError> {
@@ -213,6 +242,13 @@ impl Source for DiskSource {
             return Ok(vec![self.entry_for(&self.target_rel.clone(), false).await?]);
         }
         let abs = self.resolve(path)?;
+        if self.hidden(path, true) {
+            return Err(SourceError::new(
+                ErrorCode::NotFound,
+                format!("no such directory: {path}"),
+                Some(path),
+            ));
+        }
         let mut rd = tokio::fs::read_dir(&abs).await.map_err(|_| {
             SourceError::new(
                 ErrorCode::NotFound,
@@ -246,7 +282,7 @@ impl Source for DiskSource {
             } else {
                 continue;
             };
-            if self.is_ignored(&rel, is_dir) {
+            if self.hidden(&rel, is_dir) {
                 continue;
             }
             entries.push(self.entry_for(&rel, is_dir).await?);
@@ -272,7 +308,7 @@ impl Source for DiskSource {
                 Some(path),
             )
         };
-        if self.is_ignored(path, false) {
+        if self.hidden(path, false) {
             return Err(not_found());
         }
         let meta = tokio::fs::metadata(&abs).await.map_err(|_| not_found())?;
@@ -339,8 +375,11 @@ impl Source for DiskSource {
     }
 
     fn hides(&self, path: &str) -> bool {
-        let is_dir = std::fs::metadata(self.root_dir.join(path)).is_ok_and(|m| m.is_dir());
-        self.is_ignored(path, is_dir)
+        let is_dir = resolve_inside(&self.root_dir, path)
+            .ok()
+            .and_then(|abs| std::fs::metadata(abs).ok())
+            .is_some_and(|m| m.is_dir());
+        self.hidden(path, is_dir)
     }
 
     async fn locate(&self, path: &str) -> Result<PathBuf, SourceError> {
@@ -352,7 +391,7 @@ impl Source for DiskSource {
                 Some(path),
             )
         };
-        if self.is_ignored(path, false) {
+        if self.hidden(path, false) {
             return Err(not_found());
         }
         match tokio::fs::metadata(&abs).await {

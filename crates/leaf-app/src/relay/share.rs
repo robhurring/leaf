@@ -383,10 +383,6 @@ impl Relay {
                 if !hostkey::verify(&self.secret, &id, &host_key) {
                     return Err(bad_key());
                 }
-                if shares.get(&id).is_some_and(|s| s.host.is_some()) {
-                    tracing::warn!(share = %id, "resume refused: the share has a live host");
-                    return Err(bad_key());
-                }
                 id
             }
             None => loop {
@@ -397,18 +393,21 @@ impl Relay {
             },
         };
         let (web_url, app_url) = urls(&self.public_url, &id);
-        let shared = text(&RelayToHost::Shared {
-            id: id.clone(),
-            host_key: hostkey::host_key(&self.secret, &id),
-            web_url: web_url.clone(),
-            app_url: app_url.clone(),
-        });
         let mut replay = Vec::new();
+        let mut viewers = Vec::new();
         match shares.get_mut(&id) {
             Some(share) => {
                 if let Some(t) = share.grace_timer.take() {
                     t.abort();
                 }
+                // The key proves it's the same host, back before the relay saw its old
+                // link drop (a network change, say): the new link takes over.
+                let replacing = share.host.take();
+                if let Some(old) = &replacing {
+                    let _ = offer(old, Message::Close(None));
+                    tracing::info!(share = %id, "host came back on a new link; the old one is closed");
+                }
+                share.host_full = false;
                 share.host_conn = conn;
                 share.info.host = host;
                 share.info.mode = mode;
@@ -418,10 +417,13 @@ impl Relay {
                 queued.sort_by_key(|(v, _)| viewer_seq(v));
                 replay = queued.into_iter().flat_map(|(_, q)| q).collect();
                 share.host = Some(tx);
-                let mut full = share.status(ShareState::Live, None);
-                full.extend(share.presence());
-                tracing::info!(share = %id, viewers = share.viewers.len(), "host resumed");
-                self.settle(&id, share, full);
+                viewers = share.peers();
+                if replacing.is_none() {
+                    let mut full = share.status(ShareState::Live, None);
+                    full.extend(share.presence());
+                    tracing::info!(share = %id, viewers = share.viewers.len(), "host resumed");
+                    self.settle(&id, share, full);
+                }
             }
             None => {
                 shares.insert(
@@ -436,8 +438,8 @@ impl Relay {
                             id: id.clone(),
                             host,
                             mode,
-                            web_url,
-                            app_url,
+                            web_url: web_url.clone(),
+                            app_url: app_url.clone(),
                         },
                         host_path: None,
                         grace_timer: None,
@@ -448,6 +450,13 @@ impl Relay {
                 tracing::info!(share = %id, "shared");
             }
         }
+        let shared = text(&RelayToHost::Shared {
+            id: id.clone(),
+            host_key: hostkey::host_key(&self.secret, &id),
+            web_url,
+            app_url,
+            viewers,
+        });
         Ok(Accepted { id, shared, replay })
     }
 

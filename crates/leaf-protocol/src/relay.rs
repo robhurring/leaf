@@ -85,6 +85,9 @@ pub enum RelayToHost {
         host_key: String,
         web_url: String,
         app_url: String,
+        /// The share's viewers now: on a resume, the host drops sessions for any others.
+        #[serde(default)]
+        viewers: Vec<Peer>,
     },
     #[serde(rename_all = "camelCase")]
     Joined {
@@ -179,6 +182,11 @@ mod tests {
                 host_key: "k".into(),
                 web_url: "https://r/s/i".into(),
                 app_url: "leaf://relay/r/s/i".into(),
+                viewers: vec![Peer {
+                    id: "v1".into(),
+                    name: "Brisk Otter".into(),
+                    color: "#10b981".into(),
+                }],
             },
             RelayToHost::Joined {
                 viewer: "v1".into(),
@@ -210,5 +218,11 @@ mod tests {
             let text = serde_json::to_string(&m).unwrap();
             assert_eq!(serde_json::from_str::<RelayToHost>(&text).unwrap(), m);
         }
+        // An older relay's `shared` has no viewers.
+        let old = r#"{"type":"shared","id":"i","hostKey":"k","webUrl":"w","appUrl":"a"}"#;
+        assert!(matches!(
+            serde_json::from_str::<RelayToHost>(old).unwrap(),
+            RelayToHost::Shared { viewers, .. } if viewers.is_empty()
+        ));
     }
 }

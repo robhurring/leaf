@@ -132,6 +132,7 @@ struct Shared {
     host_key: String,
     web_url: String,
     app_url: String,
+    viewers: Vec<Peer>,
 }
 
 enum Refused {
@@ -180,6 +181,7 @@ async fn open_link(
             host_key,
             web_url,
             app_url,
+            viewers,
         }) => Ok((
             ws,
             Shared {
@@ -187,6 +189,7 @@ async fn open_link(
                 host_key,
                 web_url,
                 app_url,
+                viewers,
             },
         )),
         Ok(RelayToHost::Error { code, message }) => {
@@ -483,6 +486,25 @@ impl Link {
         }
     }
 
+    /// After a resume: the relay's viewers are the share's viewers. A restarted relay
+    /// forgot the rest and will never send their `left`.
+    fn keep_only(&mut self, present: &[Peer]) {
+        let gone: Vec<String> = self
+            .viewers
+            .keys()
+            .filter(|id| !present.iter().any(|p| &p.id == *id))
+            .cloned()
+            .collect();
+        if gone.is_empty() {
+            return;
+        }
+        tracing::info!(share = %self.id, gone = gone.len(), "dropping viewers the relay no longer has");
+        for id in gone {
+            self.drop_viewer(&id);
+        }
+        self.publish_viewers();
+    }
+
     fn drop_viewer(&mut self, viewer: &str) {
         if let Some(v) = self.viewers.remove(viewer) {
             v.task.abort();
@@ -530,7 +552,8 @@ impl Link {
                 host_key: self.host_key.clone(),
             };
             match open_link(&self.opts, Some(resume)).await {
-                Ok((mut ws, _)) => {
+                Ok((mut ws, shared)) => {
+                    self.keep_only(&shared.viewers);
                     if self.path.is_some()
                         && ws
                             .send(text(&HostToRelay::Path {
