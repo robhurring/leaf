@@ -36,6 +36,17 @@ describe('viewport', () => {
     expect(v.get()).toEqual({ scale: 1, x: -500, y: -200 });
   });
 
+  it('the first view is 1:1 when the content fits, and fitted (never enlarged) when not', () => {
+    const v = createViewport();
+    v.fitDown(400, 200, 1000, 600);
+    expect(v.get()).toEqual({ scale: 1, x: 300, y: 200 });
+    v.fitDown(3840, 1600, 1000, 600);
+    const { scale, x, y } = v.get();
+    expect(scale).toBeCloseTo((1000 - 48) / 3840);
+    expect(x).toBeCloseTo((1000 - 3840 * scale) / 2);
+    expect(y).toBeCloseTo((600 - 1600 * scale) / 2);
+  });
+
   it('fits content into the view with a margin and reset returns to identity', () => {
     const v = createViewport();
     v.fit(2000, 1000, 1000, 1000, 50);

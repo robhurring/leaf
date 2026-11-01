@@ -187,8 +187,9 @@ export function StageCanvas({
     return () => ro.disconnect();
   }, [open, viewport]);
 
-  // Once the content has a size (diagrams render asynchronously), show it at 1:1 in the
-  // middle; Fit is a button away. A sheet starts fitted, the whole page in view.
+  // Once the content has a size (diagrams render asynchronously), show it in the middle
+  // at 1:1, or smaller when it's bigger than the view (a screenshot, a wide diagram);
+  // 1:1 is a button away. A sheet starts fitted, the whole page in view.
   useEffect(() => {
     const layer = layerRef.current;
     if (!layer || typeof ResizeObserver === 'undefined') return;
@@ -238,7 +239,13 @@ export function StageCanvas({
     const size = contentSize(layer);
     if (size) viewport.fit(size.w, size.h, view.clientWidth, view.clientHeight);
   }, [viewport]);
-  const first = () => actualSize();
+  const first = () => {
+    const view = viewRef.current;
+    const layer = layerRef.current;
+    const size = layer && contentSize(layer);
+    if (view && size) viewport.fitDown(size.w, size.h, view.clientWidth, view.clientHeight);
+    else actualSize();
+  };
 
   // The picture with its ink over it, as one svg.
   const composed = async () => {
