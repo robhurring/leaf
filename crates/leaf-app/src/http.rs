@@ -132,7 +132,18 @@ pub async fn raw(State(state): State<AppState>, Path(path): Path<String>) -> Res
 
 /// The embedded UI: a real file when one exists, else index.html (the router owns the URL).
 pub async fn static_file(uri: Uri) -> Response {
-    let path = uri.path().trim_start_matches('/');
+    embedded(uri.path())
+}
+
+/// The embedded UI under a path prefix (the relay's `/s/<id>`): the prefix is stripped
+/// before the lookup, so `/s/<id>/assets/x.js` is the asset and anything else is index.html.
+pub async fn static_file_at(uri: Uri, strip: &str) -> Response {
+    let path = uri.path();
+    embedded(path.strip_prefix(strip).unwrap_or(path))
+}
+
+fn embedded(path: &str) -> Response {
+    let path = path.trim_start_matches('/');
     let decoded = percent_decode(path);
     let safe = decoded.trim_start_matches("../");
     let (name, cache) = match Assets::get(safe) {
