@@ -3,7 +3,7 @@
 // hidden to read it as a report; any cell's output collapses. HTML outputs (a pandas
 // table, a widget's markup) run sealed off like a live pane: scripts, no network.
 // There's no kernel: outputs are the ones saved in the notebook.
-import { lazy, Suspense, useContext, useEffect, useMemo, useRef, useState } from 'react';
+import { lazy, Suspense, useContext, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { BlockToolsContext } from '../../components/BlockFrame.js';
 import { DocToolsContext } from '../../components/Properties.js';
@@ -34,7 +34,10 @@ function HtmlOutput({ html, gateKey }: { html: string; gateKey: string }) {
       `</head><body>${html}<script>new ResizeObserver(function(){parent.postMessage({leaf:'nb-html',h:document.documentElement.scrollHeight},'*')}).observe(document.documentElement)</script></body></html>`,
     [html],
   );
-  useEffect(() => {
+  // Listening starts in the commit that puts the frame on the page, not an effect a task
+  // later: the frame can report its height in between (the notebook loads lazily), and
+  // that message would be lost.
+  useLayoutEffect(() => {
     const onMessage = (e: MessageEvent) => {
       if (e.source !== frame.current?.contentWindow) return;
       const d = e.data as { leaf?: string; h?: unknown };
