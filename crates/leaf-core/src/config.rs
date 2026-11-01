@@ -10,6 +10,8 @@ pub enum Command {
     Open,
     Serve,
     Share,
+    /// `leaf relay start`: the sharing relay server.
+    Relay,
     Help,
     Version,
 }
@@ -46,6 +48,8 @@ pub struct Config {
     pub log_level: LogLevel,
     pub log_format: LogFormat,
     pub plantuml_url: Option<String>,
+    /// The relay that Share uses; no Share button when unset. No trailing `/`.
+    pub relay_url: Option<String>,
     pub open: bool,
     pub ignore: Vec<String>,
     pub gitignore: bool,
@@ -66,6 +70,7 @@ pub struct Sources {
     pub log_level: ConfigSource,
     pub log_format: ConfigSource,
     pub plantuml_url: ConfigSource,
+    pub relay_url: ConfigSource,
     pub open: ConfigSource,
     pub ignore: ConfigSource,
     pub gitignore: ConfigSource,
@@ -93,6 +98,7 @@ const KEYS: &[(&str, &str)] = &[
     ("log_level", "LOG_LEVEL"),
     ("log_format", "LOG_FORMAT"),
     ("plantuml_url", "PLANTUML_URL"),
+    ("relay_url", "LEAF_RELAY_URL"),
     ("open", "LEAF_OPEN"),
     ("ignore", "LEAF_IGNORE"),
     ("gitignore", "LEAF_GITIGNORE"),
@@ -177,6 +183,7 @@ fn parse_args(argv: &[String]) -> Result<Parsed, ConfigError> {
             "-l" | "--log-level" => p.flags.push(("log_level", value(&mut i, a)?)),
             "--log-format" => p.flags.push(("log_format", value(&mut i, a)?)),
             "--plantuml-url" => p.flags.push(("plantuml_url", value(&mut i, a)?)),
+            "--relay-url" => p.flags.push(("relay_url", value(&mut i, a)?)),
             "--open" => p.flags.push(("open", "true".into())),
             "--no-open" => p.flags.push(("open", "false".into())),
             "--ignore" => p.flags.push(("ignore", value(&mut i, a)?)),
@@ -185,6 +192,13 @@ fn parse_args(argv: &[String]) -> Result<Parsed, ConfigError> {
             "--config-dir" => p.flags.push(("config_dir", value(&mut i, a)?)),
             "--idle-timeout" => p.flags.push(("idle_timeout_ms", value(&mut i, a)?)),
             _ if a.starts_with('-') => return Err(ConfigError(format!("unknown flag: {a}"))),
+            "relay" if p.command.is_none() && p.target.is_none() => {
+                if argv.get(i + 1).map(String::as_str) != Some("start") {
+                    return Err(ConfigError("relay takes one subcommand: start".into()));
+                }
+                i += 1;
+                p.command = Some(Command::Relay);
+            }
             "open" | "serve" | "share" if p.command.is_none() && p.target.is_none() => {
                 p.command = Some(match a {
                     "open" => Command::Open,
@@ -240,6 +254,7 @@ pub fn load(
         ("log_level", "warn".into()),
         ("log_format", "text".into()),
         ("plantuml_url", String::new()),
+        ("relay_url", String::new()),
         ("open", "true".into()),
         ("ignore", ".git,node_modules,.DS_Store".into()),
         ("gitignore", "true".into()),
@@ -289,7 +304,11 @@ pub fn load(
         ))
     };
 
-    let (host, host_src) = get("host");
+    let (mut host, host_src) = get("host");
+    // A relay is a server for others (Heroku sets only PORT): all interfaces unless told.
+    if command == Command::Relay && host_src == ConfigSource::Default {
+        host = "0.0.0.0".into();
+    }
     let (port_raw, port_src) = get("port");
     let port: u16 = port_raw
         .trim()
@@ -322,6 +341,7 @@ pub fn load(
         }
     };
     let (plantuml, plantuml_src) = get("plantuml_url");
+    let (relay, relay_src) = get("relay_url");
     let (open_raw, open_src) = get("open");
     let (ignore_raw, ignore_src) = get("ignore");
     let (gitignore_raw, gitignore_src) = get("gitignore");
@@ -361,7 +381,7 @@ pub fn load(
         parse_duration(&idle_raw).map_err(|e| invalid("idle_timeout_ms", idle_src, e.0))?;
 
     let target = match command {
-        Command::Help | Command::Version => cwd.to_path_buf(),
+        Command::Help | Command::Version | Command::Relay => cwd.to_path_buf(),
         _ => {
             let joined = cwd.join(args.target.as_deref().unwrap_or("."));
             joined.canonicalize().map_err(|_| {
@@ -379,6 +399,7 @@ pub fn load(
             log_level,
             log_format,
             plantuml_url: optional(plantuml.trim()),
+            relay_url: optional(relay.trim().trim_end_matches('/')),
             open: parse_bool(&open_raw),
             ignore: parse_list(&ignore_raw),
             gitignore: parse_bool(&gitignore_raw),
@@ -395,6 +416,7 @@ pub fn load(
             log_level: level_src,
             log_format: format_src,
             plantuml_url: plantuml_src,
+            relay_url: relay_src,
             open: open_src,
             ignore: ignore_src,
             gitignore: gitignore_src,

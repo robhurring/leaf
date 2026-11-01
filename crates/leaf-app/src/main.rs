@@ -282,6 +282,11 @@ async fn main() {
             eprintln!("leaf share is not yet available");
             2
         }
+        // Task 4 replaces this stub with `leaf_app::relay::run(config).await`.
+        Route::Relay => {
+            eprintln!("leaf relay start is coming");
+            2
+        }
         Route::Serve => run_server(config, sources).await,
         Route::AppForeground => {
             leaf_app::log::init(config.log_level, config.log_format);

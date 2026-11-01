@@ -7,6 +7,8 @@ usage:
   leaf serve [path]           a server that stays up, logs on the terminal (ctrl-c stops): for remote
                               machines (--host 0.0.0.0) and development
   leaf share [path]           share with others (not yet available)
+  leaf relay start            run a relay for sharing (Procfile: web: leaf relay start); listens on
+                              $PORT (default 4321), all interfaces; LEAF_RELAY_GRACE, LEAF_RELAY_SECRET
   leaf 'leaf://open/<path>'   open a link: an absolute path (or ~/…), then any of ?root=<folder> (show the
                               file inside that folder), &browser, #heading. bin/install registers the
                               installed app, so `open 'leaf://…'` and links in other apps land here; a
@@ -24,6 +26,7 @@ flags (each overrides the matching variable in the environment or .env):
   --idle-timeout <dur>        LEAF_IDLE_TIMEOUT   exit after this long with no client connected
                                                   (open: 10s; serve: never; 0 = never)
   --plantuml-url <url>        PLANTUML_URL        PlantUML server; unset shows plantuml source
+  --relay-url <url>           LEAF_RELAY_URL      the relay that Share uses (unset: no Share button)
   --ignore <patterns>         LEAF_IGNORE         comma-separated gitignore patterns always skipped
   --gitignore / --no-gitignore  LEAF_GITIGNORE    honor .gitignore files (default on)
   --config-dir <dir>          LEAF_CONFIG_DIR     preferences, instance list, logs (default ~/.config/leaf)

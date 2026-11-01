@@ -17,6 +17,7 @@ const VALUE_FLAGS: &[&str] = &[
     "--log-level",
     "--log-format",
     "--plantuml-url",
+    "--relay-url",
     "--ignore",
     "--config-dir",
     "--idle-timeout",
@@ -71,6 +72,8 @@ pub enum Route {
     Help,
     Version,
     Share,
+    /// `leaf relay start`.
+    Relay,
     Serve,
     /// `leaf open`: start the app detached (or hand off to the running one) and return.
     LaunchApp,
@@ -91,6 +94,7 @@ pub fn route(
         Command::Help => Route::Help,
         Command::Version => Route::Version,
         Command::Share => Route::Share,
+        Command::Relay => Route::Relay,
         Command::Serve => Route::Serve,
         Command::Open if as_app => Route::AppForeground,
         Command::Open if browser => Route::Browser,

@@ -163,3 +163,43 @@ fn errors_name_the_variable_or_the_path() {
     let err = load(&args(&["open", ".", "--bogus"]), &env(&[]), d.path()).unwrap_err();
     assert!(err.to_string().contains("--bogus"), "{err}");
 }
+
+#[test]
+fn relay_url_comes_from_env_flag_or_nothing() {
+    let d = tmp();
+    let (c, _) = load(&args(&["open", "."]), &env(&[]), d.path()).unwrap();
+    assert_eq!(c.relay_url, None);
+    let (c, _) = load(
+        &args(&["open", "."]),
+        &env(&[("LEAF_RELAY_URL", "https://r.test/")]),
+        d.path(),
+    )
+    .unwrap();
+    assert_eq!(c.relay_url.as_deref(), Some("https://r.test"));
+    let (c, _) = load(
+        &args(&["open", ".", "--relay-url", "https://flag.test"]),
+        &env(&[("LEAF_RELAY_URL", "https://r.test/")]),
+        d.path(),
+    )
+    .unwrap();
+    assert_eq!(c.relay_url.as_deref(), Some("https://flag.test"));
+}
+
+#[test]
+fn relay_start_is_a_command() {
+    let d = tmp();
+    let (c, _) = load(&args(&["relay", "start"]), &env(&[]), d.path()).unwrap();
+    assert_eq!(c.command, Command::Relay);
+    assert_eq!(c.host, "0.0.0.0");
+    let (c, _) = load(
+        &args(&["relay", "start"]),
+        &env(&[("HOST", "127.0.0.1")]),
+        d.path(),
+    )
+    .unwrap();
+    assert_eq!(c.host, "127.0.0.1");
+    for bad in [&["relay"][..], &["relay", "stop"][..]] {
+        let e = load(&args(bad), &env(&[]), d.path()).unwrap_err();
+        assert!(e.0.contains("relay takes one subcommand"), "{e}");
+    }
+}

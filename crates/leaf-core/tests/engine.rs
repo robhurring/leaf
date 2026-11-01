@@ -25,6 +25,7 @@ async fn engine() -> (Arc<Engine>, tempfile::TempDir) {
         topic_url: None,
         max_entries: 10,
         raw_base: None,
+        relay_url: None,
     };
     (Engine::new(source, prefs, config), d)
 }
@@ -395,4 +396,26 @@ async fn blame_replies_in_kind_and_empty_when_the_source_has_none() {
         ServerMessage::BlameHunks { path, hunks, repo_url: None, in_reply_to: Some(id) }
             if path == "README.md" && hunks.is_empty() && id == "b"
     ));
+}
+
+#[tokio::test]
+async fn welcome_carries_the_relay_url() {
+    let d = tempfile::tempdir().unwrap();
+    let prefs = Arc::new(PreferencesStore::new(d.path().join("p.json")));
+    let e = Engine::new(
+        Arc::new(FakeSource::new(&[("README.md", "# hi")])),
+        prefs,
+        EngineConfig {
+            max_entries: 10,
+            relay_url: Some("https://r.test".into()),
+            ..Default::default()
+        },
+    );
+    let out = e.handle(e.connect(), hello("1")).await;
+    match &out[0] {
+        ServerMessage::Welcome { config, .. } => {
+            assert_eq!(config.relay_url.as_deref(), Some("https://r.test"))
+        }
+        other => panic!("{other:?}"),
+    }
 }

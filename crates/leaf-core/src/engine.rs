@@ -26,6 +26,8 @@ pub struct EngineConfig {
     pub mention_url: Option<String>,
     pub topic_url: Option<String>,
     pub max_entries: usize,
+    /// The relay that Share uses (sent in the welcome); none: no Share button.
+    pub relay_url: Option<String>,
     /// Where file bytes are served instead of the source's `/raw/` (the app's own URLs).
     pub raw_base: Option<String>,
 }
@@ -244,7 +246,7 @@ impl Engine {
                         mention_url: self.config.mention_url.clone(),
                         topic_url: self.config.topic_url.clone(),
                         max_entries: Some(self.config.max_entries as u64),
-                        relay_url: None,
+                        relay_url: self.config.relay_url.clone(),
                     },
                     capabilities: {
                         let mut c = self.source.capabilities();

@@ -269,3 +269,14 @@ fn serve_opens_a_browser_only_when_asked() {
     assert!(opens_browser(Command::Open, true, ConfigSource::Default));
     assert!(!opens_browser(Command::Open, false, ConfigSource::Flag));
 }
+
+#[test]
+fn help_mentions_relay_start() {
+    let d = tempfile::tempdir().unwrap();
+    let (code, out, _) = leaf(&["--help"], &[], d.path());
+    assert_eq!(code, 0);
+    assert!(
+        out.contains("leaf relay start") && out.contains("--relay-url <url>"),
+        "{out}"
+    );
+}

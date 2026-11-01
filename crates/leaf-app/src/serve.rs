@@ -104,6 +104,7 @@ pub fn build_engine(config: &Config, raw_base: Option<&str>) -> Result<Built, Se
             topic_url: config.topic_url.clone(),
             max_entries: config.max_entries,
             raw_base: raw_base.map(str::to_string),
+            relay_url: config.relay_url.clone(),
         },
     );
 
