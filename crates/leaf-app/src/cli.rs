@@ -4,7 +4,8 @@ pub const HELP_TEXT: &str = "leaf — view markdown beautifully
 usage:
   leaf [open] [path]          open a file or folder in a leaf reader window and return (default: .)
   leaf open --browser [path]  open it in your browser instead; the server goes away when the tab closes
-  leaf serve [path]           same, but stay in the foreground and stream the logs (ctrl-c stops)
+  leaf serve [path]           a server that stays up, logs on the terminal (ctrl-c stops): for remote
+                              machines (--host 0.0.0.0) and development
   leaf share [path]           share with others (not yet available)
   leaf 'leaf://open/<path>'   open a link: an absolute path (or ~/…), then any of ?root=<folder> (show the
                               file inside that folder), &browser, #heading. bin/install registers the

@@ -118,13 +118,17 @@ open 'leaf://open/Users/me/notes/plan.md?browser'           # in the browser ins
 
 A window already showing that file, or the folder it lives in, comes forward and opens it; otherwise a new window opens. `leaf 'leaf://…'` does the same from a terminal.
 
-For a browser instead, or a socket for agents and tools:
+### In a browser, or on a server
+
+The same reader runs in any browser: it's what people you share with will see.
 
 ```sh
-leaf open --browser docs/  # a tab; the server goes away when the tab closes
-leaf serve docs/           # foreground server on 127.0.0.1:4321, ctrl-c to stop
+leaf open --browser docs/  # in your browser; the server stops when the tab closes
+leaf serve docs/           # a server that stays up, on 127.0.0.1:4321 (ctrl-c stops it)
 leaf serve docs/ -l debug  # same, with every message on the wire
 ```
+
+`serve` is for a folder on another machine (`--host 0.0.0.0` on a dev box or a server with no desktop, read from your laptop) and for development: `bin/dev` and the browser tests run it.
 
 ## What you get
 
