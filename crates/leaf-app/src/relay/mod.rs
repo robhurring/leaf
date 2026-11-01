@@ -263,7 +263,7 @@ async fn share_health(
     if s.relay.exists(&id) {
         (StatusCode::OK, "ok").into_response()
     } else {
-        s.relay.limits.failed(ip);
+        s.relay.limits.failed(ip, &id);
         (StatusCode::NOT_FOUND, "not found").into_response()
     }
 }
@@ -303,7 +303,7 @@ async fn share_raw(
     let started = match s.relay.start_fetch(&id, path, range) {
         Ok(started) => started,
         Err(share::FetchRefused::Gone) => {
-            s.relay.limits.failed(ip);
+            s.relay.limits.failed(ip, &id);
             return (StatusCode::NOT_FOUND, "not found").into_response();
         }
         Err(share::FetchRefused::Away) => {
@@ -442,7 +442,7 @@ async fn viewer_upgrade(
         return (StatusCode::TOO_MANY_REQUESTS, "too many tries").into_response();
     }
     if !s.relay.exists(&id) {
-        s.relay.limits.failed(ip);
+        s.relay.limits.failed(ip, &id);
         tracing::info!(%ip, "viewer asked for an unknown share");
         return ws.on_upgrade(|mut socket| async move {
             let _ = socket.send(share::unknown_share_close()).await;

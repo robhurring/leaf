@@ -327,14 +327,14 @@ async fn a_named_viewer_keeps_its_name() {
 #[tokio::test]
 async fn an_unknown_share_closes_and_too_many_tries_are_refused() {
     let r = start_relay().await;
-    let url = format!("ws://127.0.0.1:{}/s/aaa-bbb-ccc/ws", r.port);
-    for _ in 0..10 {
-        let (mut ws, _) = tokio_tungstenite::connect_async(&url)
+    let url = |i: usize| format!("ws://127.0.0.1:{}/s/aaa-bbb-c{i:02}/ws", r.port);
+    for i in 0..10 {
+        let (mut ws, _) = tokio_tungstenite::connect_async(url(i))
             .await
             .expect("the upgrade succeeds, then closes");
         assert_eq!(closed(&mut ws).await, Some(CloseCode::from(4404)));
     }
-    match tokio_tungstenite::connect_async(&url).await {
+    match tokio_tungstenite::connect_async(url(10)).await {
         Err(tokio_tungstenite::tungstenite::Error::Http(resp)) => {
             assert_eq!(resp.status().as_u16(), 429)
         }
@@ -650,12 +650,35 @@ async fn an_oversized_viewer_message_closes_it() {
 }
 
 #[tokio::test]
-async fn share_health_counts_unknown_ids_against_the_asker() {
+async fn retries_on_one_unknown_id_are_not_guessing_but_walking_ids_is() {
     let r = start_relay().await;
-    for _ in 0..10 {
+    // A viewer page whose share ended keeps probing the same id: that never adds up.
+    for _ in 0..50 {
         assert_eq!(http_get(r.port, "/s/aaa-bbb-ccc/healthz").await.0, 404);
     }
-    assert_eq!(http_get(r.port, "/s/aaa-bbb-ccc/healthz").await.0, 429);
+    match tokio_tungstenite::connect_async(format!("ws://127.0.0.1:{}/s/aaa-bbb-ccc/ws", r.port))
+        .await
+    {
+        Ok((mut ws, _)) => assert_eq!(closed(&mut ws).await, Some(CloseCode::from(4404))),
+        Err(e) => panic!("one id's retries must not lock the address out: {e}"),
+    }
+    // Walking ids does: with aaa-bbb-ccc that's ten distinct misses, so the 11th id is refused.
+    for i in 0..9 {
+        let path = format!("/s/zzz-yyy-x{i:02}/healthz");
+        assert_eq!(http_get(r.port, &path).await.0, 404, "id {i}");
+    }
+    assert_eq!(http_get(r.port, "/s/zzz-yyy-x09/healthz").await.0, 429);
+    r.stop().await;
+}
+
+#[tokio::test]
+async fn share_health_counts_unknown_ids_against_the_asker() {
+    let r = start_relay().await;
+    for i in 0..10 {
+        let path = format!("/s/aaa-bbb-c{i:02}/healthz");
+        assert_eq!(http_get(r.port, &path).await.0, 404);
+    }
+    assert_eq!(http_get(r.port, "/s/aaa-bbb-c10/healthz").await.0, 429);
     // The same counter guards viewer joins.
     match tokio_tungstenite::connect_async(format!("ws://127.0.0.1:{}/s/aaa-bbb-ccc/ws", r.port))
         .await
@@ -675,7 +698,7 @@ async fn a_spoofed_forwarded_for_is_ignored_unless_the_proxy_is_trusted() {
     for i in 0..10 {
         let xff = format!("X-Forwarded-For: 10.0.0.{i}\r\n");
         assert_eq!(
-            http_get_with(r.port, "/s/aaa-bbb-ccc/healthz", &xff)
+            http_get_with(r.port, &format!("/s/aaa-bbb-c{i:02}/healthz"), &xff)
                 .await
                 .0,
             404
@@ -697,7 +720,7 @@ async fn a_spoofed_forwarded_for_is_ignored_unless_the_proxy_is_trusted() {
     for i in 0..10 {
         let xff = format!("X-Forwarded-For: 192.0.2.{i}, 10.0.0.1\r\n");
         assert_eq!(
-            http_get_with(r.port, "/s/aaa-bbb-ccc/healthz", &xff)
+            http_get_with(r.port, &format!("/s/aaa-bbb-c{i:02}/healthz"), &xff)
                 .await
                 .0,
             404
