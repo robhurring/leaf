@@ -207,6 +207,7 @@ bin/dev -o     # server plus Vite on docs/examples/, opens the browser
 bin/test       # Rust and UI unit tests, build, browser smoke tests on three engines
 bin/install    # build, then symlink target/release/leaf into ~/.local/bin
 bin/package    # (macOS) the release app as a .dmg and a .zip in dist/release/
+bin/release    # the next minor version (or bin/release 1.2.3): bump, check, tag, push; CI builds the release
 ```
 
 Releases: bump `version` in `Cargo.toml`, merge to main, and push a matching tag (`git tag v0.2.0 && git push origin v0.2.0`). The release workflow builds a universal app, packages it, and publishes a GitHub release. With an Apple Developer ID in the repository secrets (`APPLE_CERTIFICATE`, `APPLE_CERTIFICATE_PASSWORD`, `APPLE_SIGNING_IDENTITY`, `APPLE_ID`, `APPLE_PASSWORD`, `APPLE_TEAM_ID`) it is signed and notarized; without one it is signed ad hoc.

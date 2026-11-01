@@ -1,0 +1,65 @@
+#!/usr/bin/env bash
+set -euo pipefail
+cd "$(dirname "$0")/.."
+
+usage() {
+  echo "usage: bin/release [X.Y.Z] [--dry-run] [--skip-checks]"
+  echo "  release the next minor version (0.1.0 -> 0.2.0), or X.Y.Z: newer than now, no prerelease."
+  echo "  Bumps the version everywhere (Cargo.toml, package.json files, lockfiles), runs the unit"
+  echo "  checks, commits \"leaf X.Y.Z\" on main, tags vX.Y.Z, and pushes both. The tag starts"
+  echo "  .github/workflows/release.yml: the macOS app, the GitHub release, then the Homebrew cask."
+  echo "  --dry-run      say what the new version would be, change nothing"
+  echo "  --skip-checks  don't run lint and bin/test --unit first"
+}
+
+next=""
+dry=false
+checks=true
+for a in "$@"; do
+  case "$a" in
+    -h|--help) usage; exit 0 ;;
+    --dry-run) dry=true ;;
+    --skip-checks) checks=false ;;
+    -*) usage >&2; exit 1 ;;
+    *) [[ -z "$next" ]] || { usage >&2; exit 1; }; next="${a#v}" ;;
+  esac
+done
+
+fail() { echo "bin/release: $*" >&2; exit 1; }
+current="$(sed -n 's/^version = "\(.*\)"/\1/p' Cargo.toml | head -1)"
+IFS=. read -r major minor _ <<<"$current"
+next="${next:-$major.$((minor + 1)).0}"
+# Plain X.Y.Z, no leading zeros: what Cargo, npm, and the Homebrew cask all accept.
+n='(0|[1-9][0-9]*)'
+[[ "$next" =~ ^$n\.$n\.$n$ ]] || fail "$next is not a version like 1.2.3"
+newest="$(printf '%s\n%s\n' "$current" "$next" | sort -t. -k1,1n -k2,2n -k3,3n | tail -1)"
+[[ "$next" != "$current" && "$newest" == "$next" ]] || fail "$next is not newer than $current"
+tag="v$next"
+
+[[ "$(git branch --show-current)" == main ]] || fail "release from main (on $(git branch --show-current))"
+[[ -z "$(git status --porcelain)" ]] || fail "the working tree has changes; commit or stash them"
+git fetch -q origin main --tags
+[[ "$(git rev-parse HEAD)" == "$(git rev-parse origin/main)" ]] || fail "main differs from origin/main; pull or push first"
+git rev-parse -q --verify "refs/tags/$tag" >/dev/null && fail "$tag already exists"
+
+echo "leaf $current -> $next ($tag)"
+$dry && exit 0
+
+# The workspace version (the first `version =` in Cargo.toml) and every package.json.
+perl -0pi -e "s/^version = \"\Q$current\E\"/version = \"$next\"/m" Cargo.toml
+for f in package.json packages/*/package.json; do
+  perl -0pi -e "s/\"version\": \"\Q$current\E\"/\"version\": \"$next\"/" "$f"
+done
+npm install --package-lock-only --silent
+cargo update --workspace --quiet
+
+if $checks; then
+  npm run lint
+  bin/test --unit
+fi
+
+git commit -qam "leaf $next"
+git tag -a "$tag" -m "leaf $next"
+git push -q origin main "$tag"
+echo "pushed $tag: the release builds at https://github.com/robhurring/leaf/actions/workflows/release.yml"
+echo "watch it with: gh run watch \$(gh run list -w release -L 1 --json databaseId -q '.[0].databaseId')"
