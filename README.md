@@ -7,7 +7,7 @@ It's one binary for macOS and Linux. `leaf open` puts a window on your dock and 
 ## Try it
 
 ```sh
-brew install --cask robhurring/taps/leaf   # macOS; or from a checkout: bin/setup && bin/install
+brew install --cask robhurring/tap/leaf   # macOS; or from a checkout: bin/setup && bin/install
 leaf open docs/examples                   # the tour: every kind of file leaf reads, one page each
 ```
 
@@ -63,7 +63,7 @@ leaf open docs/examples                   # the tour: every kind of file leaf re
 **macOS, with Homebrew:** installs **leaf reader** in Applications and `leaf` in your terminal.
 
 ```sh
-brew install --cask robhurring/taps/leaf
+brew install --cask robhurring/tap/leaf
 ```
 
 **macOS, by hand:** download the `.dmg` from [Releases](https://github.com/robhurring/leaf/releases) and drag **leaf reader** to Applications. It runs on Apple Silicon and Intel. To get `leaf` in your terminal, link the binary inside the app:
