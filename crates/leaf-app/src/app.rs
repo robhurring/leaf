@@ -134,7 +134,7 @@ fn record_place(window: &tauri::Window) {
     });
 }
 
-fn emit(app: &AppHandle, label: &str, msg: ServerMessage) {
+pub(crate) fn emit(app: &AppHandle, label: &str, msg: ServerMessage) {
     let target = EventTarget::AnyLabel {
         label: label.to_string(),
     };
@@ -150,6 +150,10 @@ async fn leaf_send(
     app: AppHandle,
     state: tauri::State<'_, AppState>,
 ) -> Result<(), String> {
+    if tabbed_share::host_bound(&msg) {
+        tabbed_share::from_host_tab(&app, &window, msg);
+        return Ok(());
+    }
     for reply in state.windows.send(&window, msg).await {
         emit(&app, &window, reply);
     }

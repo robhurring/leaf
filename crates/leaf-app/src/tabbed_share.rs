@@ -10,8 +10,8 @@ use tauri::{AppHandle, Emitter, EventTarget, Manager, Webview, Wry};
 use crate::app::AppState;
 use crate::tabbed;
 use leaf_app::sharing::{self, HostOptions, LinkStatus, ShareHandle, StartError};
-use leaf_protocol::ShareMode;
 use leaf_protocol::relay::{Peer, Resume};
+use leaf_protocol::{ClientMessage, ShareMode};
 
 /// What the title row shows of a tab's share.
 #[derive(Serialize, Clone, Debug, PartialEq)]
@@ -288,11 +288,56 @@ async fn start_tab(
         }
         let share = snapshot(&handle);
         watch_share(app, tab, &handle);
+        forward_inbox(app, tab, &handle);
         shares.insert(tab.to_string(), handle);
         share
     };
     tabbed::changed(app);
     Ok(share)
+}
+
+/// Whether the host's own tab sends `msg` to its share (its slide, canvas, pointer and
+/// ink) rather than to the engine.
+pub fn host_bound(msg: &ClientMessage) -> bool {
+    matches!(
+        msg,
+        ClientMessage::Slide { .. }
+            | ClientMessage::Stage { .. }
+            | ClientMessage::Pointer { .. }
+            | ClientMessage::Ink { .. }
+            | ClientMessage::InkUndo { .. }
+            | ClientMessage::InkClear { .. }
+    )
+}
+
+/// Hands a host-bound `msg` from `tab` to its share; a tab that isn't shared drops it.
+pub fn from_host_tab(app: &AppHandle, tab: &str, msg: ClientMessage) {
+    let state = app.state::<AppState>();
+    let shares = state.shares.lock().unwrap();
+    let Some(handle) = shares.get(tab) else {
+        return;
+    };
+    match msg {
+        ClientMessage::Slide { slide } => handle.set_slide(slide),
+        ClientMessage::Stage { stage } => handle.set_stage(stage),
+        // Pointer and ink have no handle methods until Task 9 adds them.
+        _ => {}
+    }
+}
+
+/// Pushes what the share tells the host's tab (where viewers are, their pointers and
+/// ink) to the tab until the share ends.
+fn forward_inbox(app: &AppHandle, tab: &str, handle: &ShareHandle) {
+    let Some(mut inbox) = handle.take_inbox() else {
+        return;
+    };
+    let runtime = app.state::<AppState>().runtime.clone();
+    let (app, tab) = (app.clone(), tab.to_string());
+    runtime.spawn(async move {
+        while let Some(msg) = inbox.recv().await {
+            crate::app::emit(&app, &tab, msg);
+        }
+    });
 }
 
 /// `tab`'s share; `idle` when it isn't sharing, with `resumable` naming a share its
@@ -493,6 +538,29 @@ pub fn on_menu(app: &AppHandle, id: &str) -> bool {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn only_the_hosts_presentation_messages_go_to_its_share() {
+        let yes = [
+            r#"{"type":"slide"}"#,
+            r#"{"type":"stage"}"#,
+            r#"{"type":"pointer"}"#,
+            r#"{"type":"ink","stroke":{"id":"host:1","docPath":"a.mmd","blockHash":"h","points":[[0.0,0.0],[10.5,4.0]],"color":"red","width":4.0,"sticky":true,"createdAt":1.0}}"#,
+            r#"{"type":"inkUndo","docPath":"a","blockHash":"h"}"#,
+            r#"{"type":"inkClear","docPath":"a","blockHash":"h"}"#,
+        ];
+        let no = [
+            r#"{"type":"at","path":"a.md"}"#,
+            r#"{"type":"read","path":"a.md"}"#,
+            r#"{"type":"hello","protocol":1}"#,
+        ];
+        for raw in yes {
+            assert!(host_bound(&serde_json::from_str(raw).unwrap()), "{raw}");
+        }
+        for raw in no {
+            assert!(!host_bound(&serde_json::from_str(raw).unwrap()), "{raw}");
+        }
+    }
 
     #[test]
     fn a_tab_share_speaks_camel_case() {
