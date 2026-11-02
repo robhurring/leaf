@@ -198,6 +198,19 @@ describe('pointers and ink on a shared canvas', () => {
     expect(ofType(s, 'pointer').at(-1)).toEqual({ type: 'pointer' });
   });
 
+  it('a whole-file deck is not a canvas, so the host announces no stage for it', async () => {
+    asHost();
+    history.replaceState(null, '', '/deck.md');
+    const s = scripted(
+      { 'deck.md': '---\nmarp: true\n---\n\n# One\n\n---\n\n# Two\n' },
+      { capabilities: { watch: true, write: false, collaborate: false } },
+    );
+    render(<Reader source={s.source} base="" />);
+    act(() => useDocuments.getState().open('deck.md'));
+    await screen.findByRole('status', { name: 'Slide' });
+    expect(ofType(s, 'stage')).toEqual([]);
+  });
+
   it('a viewer never sends stage or ink', async () => {
     const s = await openFile('a.mmd', SHARE);
     act(() => useStage.setState({ tool: 'pencil' }));

@@ -81,10 +81,12 @@ export function StageCanvas({
   };
   useEffect(() => {
     if (!role) return;
-    if (role === 'host')
+    // Only a zoomable diagram or image is a canvas; a deck, chart or live pane is not.
+    const canvas = role === 'host' && !!open.viewer.stage?.zoom;
+    if (canvas)
       tell({ type: 'stage', stage: { docPath: open.docPath, blockHash: open.blockHash } });
     return () => {
-      if (role === 'host') tell({ type: 'stage' });
+      if (canvas) tell({ type: 'stage' });
       pointerGone();
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps

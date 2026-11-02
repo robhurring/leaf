@@ -5,7 +5,15 @@ import { Reader } from '../src/components/Reader.js';
 import { useDocuments } from '../src/store/documents.js';
 import { WsSource } from '../src/source/WsSource.js';
 import { savedShareName } from '../src/share/path.js';
+import { contentHash } from '../src/viewers/hash.js';
 import { scripted, README, GUIDE } from './helpers/scripted.js';
+
+vi.mock('mermaid', () => ({
+  default: {
+    initialize: vi.fn(),
+    render: vi.fn(async () => ({ svg: '<svg width="100" height="50"></svg>' })),
+  },
+}));
 
 const ID = 'brisk-otter-lantern';
 const BASE = `/s/${ID}`;
@@ -221,5 +229,33 @@ describe('viewing a share', () => {
     src.check();
     expect(fetchImpl.mock.calls[0]![0]).toBe(`http://relay.test${BASE}/healthz`);
     src.close();
+  });
+});
+
+describe('the host’s avatar on the block it has open', () => {
+  const MMD = 'graph LR\nA-->B';
+  const HASH = contentHash(MMD);
+  it('wears the host’s avatar on that block only while the host has it open large', async () => {
+    history.replaceState(null, '', `${BASE}/doc.md`);
+    const s = scripted(
+      { 'doc.md': `# Doc\n\n\`\`\`mermaid\n${MMD}\n\`\`\`\n` },
+      { share: SHARE, capabilities: { watch: true, write: false, collaborate: false } },
+    );
+    render(<Reader source={s.source} base={BASE} />);
+    await screen.findByRole('heading', { name: 'Doc', level: 1 });
+    const frame = () => document.querySelector('.leaf-frame') as HTMLElement;
+    await waitFor(() => expect(frame()).toBeTruthy());
+    expect(within(frame()).queryByRole('img', { name: 'Rob' })).toBeNull();
+    act(() =>
+      s.emit(presence({ stage: { docPath: 'doc.md', blockHash: HASH }, you: 'v1', viewers: [] })),
+    );
+    await waitFor(() => expect(within(frame()).getByRole('img', { name: 'Rob' })).toBeTruthy());
+    expect(frame().querySelector('.leaf-block-tools .leaf-block-host')).toBeTruthy();
+    act(() =>
+      s.emit(
+        presence({ stage: { docPath: 'doc.md', blockHash: 'other' }, you: 'v1', viewers: [] }),
+      ),
+    );
+    await waitFor(() => expect(within(frame()).queryByRole('img', { name: 'Rob' })).toBeNull());
   });
 });

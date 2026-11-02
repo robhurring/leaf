@@ -1207,6 +1207,12 @@ html[data-resizing] .leaf-resizer::after {
   transition: opacity 0.12s;
   z-index: 2;
 }
+.leaf-block-host {
+  display: flex;
+  align-items: center;
+  padding: 0 4px;
+}
+.leaf-block:has(.leaf-block-host) .leaf-block-tools,
 .leaf-block:hover .leaf-block-tools,
 .leaf-block:focus-within .leaf-block-tools {
   opacity: 1;

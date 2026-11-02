@@ -28,6 +28,8 @@ import {
 } from '../icons/index.js';
 import { useAnnotations } from '../store/annotations.js';
 import { useStage } from '../store/stage.js';
+import { useDocuments } from '../store/documents.js';
+import { Avatar } from '../share/Avatar.js';
 import { usePinch } from '../stage/usePinch.js';
 import {
   copyCanvas,
@@ -91,6 +93,15 @@ export function BlockFrame({
   const slot = useContext(DocToolsContext);
   const source = props.content ?? '';
   const blockHash = contentHash(source);
+  // The host has this block open large: wear their avatar so a viewer knows where to look.
+  const presence = useDocuments((s) => s.presence);
+  const hostHere =
+    presence &&
+    presence.you !== 'host' &&
+    presence.stage?.docPath === props.docPath &&
+    presence.stage.blockHash === blockHash
+      ? presence.host
+      : null;
   // Zoom and pan in place, for a diagram in a document. The Stage does it for whole files.
   const [view, setView] = useState<View>(HOME);
   const [panning, setPanning] = useState(false);
@@ -176,6 +187,11 @@ export function BlockFrame({
 
   const tools = (
     <div className="leaf-block-tools" role="group" aria-label="Block tools" ref={setToolsEl}>
+      {hostHere && (
+        <span className="leaf-block-host">
+          <Avatar name={hostHere.name} color={hostHere.color} />
+        </span>
+      )}
       {zoomable && (
         <>
           <button
