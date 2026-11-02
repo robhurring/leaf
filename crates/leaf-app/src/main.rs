@@ -260,6 +260,7 @@ async fn main() {
             if text.starts_with("unknown flag")
                 || text.contains("needs a value")
                 || text.starts_with("unexpected argument")
+                || text.starts_with("relay takes")
             {
                 eprintln!("leaf: {text}\n\n{HELP_TEXT}");
             } else {

@@ -279,4 +279,15 @@ fn help_mentions_relay_start() {
         out.contains("leaf relay start") && out.contains("--relay-url <url>"),
         "{out}"
     );
+    // `leaf relay --help` prints the help page like `leaf --help` does.
+    let (code, out, _) = leaf(&["relay", "--help"], &[], d.path());
+    assert_eq!(code, 0);
+    assert!(out.contains("leaf relay start"), "{out}");
+    // A bare `leaf relay` is a usage error: the complaint, then the help page.
+    let (code, _, err) = leaf(&["relay"], &[], d.path());
+    assert_eq!(code, 2);
+    assert!(
+        err.contains("relay takes one subcommand: start") && err.contains("leaf relay start"),
+        "{err}"
+    );
 }

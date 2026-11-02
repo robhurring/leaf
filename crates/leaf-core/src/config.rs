@@ -193,8 +193,13 @@ fn parse_args(argv: &[String]) -> Result<Parsed, ConfigError> {
             "--idle-timeout" => p.flags.push(("idle_timeout_ms", value(&mut i, a)?)),
             _ if a.starts_with('-') => return Err(ConfigError(format!("unknown flag: {a}"))),
             "relay" if p.command.is_none() && p.target.is_none() => {
-                if argv.get(i + 1).map(String::as_str) != Some("start") {
-                    return Err(ConfigError("relay takes one subcommand: start".into()));
+                match argv.get(i + 1).map(String::as_str) {
+                    Some("start") => {}
+                    Some("-h" | "--help") => {
+                        p.command = Some(Command::Help);
+                        return Ok(p);
+                    }
+                    _ => return Err(ConfigError("relay takes one subcommand: start".into())),
                 }
                 i += 1;
                 p.command = Some(Command::Relay);

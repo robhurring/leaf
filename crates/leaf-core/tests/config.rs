@@ -202,4 +202,9 @@ fn relay_start_is_a_command() {
         let e = load(&args(bad), &env(&[]), d.path()).unwrap_err();
         assert!(e.0.contains("relay takes one subcommand"), "{e}");
     }
+    // `leaf relay --help` is a request for the help page, not a missing subcommand.
+    for help in [&["relay", "--help"][..], &["relay", "-h"][..]] {
+        let (c, _) = load(&args(help), &env(&[]), d.path()).unwrap();
+        assert_eq!(c.command, Command::Help, "{help:?}");
+    }
 }
