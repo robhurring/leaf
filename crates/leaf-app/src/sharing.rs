@@ -6,6 +6,7 @@
 
 use std::collections::HashMap;
 use std::sync::Arc;
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::Duration;
 
 use futures_util::{SinkExt, StreamExt};
@@ -77,12 +78,22 @@ pub struct ShareHandle {
     pub viewers: watch::Receiver<Vec<Peer>>,
     pub status: watch::Receiver<LinkStatus>,
     cmds: mpsc::UnboundedSender<Cmd>,
+    /// Viewers see git history (each file's last commit, blame). Off unless the host asks.
+    git: Arc<AtomicBool>,
 }
 
 impl ShareHandle {
     /// What the host is reading now, for viewers' presence.
     pub fn set_path(&self, path: Option<String>) {
         let _ = self.cmds.send(Cmd::Path(path));
+    }
+
+    /// Whether viewers see git history; applies to their next request.
+    pub fn set_git(&self, on: bool) {
+        self.git.store(on, Ordering::Relaxed);
+    }
+    pub fn git(&self) -> bool {
+        self.git.load(Ordering::Relaxed)
     }
 
     /// Ends the share: the relay tells viewers and frees the id.
@@ -237,6 +248,7 @@ pub async fn start_checked(opts: HostOptions) -> Result<ShareHandle, StartError>
     let (status_tx, status) = watch::channel(LinkStatus::Connected);
     let (cmds, cmd_rx) = mpsc::unbounded_channel();
     let (out_tx, out_rx) = mpsc::channel(OUT_QUEUE);
+    let git = Arc::new(AtomicBool::new(false));
     let handle = ShareHandle {
         id: shared.id.clone(),
         host_key: shared.host_key.clone(),
@@ -245,10 +257,12 @@ pub async fn start_checked(opts: HostOptions) -> Result<ShareHandle, StartError>
         viewers,
         status,
         cmds,
+        git: git.clone(),
     };
     let link = Link {
         pushes: opts.engine.pushes(),
         opts,
+        git,
         id: shared.id,
         host_key: shared.host_key,
         path: None,
@@ -298,6 +312,8 @@ enum Stop {
 
 struct Link {
     opts: HostOptions,
+    /// Shared with the handle: whether viewers see git history.
+    git: Arc<AtomicBool>,
     id: String,
     host_key: String,
     path: Option<String>,
@@ -442,6 +458,7 @@ impl Link {
                 let task = tokio::spawn(serve_viewer(
                     self.opts.engine.clone(),
                     self.opts.mode,
+                    self.git.clone(),
                     sid,
                     viewer.clone(),
                     rx,
@@ -651,13 +668,15 @@ fn path_of(msg: &ClientMessage) -> Option<&str> {
 async fn serve_viewer(
     engine: Arc<Engine>,
     mode: ShareMode,
+    git: Arc<AtomicBool>,
     sid: SessionId,
     viewer: String,
     mut inbox: mpsc::UnboundedReceiver<Value>,
     out: mpsc::Sender<Out>,
 ) {
     while let Some(msg) = inbox.recv().await {
-        let (replies, forbidden) = answer(&engine, mode, sid, msg).await;
+        let git = git.load(Ordering::Relaxed);
+        let (replies, forbidden) = answer(&engine, mode, git, sid, msg).await;
         for reply in replies {
             if out
                 .send(Out::Viewer(to_viewer(&viewer, reply)))
@@ -679,10 +698,12 @@ async fn serve_viewer(
 }
 
 /// The replies to one viewer message, and whether it reached outside the share (an
-/// escaping path; an ignored one is only not found).
+/// escaping path; an ignored one is only not found). Without `git`, a file's last commit
+/// is left out and blame is refused: the host's history stays with the host.
 async fn answer(
     engine: &Engine,
     mode: ShareMode,
+    git: bool,
     sid: SessionId,
     msg: Value,
 ) -> (Vec<Value>, bool) {
@@ -698,8 +719,9 @@ async fn answer(
         tracing::debug!(client = sid.0, "viewer preferences dropped");
         return (vec![], false);
     }
-    if !allowed(&msg, mode) {
-        tracing::info!(client = sid.0, kind = ?msg.get("type"), "viewer message not allowed");
+    let kind = msg.get("type").and_then(Value::as_str).unwrap_or("");
+    if !allowed(&msg, mode) || (kind == "blame" && !git) {
+        tracing::info!(client = sid.0, kind, "viewer message not allowed");
         let reply = refuse(ErrorCode::BadRequest, "not allowed in a shared tab", None);
         return (vec![reply], false);
     }
@@ -749,6 +771,11 @@ async fn answer(
                 ServerMessage::Welcome { .. } => {
                     if let Some(obj) = v.as_object_mut() {
                         obj.remove("preferences");
+                    }
+                }
+                ServerMessage::File { .. } if !git => {
+                    if let Some(obj) = v.as_object_mut() {
+                        obj.remove("git");
                     }
                 }
                 ServerMessage::Error {

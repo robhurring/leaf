@@ -454,6 +454,72 @@ async fn the_host_reconnects_and_keeps_its_id() {
     r.stop().await;
 }
 
+/// Makes `root` a git repository with everything in it committed.
+fn commit_all(root: &std::path::Path) {
+    let git = |args: &[&str]| {
+        let st = std::process::Command::new("git")
+            .args(args)
+            .current_dir(root)
+            .output()
+            .expect("git runs");
+        assert!(
+            st.status.success(),
+            "git {args:?}: {}",
+            String::from_utf8_lossy(&st.stderr)
+        );
+    };
+    let who = ["-c", "user.name=Test", "-c", "user.email=t@example.com"];
+    git(&["init", "-q"]);
+    git(&[&who[..], &["add", "."]].concat());
+    git(&[&who[..], &["commit", "-q", "-m", "docs: first"]].concat());
+}
+
+#[tokio::test]
+async fn git_history_stays_with_the_host_unless_the_host_includes_it() {
+    let f = folder();
+    commit_all(&f.root());
+    let r = relay::start(options(0)).await.unwrap();
+    let h = share(&r, &f.engine).await;
+    let (mut v, _) = viewer(r.port, &h.id).await;
+
+    // Off by default: the file comes without its last commit, and blame is refused.
+    let file = read(&mut v, "README.md", "r1").await;
+    assert_eq!(file["type"], "file", "{file}");
+    assert!(file.get("git").is_none(), "{file}");
+    send(
+        &mut v,
+        json!({"type": "blame", "path": "README.md", "id": "b1"}),
+    )
+    .await;
+    let blame = loop {
+        let m = next_json(&mut v).await.expect("a reply");
+        if m["inReplyTo"] == "b1" {
+            break m;
+        }
+    };
+    assert_eq!(blame["type"], "error", "{blame}");
+
+    // The host includes it: the same reads now carry the commit and the hunks.
+    h.set_git(true);
+    let file = read(&mut v, "README.md", "r2").await;
+    assert!(file["git"]["commit"].is_string(), "{file}");
+    send(
+        &mut v,
+        json!({"type": "blame", "path": "README.md", "id": "b2"}),
+    )
+    .await;
+    let blame = loop {
+        let m = next_json(&mut v).await.expect("a reply");
+        if m["inReplyTo"] == "b2" {
+            break m;
+        }
+    };
+    assert_eq!(blame["type"], "blameHunks", "{blame}");
+    assert!(!blame["hunks"].as_array().unwrap().is_empty(), "{blame}");
+    h.end();
+    r.stop().await;
+}
+
 #[test]
 fn allowed_lists_what_read_only_permits() {
     for ty in [

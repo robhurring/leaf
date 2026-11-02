@@ -144,6 +144,7 @@ Or put `LEAF_RELAY_URL` in your `.env` or pass `--relay-url`. With a relay set, 
 - **Copy app link**: a `leaf://relay/<relay-host>/s/<id>` link. It opens in leaf once `leaf connect` ships, in the next release.
 - **Copy web link**: `https://<relay>/s/<id>`, which opens the reader in any browser, with a banner naming the host, who's here, and what the host is reading.
 - **Open web link**: the same link, in your browser, to see what viewers see.
+- **Include git history**: off by default, so viewers see files without their last commit and without blame; turn it on for a share when you want them to.
 - **End session**: stops sharing and disconnects everyone.
 - Under those, who is watching.
 

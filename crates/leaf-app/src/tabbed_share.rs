@@ -25,6 +25,8 @@ pub struct TabShare {
     pub viewers: Vec<Peer>,
     /// An id this tab's root could take back (its tab closed while it was live).
     pub resumable: Option<String>,
+    /// Viewers see git history (last commits, blame). Off unless the host includes it.
+    pub git: bool,
 }
 
 fn status_name(s: LinkStatus) -> &'static str {
@@ -43,6 +45,7 @@ fn snapshot(h: &ShareHandle) -> TabShare {
         status: status_name(*h.status.borrow()).to_string(),
         viewers: h.viewers.borrow().clone(),
         resumable: None,
+        git: h.git(),
     }
 }
 
@@ -54,6 +57,7 @@ fn idle(resumable: Option<String>) -> TabShare {
         status: "idle".into(),
         viewers: Vec::new(),
         resumable,
+        git: false,
     }
 }
 
@@ -78,6 +82,8 @@ pub enum MenuEntry {
         id: String,
         text: String,
         enabled: bool,
+        /// A line with a check mark, and whether it is on.
+        checked: Option<bool>,
     },
     Separator,
 }
@@ -88,6 +94,7 @@ pub enum ShareAction {
     CopyApp,
     CopyWeb,
     OpenWeb,
+    ToggleGit,
     End,
     Resume,
     Start,
@@ -96,6 +103,7 @@ pub enum ShareAction {
 const COPY_APP: &str = "share:copy-app";
 const COPY_WEB: &str = "share:copy-web";
 const OPEN_WEB: &str = "share:open-web";
+const GIT: &str = "share:git";
 const END: &str = "share:end";
 const RESUME: &str = "share:resume";
 const START: &str = "share:start";
@@ -108,6 +116,7 @@ pub fn menu_items(share: &TabShare) -> Vec<MenuEntry> {
         id: id.into(),
         text: text.into(),
         enabled: true,
+        checked: None,
     };
     match share.status.as_str() {
         "live" | "reconnecting" => {
@@ -115,6 +124,13 @@ pub fn menu_items(share: &TabShare) -> Vec<MenuEntry> {
                 item(COPY_APP, "Copy app link"),
                 item(COPY_WEB, "Copy web link"),
                 item(OPEN_WEB, "Open web link"),
+                MenuEntry::Separator,
+                MenuEntry::Item {
+                    id: GIT.into(),
+                    text: "Include git history".into(),
+                    enabled: true,
+                    checked: Some(share.git),
+                },
                 MenuEntry::Separator,
                 item(END, "End session"),
             ];
@@ -124,6 +140,7 @@ pub fn menu_items(share: &TabShare) -> Vec<MenuEntry> {
                     id: format!("share:viewer:{}", v.id),
                     text: v.name.clone(),
                     enabled: false,
+                    checked: None,
                 }));
             }
             items
@@ -144,6 +161,7 @@ pub fn menu_action(id: &str) -> Option<ShareAction> {
         COPY_APP => ShareAction::CopyApp,
         COPY_WEB => ShareAction::CopyWeb,
         OPEN_WEB => ShareAction::OpenWeb,
+        GIT => ShareAction::ToggleGit,
         END => ShareAction::End,
         RESUME => ShareAction::Resume,
         START => ShareAction::Start,
@@ -399,7 +417,7 @@ pub fn leaf_active_share(webview: Webview<Wry>) -> Option<TabShare> {
 /// app's own menu at the pointer (a dropdown would be cut off by the title row's height).
 #[tauri::command]
 pub fn leaf_share_button(webview: Webview<Wry>) {
-    use tauri::menu::{MenuBuilder, MenuItem};
+    use tauri::menu::{CheckMenuItem, MenuBuilder, MenuItem};
     let app = webview.app_handle();
     let window = webview.window();
     let Some((tab, share)) = active_share_of(app, window.label()) else {
@@ -414,12 +432,24 @@ pub fn leaf_share_button(webview: Webview<Wry>) {
     for entry in entries {
         menu = match entry {
             MenuEntry::Separator => menu.separator(),
-            MenuEntry::Item { id, text, enabled } => {
-                match MenuItem::with_id(app, id, text, enabled, None::<&str>) {
-                    Ok(item) => menu.item(&item),
-                    Err(_) => return,
-                }
-            }
+            MenuEntry::Item {
+                id,
+                text,
+                enabled,
+                checked: Some(on),
+            } => match CheckMenuItem::with_id(app, id, text, enabled, on, None::<&str>) {
+                Ok(item) => menu.item(&item),
+                Err(_) => return,
+            },
+            MenuEntry::Item {
+                id,
+                text,
+                enabled,
+                checked: None,
+            } => match MenuItem::with_id(app, id, text, enabled, None::<&str>) {
+                Ok(item) => menu.item(&item),
+                Err(_) => return,
+            },
         };
     }
     if let Ok(menu) = menu.build() {
@@ -445,6 +475,12 @@ pub fn on_menu(app: &AppHandle, id: &str) -> bool {
         ShareAction::OpenWeb => {
             if !share.web_url.is_empty() {
                 let _ = open::that_detached(&share.web_url);
+            }
+        }
+        ShareAction::ToggleGit => {
+            let state = app.state::<AppState>();
+            if let Some(h) = state.shares.lock().unwrap().get(&tab) {
+                h.set_git(!h.git());
             }
         }
         ShareAction::End => end_tab(app, &tab),
@@ -482,15 +518,22 @@ mod tests {
                 })
                 .collect(),
             resumable: None,
+            git: false,
         }
     }
 
-    /// The menu as a reader sees it: `—` a separator, `(off)` a line that can't be chosen.
+    /// The menu as a reader sees it: `—` a separator, `(off)` a line that can't be
+    /// chosen, `[x]`/`[ ]` a line with a check mark.
     fn lines(share: &TabShare) -> Vec<String> {
         menu_items(share)
             .iter()
             .map(|e| match e {
                 MenuEntry::Separator => "—".to_string(),
+                MenuEntry::Item {
+                    text,
+                    checked: Some(on),
+                    ..
+                } => format!("[{}] {text}", if *on { "x" } else { " " }),
                 MenuEntry::Item {
                     text,
                     enabled: true,
@@ -514,12 +557,21 @@ mod tests {
                 "Copy web link",
                 "Open web link",
                 "—",
+                "[ ] Include git history",
+                "—",
                 "End session",
                 "—",
                 "Ada (off)",
                 "Bob (off)"
             ]
         );
+    }
+
+    #[test]
+    fn the_git_line_shows_its_check_when_the_host_included_it() {
+        let mut s = live(&[]);
+        s.git = true;
+        assert!(lines(&s).contains(&"[x] Include git history".to_string()));
     }
 
     #[test]
@@ -532,6 +584,8 @@ mod tests {
                 "Copy app link",
                 "Copy web link",
                 "Open web link",
+                "—",
+                "[ ] Include git history",
                 "—",
                 "End session"
             ]
@@ -568,6 +622,7 @@ mod tests {
                 Some(ShareAction::CopyApp),
                 Some(ShareAction::CopyWeb),
                 Some(ShareAction::OpenWeb),
+                Some(ShareAction::ToggleGit),
                 Some(ShareAction::End),
                 None, // a viewer's line
                 Some(ShareAction::Resume),
