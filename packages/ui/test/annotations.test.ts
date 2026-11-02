@@ -77,3 +77,43 @@ describe('invisible ink timing', () => {
     expect(css).toMatch(new RegExp(`animation-delay: ${s};`));
   });
 });
+
+describe('ink from the relay', () => {
+  it('addRemote adds a stroke marked with its peer, once per id', () => {
+    const k = stroke({ id: 'r1', peer: 'host' });
+    useAnnotations.getState().addRemote(k);
+    useAnnotations.getState().addRemote(k); // a reconnecting viewer gets the kept strokes again
+    const strokes = useAnnotations.getState().strokes;
+    expect(strokes).toHaveLength(1);
+    expect(strokes[0]).toMatchObject({ id: 'r1', peer: 'host' });
+  });
+
+  it('undo and clear leave remote strokes alone', () => {
+    useAnnotations.getState().add(stroke({ id: 'mine' }));
+    useAnnotations.getState().addRemote(stroke({ id: 'theirs', peer: 'host' }));
+    useAnnotations.getState().undo('a.md', 'h1');
+    expect(useAnnotations.getState().strokes.map((k) => k.id)).toEqual(['theirs']);
+    useAnnotations.getState().add(stroke({ id: 'mine2' }));
+    useAnnotations.getState().clear('a.md', 'h1');
+    expect(useAnnotations.getState().strokes.map((k) => k.id)).toEqual(['theirs']);
+  });
+
+  it('undoRemote removes only the last remote stroke of that canvas', () => {
+    const s = useAnnotations.getState();
+    s.addRemote(stroke({ id: 'r1', peer: 'host' }));
+    s.addRemote(stroke({ id: 'r2', peer: 'host' }));
+    s.addRemote(stroke({ id: 'other', peer: 'host', blockHash: 'h2' }));
+    s.add(stroke({ id: 'mine' }));
+    useAnnotations.getState().undoRemote('a.md', 'h1');
+    expect(useAnnotations.getState().strokes.map((k) => k.id)).toEqual(['r1', 'other', 'mine']);
+  });
+
+  it('clearRemote removes only remote strokes of that canvas', () => {
+    const s = useAnnotations.getState();
+    s.addRemote(stroke({ id: 'r1', peer: 'host' }));
+    s.addRemote(stroke({ id: 'other', peer: 'host', blockHash: 'h2' }));
+    s.add(stroke({ id: 'mine' }));
+    useAnnotations.getState().clearRemote('a.md', 'h1');
+    expect(useAnnotations.getState().strokes.map((k) => k.id)).toEqual(['other', 'mine']);
+  });
+});

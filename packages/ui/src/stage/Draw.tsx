@@ -5,6 +5,8 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { INK_GONE_MS, strokesFor, useAnnotations, type Stroke } from '../store/annotations.js';
 import { BRUSH_WIDTHS, INK_COLORS, useStage } from '../store/stage.js';
+import { useDocuments } from '../store/documents.js';
+import { liveRole } from '../share/live.js';
 
 export type ContentPoint = [number, number];
 
@@ -12,7 +14,8 @@ const round = (n: number) => Math.round(n * 100) / 100;
 const pathOf = (points: ContentPoint[]) =>
   points.map(([x, y], i) => `${i === 0 ? 'M' : 'L'}${x} ${y}`).join(' ');
 
-export function useDrawing(docPath: string, blockHash: string) {
+/** `share`: the canvas is in a share (not a draw board), so the host's strokes go to the relay. */
+export function useDrawing(docPath: string, blockHash: string, share = false) {
   const [current, setCurrent] = useState<ContentPoint[] | null>(null);
   const live = useRef<ContentPoint[] | null>(null);
 
@@ -42,7 +45,9 @@ export function useDrawing(docPath: string, blockHash: string) {
       createdAt: Date.now(),
     };
     useAnnotations.getState().add(stroke);
-  }, [docPath, blockHash]);
+    const docs = useDocuments.getState();
+    if (share && liveRole(docs.share) === 'host') docs.tell({ type: 'ink', stroke });
+  }, [docPath, blockHash, share]);
 
   return { current, start, move, end, drawing: live.current !== null };
 }

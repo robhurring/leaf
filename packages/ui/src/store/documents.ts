@@ -23,6 +23,8 @@ import type { DocumentSource, SourceStatus } from '../source/DocumentSource.js';
 import type { Heading } from '../render/headings.js';
 import { NAME_KEY } from '../share/path.js';
 import { liveRole } from '../share/live.js';
+import { usePointers } from '../share/pointers.js';
+import { useAnnotations } from './annotations.js';
 
 export type DocumentsState = {
   status: SourceStatus;
@@ -220,6 +222,19 @@ export const useDocuments = create<DocumentsState>((set, get) => {
           // No storage: the relay names us again next time.
         }
         return;
+      // The other peers' pointers, and the host's ink, on the canvases of a share.
+      case 'pointer':
+        usePointers.getState().move(msg.peer, msg.pointer);
+        return;
+      case 'ink':
+        useAnnotations.getState().addRemote({ ...msg.stroke, peer: 'host' });
+        return;
+      case 'inkUndo':
+        useAnnotations.getState().undoRemote(msg.docPath, msg.blockHash);
+        return;
+      case 'inkClear':
+        useAnnotations.getState().clearRemote(msg.docPath, msg.blockHash);
+        return;
       case 'shareStatus':
         set({ shareStatus: msg.state, shareReason: msg.reason ?? null });
         return;
@@ -358,6 +373,7 @@ export const useDocuments = create<DocumentsState>((set, get) => {
       stopPreferenceSync?.();
       stopPreferenceSync = null;
       source = null;
+      usePointers.getState().clear();
       set(initial());
     },
   };
