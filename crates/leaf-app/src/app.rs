@@ -51,6 +51,8 @@ pub(crate) struct AppState {
     /// The system clipboard, held once a Share link is copied (on X11 the copy lives
     /// only as long as this does).
     pub(crate) clipboard: Mutex<Option<arboard::Clipboard>>,
+    /// Each tab's open slide and canvas, by tab label, for a share that starts later.
+    pub(crate) presentation: Mutex<HashMap<String, crate::tabbed_share::Presentation>>,
 }
 
 /// How long after the last move or resize the window places are written.
@@ -622,6 +624,7 @@ pub fn run(config: Config, link: Option<String>, welcome: bool) -> i32 {
                 recent: Mutex::new(RecentShares::new(std::time::Duration::from_secs(60))),
                 name: leaf_app::sharing::host_name(&std::env::vars().collect()),
                 clipboard: Mutex::new(None),
+                presentation: Mutex::new(HashMap::new()),
             });
             // The tabs open at the last quit come back first (when asked for), then
             // what this launch names opens among them.

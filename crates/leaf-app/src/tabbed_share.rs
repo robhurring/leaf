@@ -11,7 +11,7 @@ use crate::app::AppState;
 use crate::tabbed;
 use leaf_app::sharing::{self, HostOptions, LinkStatus, ShareHandle, StartError};
 use leaf_protocol::relay::{Peer, Resume};
-use leaf_protocol::{ClientMessage, ShareMode};
+use leaf_protocol::{ClientMessage, ShareMode, Slide, StageRef};
 
 /// What the title row shows of a tab's share.
 #[derive(Serialize, Clone, Debug, PartialEq)]
@@ -172,6 +172,7 @@ pub fn menu_action(id: &str) -> Option<ShareAction> {
 /// The tab's tab closed: let go of its share without ending it, and remember it.
 pub fn release(app: &AppHandle, tab: &str) {
     let state = app.state::<AppState>();
+    state.presentation.lock().unwrap().remove(tab);
     let handle = state.shares.lock().unwrap().remove(tab);
     let (Some(h), Some(root)) = (handle, state.windows.opened(tab)) else {
         return;
@@ -292,6 +293,14 @@ async fn start_tab(
         shares.insert(tab.to_string(), handle);
         share
     };
+    // Announce what the tab already has open (taking `presentation` with `shares` released).
+    let known = state.presentation.lock().unwrap().get(tab).cloned();
+    if let Some(p) = known.filter(|p| p.slide.is_some() || p.stage.is_some())
+        && let Some(h) = state.shares.lock().unwrap().get(tab)
+    {
+        h.set_slide(p.slide);
+        h.set_stage(p.stage);
+    }
     tabbed::changed(app);
     Ok(share)
 }
@@ -310,9 +319,43 @@ pub fn host_bound(msg: &ClientMessage) -> bool {
     )
 }
 
-/// Hands a host-bound `msg` from `tab` to its share; a tab that isn't shared drops it.
+/// The slide and canvas a tab has open, remembered whether or not it is shared so a
+/// share that starts later can announce them at once.
+#[derive(Default, Debug, Clone, PartialEq)]
+pub struct Presentation {
+    pub slide: Option<Slide>,
+    pub stage: Option<StageRef>,
+}
+
+/// Updates `p` from a `Slide` or `Stage` message (`None` clears); returns whether
+/// anything changed. Other messages leave it alone.
+pub fn remember(p: &mut Presentation, msg: &ClientMessage) -> bool {
+    match msg {
+        ClientMessage::Slide { slide } if *slide != p.slide => {
+            p.slide = slide.clone();
+            true
+        }
+        ClientMessage::Stage { stage } if *stage != p.stage => {
+            p.stage = stage.clone();
+            true
+        }
+        _ => false,
+    }
+}
+
+/// Hands a host-bound `msg` from `tab` to its share; a tab that isn't shared only has
+/// its slide and canvas remembered.
 pub fn from_host_tab(app: &AppHandle, tab: &str, msg: ClientMessage) {
     let state = app.state::<AppState>();
+    remember(
+        state
+            .presentation
+            .lock()
+            .unwrap()
+            .entry(tab.to_string())
+            .or_default(),
+        &msg,
+    );
     let shares = state.shares.lock().unwrap();
     let Some(handle) = shares.get(tab) else {
         return;
@@ -548,6 +591,26 @@ pub fn on_menu(app: &AppHandle, id: &str) -> bool {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn a_tabs_slide_and_canvas_are_remembered_from_its_messages() {
+        let msg = |raw: &str| serde_json::from_str::<ClientMessage>(raw).unwrap();
+        let mut p = Presentation::default();
+        let slide = msg(r#"{"type":"slide","slide":{"path":"a.md","index":2}}"#);
+        assert!(remember(&mut p, &slide));
+        assert_eq!(p.slide.as_ref().map(|s| s.index), Some(2));
+        assert!(!remember(&mut p, &slide), "the same slide is no change");
+
+        let stage = msg(r#"{"type":"stage","stage":{"docPath":"a.md","blockHash":"h"}}"#);
+        assert!(remember(&mut p, &stage));
+        assert!(p.stage.is_some());
+
+        assert!(!remember(&mut p, &msg(r#"{"type":"pointer"}"#)));
+        assert!(p.slide.is_some() && p.stage.is_some());
+
+        assert!(remember(&mut p, &msg(r#"{"type":"stage"}"#)));
+        assert!(p.stage.is_none() && p.slide.is_some());
+    }
 
     #[test]
     fn only_the_hosts_presentation_messages_go_to_its_share() {
