@@ -496,10 +496,26 @@ async fn the_host_hears_where_viewers_are_and_viewers_hear_the_hosts_slide() {
     .expect("the viewer hears the slide");
     assert_eq!(m["slide"]["path"], "deck.md");
     h.end();
+    // The share is over: the tab's last word is a presence with nobody in it.
+    let last = tokio::time::timeout(WAIT, async {
+        let mut last = None;
+        while let Some(m) = inbox.recv().await {
+            last = Some(m);
+        }
+        last
+    })
+    .await
+    .expect("the inbox closes when the share ends");
+    match last {
+        Some(ServerMessage::Presence { viewers, you, .. }) => {
+            assert!(viewers.is_empty(), "{viewers:?}");
+            assert_eq!(you, "host");
+        }
+        other => panic!("the last message is an empty presence, not {other:?}"),
+    }
     r.stop().await;
 }
 
-/// Makes `root` a git repository with everything in it committed.
 fn stroke_sticky(id: &str, doc: &str, block: &str) -> Stroke {
     Stroke {
         id: id.into(),
@@ -572,6 +588,7 @@ async fn pointers_and_ink_cross_the_relay_both_ways() {
     r.stop().await;
 }
 
+/// Makes `root` a git repository with everything in it committed.
 fn commit_all(root: &std::path::Path) {
     let git = |args: &[&str]| {
         let st = std::process::Command::new("git")

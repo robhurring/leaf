@@ -673,14 +673,8 @@ impl Link {
                 }
             }
             RelayToHost::Presence { viewers } => {
-                let host = Peer {
-                    id: HOST_ID.into(),
-                    name: self.opts.name.clone(),
-                    color: color_for(&self.opts.name),
-                    path: None,
-                };
                 let _ = self.inbox_tx.send(ServerMessage::Presence {
-                    host,
+                    host: self.host_peer(),
                     host_path: self.path.clone(),
                     viewers,
                     you: HOST_ID.into(),
@@ -697,6 +691,16 @@ impl Link {
                 });
             }
             RelayToHost::Shared { .. } | RelayToHost::Ping | RelayToHost::Error { .. } => {}
+        }
+    }
+
+    /// The host as its own tab sees it in presence.
+    fn host_peer(&self) -> Peer {
+        Peer {
+            id: HOST_ID.into(),
+            name: self.opts.name.clone(),
+            color: color_for(&self.opts.name),
+            path: None,
         }
     }
 
@@ -832,6 +836,17 @@ impl Link {
             self.drop_viewer(&id);
         }
         self.publish_viewers();
+        // The host's tab hears presence only from here: tell it nobody is left, or it
+        // keeps the last viewers' avatars after the share ends.
+        let _ = self.inbox_tx.send(ServerMessage::Presence {
+            host: self.host_peer(),
+            host_path: None,
+            viewers: Vec::new(),
+            you: HOST_ID.into(),
+            slide: None,
+            stage: None,
+            in_reply_to: None,
+        });
         let _ = self.status_tx.send(LinkStatus::Ended);
     }
 }
@@ -1097,13 +1112,36 @@ mod tests {
                 index: 1,
             })
         };
+        let stroke = || Stroke {
+            id: "host:1".into(),
+            doc_path: "a.mmd".into(),
+            block_hash: "h".into(),
+            points: vec![[0.0, 0.0], [1.0, 1.0]],
+            color: "red".into(),
+            width: 2.0,
+            sticky: true,
+            created_at: 0.0,
+        };
         let (quiet, mut rx) = ShareHandle::for_test(false);
         quiet.set_slide(slide());
         quiet.set_stage(None);
+        quiet.pointer(Some(PointerAt {
+            doc_path: "a.mmd".into(),
+            block_hash: "h".into(),
+            x: 1.0,
+            y: 2.0,
+        }));
+        quiet.ink(stroke());
+        quiet.ink_undo("a.mmd".into(), "h".into());
+        quiet.ink_clear("a.mmd".into(), "h".into());
         assert!(rx.try_recv().is_err(), "nothing is sent");
+        assert!(quiet.pointer.borrow().is_none(), "no pointer is pending");
         let (loud, mut rx) = ShareHandle::for_test(true);
         loud.set_slide(slide());
         assert!(matches!(rx.try_recv(), Ok(Cmd::Slide(Some(_)))));
+        loud.ink(stroke());
+        assert!(matches!(rx.try_recv(), Ok(Cmd::Ink(s)) if s.id == "host:1"));
+        assert!(rx.try_recv().is_err(), "one command per stroke");
     }
 
     #[test]
