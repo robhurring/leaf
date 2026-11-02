@@ -9,12 +9,12 @@
 use std::collections::{HashMap, VecDeque};
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::{Arc, Mutex, MutexGuard};
-use std::time::Duration;
+use std::time::{Duration, Instant};
 
 use axum::body::Bytes;
 use axum::extract::ws::{CloseFrame, Message};
 use leaf_protocol::relay::{Peer, RelayToHost, Resume, ShareInfo, ShareMode};
-use leaf_protocol::{ServerMessage, ShareState, Slide, StageRef};
+use leaf_protocol::{PointerAt, ServerMessage, ShareState, Slide, StageRef, Stroke};
 use serde_json::Value;
 use tokio::sync::mpsc::error::TrySendError;
 use tokio::sync::mpsc::{self, Sender};
@@ -94,6 +94,19 @@ fn offer(tx: &Sender<Message>, m: Message) -> bool {
     !matches!(tx.try_send(m), Err(TrySendError::Full(_)))
 }
 
+/// Queues `m` for a viewer who can do without it (a pointer, a stroke): when the queue is
+/// full it is dropped, and the viewer is neither marked behind nor dropped.
+fn offer_drop(tx: &Sender<Message>, m: Message) {
+    let _ = tx.try_send(m);
+}
+
+/// Most canvases whose sticky strokes a share keeps; the oldest canvas goes first.
+pub const MAX_STICKY_CANVASES: usize = 50;
+/// Most sticky strokes kept per canvas; the oldest stroke goes first.
+pub const MAX_STICKY_STROKES: usize = 200;
+/// A viewer's pointer frames closer together than this are dropped (twenty a second).
+pub const POINTER_MIN_GAP: Duration = Duration::from_millis(50);
+
 /// Why a host's `share` was refused: the `RelayToHost::Error` to send before closing.
 pub struct Refused {
     pub code: &'static str,
@@ -171,6 +184,12 @@ pub struct Share {
     slide: Option<Slide>,
     /// The block open on the host's canvas.
     stage: Option<StageRef>,
+    /// The host's sticky strokes by `(doc_path, block_hash)`, for viewers who arrive later.
+    sticky: HashMap<(String, String), VecDeque<Stroke>>,
+    /// The canvases in `sticky`, oldest first.
+    sticky_order: VecDeque<(String, String)>,
+    /// When each viewer's last pointer frame was let through.
+    last_pointer_at: HashMap<String, Instant>,
     grace_timer: Option<JoinHandle<()>>,
     /// Raw fetches waiting on the host, by `req`.
     fetches: HashMap<u32, Fetch>,
@@ -208,6 +227,53 @@ impl Share {
             && !offer(tx, text(msg))
         {
             self.host_full = true;
+        }
+    }
+
+    /// Sends `msg` to the viewers on document `path` (every viewer when `None`), except
+    /// `skip`, dropping it for any whose queue is full.
+    fn to_viewers_on(&self, path: Option<&str>, skip: Option<&str>, msg: &ServerMessage) {
+        let m = text(msg);
+        for (id, v) in &self.viewers {
+            let there = path.is_none_or(|p| v.peer.path.as_deref() == Some(p));
+            if there && skip != Some(id.as_str()) {
+                offer_drop(&v.tx, m.clone());
+            }
+        }
+    }
+
+    /// Keeps a sticky stroke, dropping the canvas's oldest stroke, or the oldest canvas,
+    /// when over the bounds.
+    fn keep(&mut self, stroke: Stroke) {
+        let key = (stroke.doc_path.clone(), stroke.block_hash.clone());
+        if !self.sticky.contains_key(&key) {
+            if self.sticky_order.len() == MAX_STICKY_CANVASES
+                && let Some(oldest) = self.sticky_order.pop_front()
+            {
+                self.sticky.remove(&oldest);
+            }
+            self.sticky_order.push_back(key.clone());
+        }
+        let strokes = self.sticky.entry(key).or_default();
+        if strokes.len() == MAX_STICKY_STROKES {
+            strokes.pop_front();
+        }
+        strokes.push_back(stroke);
+    }
+
+    /// Sends one viewer the kept strokes of every canvas on document `path`.
+    fn send_kept(&self, viewer: &str, path: &str) {
+        let Some(v) = self.viewers.get(viewer) else {
+            return;
+        };
+        for key in self.sticky_order.iter().filter(|(doc, _)| doc == path) {
+            for stroke in self.sticky.get(key).into_iter().flatten() {
+                let m = ServerMessage::Ink {
+                    stroke: stroke.clone(),
+                    in_reply_to: None,
+                };
+                offer_drop(&v.tx, text(&m));
+            }
         }
     }
 
@@ -478,6 +544,9 @@ impl Relay {
                         host_path: None,
                         slide: None,
                         stage: None,
+                        sticky: HashMap::new(),
+                        sticky_order: VecDeque::new(),
+                        last_pointer_at: HashMap::new(),
                         grace_timer: None,
                         fetches: HashMap::new(),
                         next_req: 1,
@@ -578,6 +647,76 @@ impl Relay {
             share.stage = stage;
             let full = share.presence();
             self.settle(id, share, full);
+        }
+    }
+
+    /// The host's `pointer`: shown to the viewers on its document, or to all when it is gone.
+    pub fn pointer(self: &Arc<Self>, id: &str, conn: u64, pointer: Option<PointerAt>) {
+        let mut shares = self.lock();
+        if let Some(share) = shares.get_mut(id).filter(|s| s.host_conn == conn) {
+            let doc = pointer.as_ref().map(|p| p.doc_path.clone());
+            share.to_viewers_on(
+                doc.as_deref(),
+                None,
+                &ServerMessage::Pointer {
+                    peer: HOST_ID.to_string(),
+                    pointer,
+                    in_reply_to: None,
+                },
+            );
+        }
+    }
+
+    /// The host's `ink`: a stroke for the viewers on its document; kept when sticky.
+    pub fn ink(self: &Arc<Self>, id: &str, conn: u64, stroke: Stroke) {
+        let mut shares = self.lock();
+        if let Some(share) = shares.get_mut(id).filter(|s| s.host_conn == conn) {
+            share.to_viewers_on(
+                Some(&stroke.doc_path),
+                None,
+                &ServerMessage::Ink {
+                    stroke: stroke.clone(),
+                    in_reply_to: None,
+                },
+            );
+            if stroke.sticky {
+                share.keep(stroke);
+            }
+        }
+    }
+
+    /// The host's `inkUndo`: the canvas's last kept stroke goes; viewers on it are told.
+    pub fn ink_undo(self: &Arc<Self>, id: &str, conn: u64, doc_path: String, block_hash: String) {
+        let mut shares = self.lock();
+        if let Some(share) = shares.get_mut(id).filter(|s| s.host_conn == conn) {
+            if let Some(strokes) = share
+                .sticky
+                .get_mut(&(doc_path.clone(), block_hash.clone()))
+            {
+                strokes.pop_back();
+            }
+            let m = ServerMessage::InkUndo {
+                doc_path: doc_path.clone(),
+                block_hash,
+                in_reply_to: None,
+            };
+            share.to_viewers_on(Some(&doc_path), None, &m);
+        }
+    }
+
+    /// The host's `inkClear`: the canvas's kept strokes go; viewers on it are told.
+    pub fn ink_clear(self: &Arc<Self>, id: &str, conn: u64, doc_path: String, block_hash: String) {
+        let mut shares = self.lock();
+        if let Some(share) = shares.get_mut(id).filter(|s| s.host_conn == conn) {
+            let key = (doc_path.clone(), block_hash.clone());
+            share.sticky.remove(&key);
+            share.sticky_order.retain(|k| *k != key);
+            let m = ServerMessage::InkClear {
+                doc_path: doc_path.clone(),
+                block_hash,
+                in_reply_to: None,
+            };
+            share.to_viewers_on(Some(&doc_path), None, &m);
         }
     }
 
@@ -683,10 +822,15 @@ impl Relay {
                     .and_then(Value::as_str)
                     .and_then(clean_share_path);
                 if let (Some(at), Some(v)) = (at, share.viewers.get_mut(viewer)) {
-                    v.peer.path = Some(at);
+                    v.peer.path = Some(at.clone());
                     let full = share.presence();
+                    share.send_kept(viewer, &at);
                     self.settle(id, share, full);
                 }
+                return;
+            }
+            if msg.get("type").and_then(Value::as_str) == Some("pointer") {
+                self.viewer_pointer(id, share, viewer, &msg);
                 return;
             }
             share.for_host(
@@ -700,6 +844,51 @@ impl Relay {
         }
     }
 
+    /// A viewer's `pointer`: thinned to one frame per `POINTER_MIN_GAP`, then shown to the
+    /// other viewers on its document and to the host. Never sent back to its sender.
+    fn viewer_pointer(self: &Arc<Self>, id: &str, share: &mut Share, viewer: &str, msg: &Value) {
+        let pointer = match msg.get("pointer") {
+            None | Some(Value::Null) => None,
+            Some(p) => match serde_json::from_value::<PointerAt>(p.clone()) {
+                Ok(p) => Some(p),
+                Err(_) => return,
+            },
+        };
+        // A gone pointer always goes through, or it would linger on the others' screens.
+        if pointer.is_some() {
+            let now = Instant::now();
+            if share
+                .last_pointer_at
+                .get(viewer)
+                .is_some_and(|t| now.duration_since(*t) < POINTER_MIN_GAP)
+            {
+                return;
+            }
+            share
+                .last_pointer_at
+                .retain(|v, _| share.viewers.contains_key(v));
+            share.last_pointer_at.insert(viewer.to_string(), now);
+        }
+        let doc = pointer.as_ref().map(|p| p.doc_path.clone());
+        share.to_viewers_on(
+            doc.as_deref(),
+            Some(viewer),
+            &ServerMessage::Pointer {
+                peer: viewer.to_string(),
+                pointer: pointer.clone(),
+                in_reply_to: None,
+            },
+        );
+        share.for_host(
+            viewer,
+            &RelayToHost::Pointer {
+                viewer: viewer.to_string(),
+                pointer,
+            },
+        );
+        self.settle(id, share, Vec::new());
+    }
+
     /// A viewer's socket closed. Nothing to do when it was already dropped or the share ended.
     pub fn viewer_left(self: &Arc<Self>, id: &str, viewer: &str) {
         let mut shares = self.lock();
@@ -707,6 +896,7 @@ impl Relay {
             && share.viewers.contains_key(viewer)
         {
             share.viewers.remove(viewer);
+            share.last_pointer_at.remove(viewer);
             share.for_host(
                 viewer,
                 &RelayToHost::Left {
@@ -993,6 +1183,213 @@ mod tests {
         let p = payload(&late.try_recv().unwrap());
         assert!(p["slide"].is_null());
         assert_eq!(p["stage"]["blockHash"], "h");
+        r.shutdown();
+    }
+
+    fn at(doc: &str, hash: &str) -> PointerAt {
+        PointerAt {
+            doc_path: doc.into(),
+            block_hash: hash.into(),
+            x: 1.0,
+            y: 2.0,
+        }
+    }
+
+    fn stroke(id: &str, doc: &str, hash: &str, sticky: bool) -> Stroke {
+        Stroke {
+            id: id.into(),
+            doc_path: doc.into(),
+            block_hash: hash.into(),
+            points: vec![[0.0, 0.0], [1.0, 1.0]],
+            color: "red".into(),
+            width: 2.0,
+            sticky,
+            created_at: 0.0,
+        }
+    }
+
+    /// `crowd()` with Ann at `a.mmd` and Bob at `b.md`, every queue drained again.
+    async fn placed() -> (
+        Arc<Relay>,
+        String,
+        (String, mpsc::Receiver<Message>),
+        (String, mpsc::Receiver<Message>),
+        mpsc::Receiver<Message>,
+    ) {
+        let (r, id, (ann, mut arx), (bob, mut brx), mut hrx) = crowd().await;
+        r.from_viewer(&id, &ann, json!({"type": "at", "path": "a.mmd"}));
+        r.from_viewer(&id, &bob, json!({"type": "at", "path": "b.md"}));
+        while arx.try_recv().is_ok() {}
+        while brx.try_recv().is_ok() {}
+        while hrx.try_recv().is_ok() {}
+        (r, id, (ann, arx), (bob, brx), hrx)
+    }
+
+    #[tokio::test]
+    async fn the_hosts_pointer_reaches_only_viewers_on_that_document() {
+        let (r, id, (_ann, mut arx), (_bob, mut brx), _hrx) = placed().await;
+        r.pointer(&id, 1, Some(at("a.mmd", "h")));
+        let p = payload(&arx.try_recv().unwrap());
+        assert_eq!(p["type"], "pointer");
+        assert_eq!(p["peer"], "host");
+        assert_eq!(p["pointer"]["docPath"], "a.mmd");
+        assert!(brx.try_recv().is_err());
+        r.pointer(&id, 1, None);
+        for rx in [&mut arx, &mut brx] {
+            let p = payload(&rx.try_recv().unwrap());
+            assert_eq!(p["type"], "pointer");
+            assert!(p["pointer"].is_null());
+        }
+        r.shutdown();
+    }
+
+    #[tokio::test]
+    async fn a_viewers_pointer_reaches_the_others_on_the_document_and_the_host() {
+        let (r, id, (ann, mut arx), (_bob, mut brx), mut hrx) = placed().await;
+        let (tx, mut crx) = mpsc::channel(QUEUE_FRAMES);
+        r.join(&id, Some("Cy".into()), json!({"type": "hello"}), tx)
+            .unwrap();
+        let cy = "v3";
+        r.from_viewer(&id, cy, json!({"type": "at", "path": "a.mmd"}));
+        while arx.try_recv().is_ok() {}
+        while brx.try_recv().is_ok() {}
+        while crx.try_recv().is_ok() {}
+        while hrx.try_recv().is_ok() {}
+        r.from_viewer(
+            &id,
+            &ann,
+            json!({"type": "pointer", "pointer": {"docPath": "a.mmd", "blockHash": "h", "x": 1.0, "y": 2.0}}),
+        );
+        let p = payload(&crx.try_recv().unwrap());
+        assert_eq!(p["type"], "pointer");
+        assert_eq!(p["peer"], ann);
+        assert!(brx.try_recv().is_err());
+        assert!(arx.try_recv().is_err(), "the sender never hears itself");
+        let p = payload(&hrx.try_recv().unwrap());
+        assert_eq!(p["type"], "pointer");
+        assert_eq!(p["viewer"], ann);
+        assert_eq!(p["pointer"]["blockHash"], "h");
+        assert!(hrx.try_recv().is_err(), "not forwarded as a viewer message");
+        r.shutdown();
+    }
+
+    #[tokio::test]
+    async fn pointer_frames_are_dropped_not_queued_when_a_viewer_is_full() {
+        let (r, id, _ann, _bob, _hrx) = placed().await;
+        let (tx, mut full) = mpsc::channel(1);
+        let cy = r
+            .join(&id, Some("Cy".into()), json!({"type": "hello"}), tx)
+            .unwrap();
+        // Cy's single slot holds presence; a pointer finds no room.
+        r.pointer(&id, 1, None);
+        assert_eq!(full.try_recv().map(|m| kind(&m)).unwrap(), "presence");
+        assert!(
+            full.try_recv().is_err(),
+            "the pointer was dropped, not queued"
+        );
+        r.pointer(&id, 1, None);
+        let shares = r.lock();
+        let share = shares.get(&id).unwrap();
+        assert!(share.viewers.contains_key(&cy), "still a viewer");
+        assert!(!share.host_full);
+        drop(shares);
+        r.shutdown();
+    }
+
+    #[tokio::test]
+    async fn pointers_faster_than_twenty_a_second_are_thinned() {
+        let (r, id, (ann, _arx), _bob, mut hrx) = placed().await;
+        let frame = json!({"type": "pointer", "pointer": {"docPath": "a.mmd", "blockHash": "h", "x": 1.0, "y": 2.0}});
+        for _ in 0..10 {
+            r.from_viewer(&id, &ann, frame.clone());
+        }
+        assert_eq!(payload(&hrx.try_recv().unwrap())["type"], "pointer");
+        assert!(hrx.try_recv().is_err());
+        tokio::time::sleep(Duration::from_millis(60)).await;
+        r.from_viewer(&id, &ann, frame);
+        assert_eq!(payload(&hrx.try_recv().unwrap())["type"], "pointer");
+        assert!(hrx.try_recv().is_err());
+        r.shutdown();
+    }
+
+    #[tokio::test]
+    async fn sticky_ink_is_kept_per_canvas_and_sent_to_a_viewer_arriving_on_the_document() {
+        let (r, id, (_ann, mut arx), (bob, mut brx), _hrx) = placed().await;
+        r.ink(&id, 1, stroke("s1", "a.mmd", "h", true));
+        r.ink(&id, 1, stroke("f1", "a.mmd", "h", false));
+        let p = payload(&arx.try_recv().unwrap());
+        assert_eq!(p["type"], "ink");
+        assert_eq!(p["stroke"]["id"], "s1");
+        assert_eq!(payload(&arx.try_recv().unwrap())["stroke"]["id"], "f1");
+        assert!(brx.try_recv().is_err());
+        r.from_viewer(&id, &bob, json!({"type": "at", "path": "a.mmd"}));
+        assert_eq!(kind(&brx.try_recv().unwrap()), "presence");
+        let p = payload(&brx.try_recv().unwrap());
+        assert_eq!(p["type"], "ink");
+        assert_eq!(p["stroke"]["id"], "s1");
+        assert!(brx.try_recv().is_err(), "the fading stroke was not kept");
+        r.shutdown();
+    }
+
+    #[tokio::test]
+    async fn sticky_ink_is_bounded() {
+        let (r, id, _ann, (bob, mut brx), _hrx) = placed().await;
+        for i in 0..=MAX_STICKY_STROKES {
+            r.ink(&id, 1, stroke(&format!("s{i}"), "a.mmd", "h", true));
+        }
+        r.from_viewer(&id, &bob, json!({"type": "at", "path": "a.mmd"}));
+        let ids: Vec<String> = std::iter::from_fn(|| brx.try_recv().ok())
+            .filter(|m| kind(m) == "ink")
+            .map(|m| payload(&m)["stroke"]["id"].as_str().unwrap().to_string())
+            .collect();
+        assert_eq!(ids.len(), MAX_STICKY_STROKES);
+        assert!(!ids.contains(&"s0".to_string()));
+        assert!(ids.contains(&"s1".to_string()));
+
+        for i in 0..=MAX_STICKY_CANVASES {
+            r.ink(
+                &id,
+                1,
+                stroke(&format!("c{i}"), "c.mmd", &format!("h{i}"), true),
+            );
+        }
+        r.from_viewer(&id, &bob, json!({"type": "at", "path": "b.md"}));
+        while brx.try_recv().is_ok() {}
+        r.from_viewer(&id, &bob, json!({"type": "at", "path": "c.mmd"}));
+        let ids: Vec<String> = std::iter::from_fn(|| brx.try_recv().ok())
+            .filter(|m| kind(m) == "ink")
+            .map(|m| payload(&m)["stroke"]["id"].as_str().unwrap().to_string())
+            .collect();
+        assert_eq!(ids.len(), MAX_STICKY_CANVASES);
+        assert!(!ids.contains(&"c0".to_string()));
+        assert!(ids.contains(&"c1".to_string()));
+        r.shutdown();
+    }
+
+    #[tokio::test]
+    async fn ink_undo_and_clear_trim_the_kept_strokes_and_reach_viewers() {
+        let (r, id, (_ann, mut arx), (bob, mut brx), _hrx) = placed().await;
+        r.ink(&id, 1, stroke("s1", "a.mmd", "h", true));
+        r.ink(&id, 1, stroke("s2", "a.mmd", "h", true));
+        while arx.try_recv().is_ok() {}
+        r.ink_undo(&id, 1, "a.mmd".into(), "h".into());
+        let p = payload(&arx.try_recv().unwrap());
+        assert_eq!(p["type"], "inkUndo");
+        assert_eq!(p["blockHash"], "h");
+        assert!(brx.try_recv().is_err());
+        r.from_viewer(&id, &bob, json!({"type": "at", "path": "a.mmd"}));
+        assert_eq!(kind(&brx.try_recv().unwrap()), "presence");
+        assert_eq!(payload(&brx.try_recv().unwrap())["stroke"]["id"], "s1");
+        assert!(brx.try_recv().is_err());
+        while arx.try_recv().is_ok() {}
+        r.ink_clear(&id, 1, "a.mmd".into(), "h".into());
+        assert_eq!(kind(&arx.try_recv().unwrap()), "inkClear");
+        r.from_viewer(&id, &bob, json!({"type": "at", "path": "b.md"}));
+        r.from_viewer(&id, &bob, json!({"type": "at", "path": "a.mmd"}));
+        let kinds: Vec<String> = std::iter::from_fn(|| brx.try_recv().ok())
+            .map(|m| kind(&m))
+            .collect();
+        assert!(!kinds.contains(&"ink".to_string()));
         r.shutdown();
     }
 
