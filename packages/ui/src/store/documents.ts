@@ -148,6 +148,8 @@ export const useDocuments = create<DocumentsState>((set, get) => {
         if (get().path !== null) {
           send({ type: 'subscribe', path: get().path! });
           read(get().path!);
+          // A reconnect gives the relay a fresh viewer id; tell it where this one is.
+          if (liveRole(get().share) === 'viewer') send({ type: 'at', path: get().path! });
         }
         return;
       case 'tree':

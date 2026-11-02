@@ -76,7 +76,17 @@ describe('the title row’s Share button', () => {
   it('shows Sharing and how many are watching while the tab is shared', async () => {
     await mount([tab('t1', true, true)], LIVE);
     const btn = within(bar()).getByRole('button', { name: 'Sharing' });
-    expect(within(btn).getByText('1')).toBeTruthy();
+    expect(within(btn).getByRole('img', { name: 'Ada' })).toBeTruthy();
+    expect(within(btn).queryByText('1')).toBeNull();
+  });
+
+  it('shows three avatars and how many more when a crowd is watching', async () => {
+    const names = ['Ada', 'Bob', 'Cy', 'Di', 'Ed'];
+    const crowd = { ...LIVE, viewers: names.map((n) => ({ id: n, name: n, color: '#e5484d' })) };
+    await mount([tab('t1', true, true)], crowd);
+    const btn = within(bar()).getByRole('button', { name: 'Sharing' });
+    expect(within(btn).getAllByRole('img')).toHaveLength(3);
+    expect(within(btn).getByText('+2').getAttribute('title')).toBe('Di, Ed');
   });
 
   it('hands the click to the app, which answers with its own menu', async () => {

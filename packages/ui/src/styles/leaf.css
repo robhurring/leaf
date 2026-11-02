@@ -3483,6 +3483,35 @@ html[data-tab] {
   background: var(--leaf-accent-soft);
 }
 
+/* ---------- avatars: who is reading what in a share ---------- */
+.leaf-avatar {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  justify-content: center;
+  border-radius: 50%;
+  color: #fff;
+  font: 600 9px/16px var(--leaf-font-ui);
+  box-shadow: 0 0 0 1.5px var(--leaf-surface);
+}
+.leaf-avatar-stack {
+  display: inline-flex;
+  align-items: center;
+}
+.leaf-avatar-stack > * + * {
+  margin-left: -4px;
+}
+.leaf-avatar-more {
+  padding-left: 6px;
+  color: var(--leaf-text-2);
+  font: 600 9px/16px var(--leaf-font-ui);
+}
+.leaf-row-peers {
+  display: inline-flex;
+  margin-left: auto;
+  padding-left: 6px;
+}
+
 /* ---------- the title row's Share button ---------- */
 .leaf-share-button {
   position: relative;
@@ -3492,19 +3521,6 @@ html[data-tab] {
 }
 .leaf-share-button[data-status='reconnecting'] {
   opacity: 0.6;
-}
-.leaf-share-badge {
-  position: absolute;
-  top: -2px;
-  right: -2px;
-  min-width: 14px;
-  height: 14px;
-  padding: 0 3px;
-  border-radius: 7px;
-  background: var(--leaf-accent);
-  color: var(--leaf-surface);
-  font: 600 9px/14px var(--leaf-font-ui);
-  text-align: center;
 }
 
 /* ---------- a share's viewer ---------- */

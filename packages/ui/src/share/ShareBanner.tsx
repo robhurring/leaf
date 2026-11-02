@@ -1,6 +1,7 @@
 // A share's viewer: a line above the document naming the host, who's here, and what the
 // host is reading; when the share ends, a notice in the document's place.
 import { useDocuments } from '../store/documents.js';
+import { AvatarStack } from './Avatar.js';
 
 const ENDED: Record<string, (host: string) => string> = {
   host: (host) => `${host} ended the share`,
@@ -34,7 +35,7 @@ export default function ShareBanner({ path, base, onOpen, ended }: ShareBannerPr
       </div>
     );
 
-  const count = presence?.viewers.length;
+  const here = presence?.viewers.filter((v) => v.id !== presence.you);
   const hostPath = presence?.hostPath;
   return (
     <div className="leaf-share-banner" role="region" aria-label="Share">
@@ -45,8 +46,8 @@ export default function ShareBanner({ path, base, onOpen, ended }: ShareBannerPr
         <>
           <span>
             {host}’s share · {share.id}
-            {count !== undefined && ` · ${count} here`}
           </span>
+          {here && <AvatarStack peers={here} />}
           {hostPath && hostPath !== path && (
             <a
               href={`${base}/${hostPath.split('/').map(encodeURIComponent).join('/')}`}

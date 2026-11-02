@@ -148,7 +148,7 @@ Or put `LEAF_RELAY_URL` in your `.env` or pass `--relay-url`. With a relay set, 
 - **End session**: stops sharing and disconnects everyone.
 - Under those, who is watching.
 
-The button shows how many are watching, and a shared tab wears a mark in the tab row.
+The button shows who is watching, and a shared tab wears a mark in the tab row. Everyone sees small avatars on the files others are reading, in the tree and on the Share button.
 
 What viewers can and can't do:
 

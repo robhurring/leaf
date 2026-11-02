@@ -8,6 +8,8 @@ import {
   Share,
   Sidebar,
 } from '../icons/index.js';
+import type { Peer } from '@leaf/protocol';
+import { AvatarStack } from '../share/Avatar.js';
 import type { SourceStatus } from '../source/DocumentSource.js';
 import type { Appearance, Theme } from '../store/ui.js';
 import { ConnectionDot } from './ConnectionDot.js';
@@ -56,7 +58,7 @@ export type TopBarProps = {
 /** What the Share button shows: the tab's share, and a check just after a link is copied. */
 export type ShareState = {
   status: 'idle' | 'live' | 'reconnecting' | 'ended';
-  viewers: number;
+  viewers: Peer[];
   copied?: boolean;
 };
 
@@ -76,7 +78,7 @@ export function ShareButton({ share, onClick }: { share: ShareState; onClick(): 
       onClick={onClick}
     >
       {share.copied ? <Check /> : <Share />}
-      {sharing && share.viewers > 0 && <span className="leaf-share-badge">{share.viewers}</span>}
+      {sharing && <AvatarStack peers={share.viewers} />}
     </button>
   );
 }

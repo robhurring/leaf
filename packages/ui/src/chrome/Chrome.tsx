@@ -105,7 +105,7 @@ export function Chrome({ bridge, fits }: { bridge: Bridge; fits?: (s: string) =>
         onAppearanceMenu={() => bridge.appearanceMenu()}
         onSearch={send('openPalette')}
         onTitle={send('scrollTop')}
-        share={share ? { status: share.status, viewers: share.viewers.length, copied } : undefined}
+        share={share ? { status: share.status, viewers: share.viewers, copied } : undefined}
         onShare={() => bridge.shareButton()}
         brand={only ? tabDragHandlers(bridge, only, 'mark') : undefined}
       />

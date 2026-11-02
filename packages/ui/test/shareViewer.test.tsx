@@ -54,16 +54,58 @@ describe('viewing a share', () => {
     await waitFor(() => expect(s.sent).toContainEqual({ type: 'at', path: 'docs/plan.md' }));
   });
 
-  it('the_banner_names_the_host_and_counts_viewers', async () => {
+  it('the_banner_names_the_host_and_shows_who_is_here', async () => {
     const s = await open();
     expect((await banner()).textContent).toContain('Rob’s share · brisk-otter-lantern');
-    expect((await banner()).textContent).not.toContain('here');
+    expect(within(await banner()).queryAllByRole('img')).toEqual([]);
     act(() => s.emit(presence()));
-    await waitFor(async () =>
-      expect((await banner()).textContent).toContain('Rob’s share · brisk-otter-lantern · 3 here'),
+    await waitFor(async () => expect(within(await banner()).getAllByRole('img')).toHaveLength(2));
+    const here = within(await banner());
+    expect(here.getByRole('img', { name: 'Ada' })).toBeTruthy();
+    expect(here.getByRole('img', { name: 'Linus' })).toBeTruthy();
+    expect(here.queryByRole('img', { name: 'Grace' })).toBeNull(); // never yourself
+    expect((await banner()).textContent).not.toContain('here');
+  });
+
+  it('shows who is on each file in the tree, and who is inside a closed folder', async () => {
+    const s = await open();
+    act(() =>
+      s.emit(
+        presence({
+          hostPath: 'docs/plan.md',
+          viewers: [
+            { ...viewer('v1', 'Ada'), path: 'README.md' },
+            { ...viewer('v2', 'Grace'), path: 'docs/guide.md' },
+          ],
+          you: 'v2',
+        }),
+      ),
     );
-    act(() => s.emit(presence({ viewers: [viewer('v2', 'Grace')] })));
-    await waitFor(async () => expect((await banner()).textContent).toMatch(/· 1 here$/));
+    const readme = await screen.findByRole('treeitem', { name: /README/ });
+    await waitFor(() => expect(within(readme).getByRole('img', { name: 'Ada' })).toBeTruthy());
+    expect(within(readme).getByRole('img', { name: 'Ada' }).textContent).toBe('A');
+    expect(within(readme).queryByRole('img', { name: 'Grace' })).toBeNull(); // never yourself
+    const docs = screen.getByRole('treeitem', { name: /^docs/ }); // collapsed
+    expect(within(docs).getByRole('img', { name: 'Rob' })).toBeTruthy();
+  });
+
+  it('says where it is again when a reconnect brings a new welcome', async () => {
+    const s = await open();
+    await waitFor(() => expect(s.sent).toContainEqual({ type: 'at', path: 'README.md' }));
+    act(() =>
+      s.emit({
+        type: 'welcome',
+        protocol: 1,
+        root: { kind: 'dir', name: 'x' },
+        config: {},
+        capabilities: { watch: true, write: false, collaborate: false },
+        participant: { id: 'local', name: 'You' },
+        share: SHARE,
+      }),
+    );
+    await waitFor(() =>
+      expect(s.sent.filter((m) => m.type === 'at' && m.path === 'README.md')).toHaveLength(2),
+    );
   });
 
   it('the_host_s_file_is_one_click_away', async () => {
