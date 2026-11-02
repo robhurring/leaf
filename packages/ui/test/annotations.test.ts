@@ -116,4 +116,14 @@ describe('ink from the relay', () => {
     useAnnotations.getState().clearRemote('a.md', 'h1');
     expect(useAnnotations.getState().strokes.map((k) => k.id)).toEqual(['other', 'mine']);
   });
+
+  it('clearRemoteFor removes every remote stroke of that document and nothing else', () => {
+    const s = useAnnotations.getState();
+    s.addRemote(stroke({ id: 'r1', peer: 'host' }));
+    s.addRemote(stroke({ id: 'r2', peer: 'host', blockHash: 'h2' }));
+    s.addRemote(stroke({ id: 'elsewhere', peer: 'host', docPath: 'b.md' }));
+    s.add(stroke({ id: 'mine' }));
+    useAnnotations.getState().clearRemoteFor('a.md');
+    expect(useAnnotations.getState().strokes.map((k) => k.id)).toEqual(['elsewhere', 'mine']);
+  });
 });

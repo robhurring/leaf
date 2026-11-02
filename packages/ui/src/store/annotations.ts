@@ -52,6 +52,8 @@ type State = {
   undoRemote(docPath: string, blockHash: string): void;
   /** Drops the block's strokes from the relay. */
   clearRemote(docPath: string, blockHash: string): void;
+  /** Drops every stroke from the relay on a document, before the relay sends its kept ones. */
+  clearRemoteFor(docPath: string): void;
   /** Drops non-sticky strokes older than INK_GONE_MS. Returns how many remain. */
   expire(now: number): number;
   /** Sticky strokes for `docPath` with a different block hash become stale (the diagram changed). */
@@ -90,6 +92,8 @@ export const useAnnotations = create<State>((set, get) => ({
           { strokes: [...s.strokes, { ...stroke, createdAt: Date.now() }] },
     ),
   clearRemote: (docPath, blockHash) => set((s) => dropAll(s.strokes, docPath, blockHash, true)),
+  clearRemoteFor: (docPath) =>
+    set((s) => ({ strokes: s.strokes.filter((k) => !(k.peer && k.docPath === docPath)) })),
   undoRemote: (docPath, blockHash) => set((s) => dropLast(s.strokes, docPath, blockHash, true)),
   expire: (now) => {
     set((s) => ({ strokes: s.strokes.filter((k) => k.sticky || now - k.createdAt < INK_GONE_MS) }));

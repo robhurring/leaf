@@ -259,3 +259,20 @@ describe('the host’s avatar on the block it has open', () => {
     await waitFor(() => expect(within(frame()).queryByRole('img', { name: 'Rob' })).toBeNull());
   });
 });
+
+describe('the host’s own tab', () => {
+  it('loses the viewers’ avatars when the share ends and its last presence has nobody', async () => {
+    history.replaceState(null, '', '/');
+    const s = scripted({ 'README.md': README, 'docs/plan.md': '# Plan\n' });
+    render(<Reader source={s.source} />);
+    await screen.findByRole('heading', { name: 'Title', level: 1 });
+    act(() =>
+      s.emit(presence({ you: 'host', viewers: [{ ...viewer('v1', 'Ada'), path: 'README.md' }] })),
+    );
+    const readme = await screen.findByRole('treeitem', { name: /README/ });
+    await waitFor(() => expect(within(readme).getByRole('img', { name: 'Ada' })).toBeTruthy());
+    act(() => s.emit(presence({ you: 'host', viewers: [] })));
+    await waitFor(() => expect(within(readme).queryByRole('img', { name: 'Ada' })).toBeNull());
+    expect(screen.queryAllByRole('img', { name: 'Ada' })).toEqual([]);
+  });
+});

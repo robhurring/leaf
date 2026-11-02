@@ -161,6 +161,20 @@ describe('pointers and ink on a shared canvas', () => {
     expect(useAnnotations.getState().strokes[0]!.peer).toBeUndefined();
   });
 
+  it('a viewer back on a document keeps only the host ink the relay sends again', async () => {
+    const s = await openFile('a.mmd', SHARE);
+    act(() => s.emit({ type: 'ink', stroke: hostStroke({ id: 'k1' }) }));
+    expect(inks()).toHaveLength(1);
+    // Away on another file, the host clears a.mmd; the viewer, not on it, never hears.
+    act(() => useDocuments.getState().open('note.md'));
+    act(() => useDocuments.getState().open('a.mmd'));
+    const remote = () => useAnnotations.getState().strokes.filter((k) => k.peer);
+    expect(remote()).toEqual([]);
+    await waitFor(() => expect(ofType(s, 'at').at(-1)).toEqual({ type: 'at', path: 'a.mmd' }));
+    act(() => s.emit({ type: 'ink', stroke: hostStroke({ id: 'k1' }) }));
+    expect(remote().map((k) => k.id)).toEqual(['k1']);
+  });
+
   it('a viewer sends its pointer, throttled, and gone on leave', async () => {
     const s = await openFile('a.mmd', SHARE);
     for (let i = 0; i < 10; i++)

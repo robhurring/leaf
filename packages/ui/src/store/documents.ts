@@ -115,6 +115,14 @@ const parentOf = (path: string) => (path.includes('/') ? path.slice(0, path.last
 export const useDocuments = create<DocumentsState>((set, get) => {
   const send = (msg: Parameters<DocumentSource['send']>[0]) => source?.send(msg);
 
+  // A viewer tells the relay it is on `path`. The relay sends the host's kept strokes for
+  // it again, and that is the whole truth: drop what this page had, which may hold strokes
+  // the host undid or cleared while the viewer was elsewhere and so never heard about.
+  const arrive = (path: string) => {
+    useAnnotations.getState().clearRemoteFor(path);
+    send({ type: 'at', path });
+  };
+
   const list = (dir: string) => send({ type: 'list', path: dir || undefined, id: nextId() });
 
   const read = (path: string) => {
@@ -151,7 +159,7 @@ export const useDocuments = create<DocumentsState>((set, get) => {
           send({ type: 'subscribe', path: get().path! });
           read(get().path!);
           // A reconnect gives the relay a fresh viewer id; tell it where this one is.
-          if (liveRole(get().share) === 'viewer') send({ type: 'at', path: get().path! });
+          if (liveRole(get().share) === 'viewer') arrive(get().path!);
         }
         return;
       case 'tree':
@@ -301,7 +309,7 @@ export const useDocuments = create<DocumentsState>((set, get) => {
       if (prev !== path) {
         send({ type: 'subscribe', path });
         // A viewer of a share tells the relay where it is, so the others can see.
-        if (liveRole(get().share) === 'viewer') send({ type: 'at', path });
+        if (liveRole(get().share) === 'viewer') arrive(path);
       }
       read(path);
     },
