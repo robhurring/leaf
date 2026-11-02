@@ -145,3 +145,42 @@ describe('a gated pane and its start timer', () => {
     expect(screen.queryByText(/didn.t start/)).toBeNull();
   });
 });
+
+describe('allowing a share for this session', () => {
+  const shareNamed = (id: string): ShareInfo => ({
+    ...SHARE,
+    id,
+    webUrl: `https://relay.test/s/${id}`,
+  });
+  const allow = () => screen.findByRole('button', { name: 'Allow for this session' });
+
+  it('runs every gated block in the document at once', async () => {
+    const two = DOC(fence(nb(H, 'first')) + '\n\n' + fence(nb(H, 'second')));
+    await open(two, shareNamed('allow-one'), 'allow-one.md');
+    expect((await screen.findAllByRole('button', { name: 'Run' })).length).toBe(2);
+    fireEvent.click((await screen.findAllByRole('button', { name: 'Allow for this session' }))[0]!);
+    expect((await screen.findAllByTitle('Output')).length).toBe(2);
+    expect(screen.queryByRole('button', { name: 'Run' })).toBeNull();
+  });
+
+  it('runs the blocks of other documents in the same share without asking', async () => {
+    const share = shareNamed('allow-two');
+    await open(NOTEBOOK, share, 'allow-two.md');
+    fireEvent.click(await allow());
+    expect(await screen.findByTitle('Output')).toBeTruthy();
+    cleanup();
+    await open(LIVE, share, 'allow-two.md');
+    expect(await screen.findByTitle('canvas animation')).toBeTruthy();
+    expect(document.querySelector('.leaf-run-gate')).toBeNull();
+  });
+
+  it('another share still asks', async () => {
+    await open(NOTEBOOK, shareNamed('allow-three'), 'allow-three.md');
+    fireEvent.click(await allow());
+    expect(await screen.findByTitle('Output')).toBeTruthy();
+    cleanup();
+    await open(NOTEBOOK, shareNamed('allow-other'), 'allow-three.md');
+    await run();
+    expect(frames().length).toBe(0);
+  });
+});

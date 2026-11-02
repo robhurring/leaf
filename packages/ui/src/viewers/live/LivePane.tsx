@@ -17,7 +17,7 @@ import { contentHash } from '../hash.js';
 import { useAppearance } from '../appearance.js';
 import { useStage } from '../../store/stage.js';
 import { useDocuments } from '../../store/documents.js';
-import { hasRun } from '../../share/ran.js';
+import { hasRun, shareAllowed } from '../../share/ran.js';
 import { Pause, Play, Restart, StepFrame } from '../../icons/index.js';
 import {
   buildSrcdoc,
@@ -56,13 +56,15 @@ export function LivePane(props: ViewerProps & { fill?: boolean }) {
   const kind = kindOf(file.path);
   const hash = contentHash(code);
   const theme = useAppearance(props.appearance);
-  const shared = useDocuments((s) => s.share !== null);
-  // In a share the frame doesn't exist until the viewer runs this block's code, so
-  // nothing can be late yet. The gate says when it has run (which re-renders the pane).
+  const shareId = useDocuments((s) => s.share?.id ?? null);
+  const shared = shareId !== null;
+  // In a share the frame doesn't exist until the viewer runs this block's code (or allows
+  // the share), so nothing can be late yet. The gate says when it has run (which
+  // re-renders the pane).
   const gateKey = `${docPath}:${hash}`;
   const [, setRunTick] = useState(0);
   const onRun = useCallback(() => setRunTick((n) => n + 1), []);
-  const waiting = shared && !hasRun(gateKey);
+  const waiting = shared && !hasRun(gateKey) && !shareAllowed(shareId);
 
   const frame = useRef<HTMLIFrameElement>(null);
   const [userPaused, setUserPaused] = useState(prefersReducedMotion);

@@ -2850,6 +2850,12 @@ html[data-resizing] .leaf-blame-resizer::after {
   color: var(--leaf-text-2);
   text-align: center;
 }
+.leaf-run-gate-actions {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  justify-content: center;
+}
 .leaf-live .leaf-run-gate {
   height: 100%;
 }

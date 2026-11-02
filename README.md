@@ -153,7 +153,7 @@ What viewers can and can't do:
 
 - They browse the tab's tree on their own: open other files in it without moving you, and the other way round.
 - It's read-only. Nothing they do changes your files.
-- Code runs only when they click Run: live blocks and notebook outputs in a share don't start by themselves.
+- Code runs only when they ask: live blocks and notebook outputs in a share don't start by themselves. **Run** runs one block; **Allow for this session** runs every block of the share until the page is closed (nothing is saved yet).
 - Files your ignore rules skip, and anything outside the tab's folder, stay private.
 
 Close the tab or the window by accident and you have 60 seconds (`LEAF_RELAY_GRACE`) to come back before the session ends for everyone; for those 60 seconds the Share menu offers **Resume sharing**.
