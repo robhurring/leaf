@@ -5,8 +5,8 @@
 //! No Tauri in here; the app holds the `ShareHandle`.
 
 use std::collections::HashMap;
-use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
 use futures_util::{SinkExt, StreamExt};
@@ -14,12 +14,16 @@ use leaf_core::engine::{Engine, SessionId};
 use leaf_protocol::relay::{
     CHUNK_BYTES, HostToRelay, Peer, RELAY_PROTOCOL, RelayToHost, ShareMode,
 };
-use leaf_protocol::{ClientMessage, ErrorCode, PROTOCOL_VERSION, RootInfo, ServerMessage};
+use leaf_protocol::{
+    ClientMessage, ErrorCode, PROTOCOL_VERSION, RootInfo, ServerMessage, Slide, StageRef,
+};
 use serde_json::{Value, json};
 use tokio::io::AsyncReadExt;
 use tokio::sync::{broadcast, mpsc, watch};
 use tokio::task::JoinHandle;
 use tokio_tungstenite::tungstenite::Message;
+
+use crate::relay::share::{HOST_ID, color_for};
 
 type Ws =
     tokio_tungstenite::WebSocketStream<tokio_tungstenite::MaybeTlsStream<tokio::net::TcpStream>>;
@@ -65,6 +69,8 @@ pub enum LinkStatus {
 
 enum Cmd {
     Path(Option<String>),
+    Slide(Option<Slide>),
+    Stage(Option<StageRef>),
     End,
 }
 
@@ -80,12 +86,41 @@ pub struct ShareHandle {
     cmds: mpsc::UnboundedSender<Cmd>,
     /// Viewers see git history (each file's last commit, blame). Off unless the host asks.
     git: Arc<AtomicBool>,
+    /// The relay announced the `presence` capability: slide and stage may be sent.
+    presence: Arc<AtomicBool>,
+    /// What the host's own tab should see (presence), taken once.
+    inbox: Mutex<Option<mpsc::UnboundedReceiver<ServerMessage>>>,
 }
 
 impl ShareHandle {
     /// What the host is reading now, for viewers' presence.
     pub fn set_path(&self, path: Option<String>) {
         let _ = self.cmds.send(Cmd::Path(path));
+    }
+
+    /// The slide the host is on, for viewers; silent when the relay can't take it.
+    pub fn set_slide(&self, slide: Option<Slide>) {
+        if self.presence_capable() {
+            let _ = self.cmds.send(Cmd::Slide(slide));
+        }
+    }
+
+    /// The canvas the host has open, for viewers; silent when the relay can't take it.
+    pub fn set_stage(&self, stage: Option<StageRef>) {
+        if self.presence_capable() {
+            let _ = self.cmds.send(Cmd::Stage(stage));
+        }
+    }
+
+    /// Whether the relay speaks presence (checked at start and after each resume).
+    pub fn presence_capable(&self) -> bool {
+        self.presence.load(Ordering::Relaxed)
+    }
+
+    /// The messages the host's own tab should see; there is one receiver, so only the
+    /// first call gets it.
+    pub fn take_inbox(&self) -> Option<mpsc::UnboundedReceiver<ServerMessage>> {
+        self.inbox.lock().ok()?.take()
     }
 
     /// Whether viewers see git history; applies to their next request.
@@ -144,6 +179,7 @@ struct Shared {
     web_url: String,
     app_url: String,
     viewers: Vec<Peer>,
+    capabilities: Vec<String>,
 }
 
 enum Refused {
@@ -193,7 +229,7 @@ async fn open_link(
             web_url,
             app_url,
             viewers,
-            ..
+            capabilities,
         }) => Ok((
             ws,
             Shared {
@@ -202,6 +238,7 @@ async fn open_link(
                 web_url,
                 app_url,
                 viewers,
+                capabilities,
             },
         )),
         Ok(RelayToHost::Error { code, message }) => {
@@ -250,6 +287,8 @@ pub async fn start_checked(opts: HostOptions) -> Result<ShareHandle, StartError>
     let (cmds, cmd_rx) = mpsc::unbounded_channel();
     let (out_tx, out_rx) = mpsc::channel(OUT_QUEUE);
     let git = Arc::new(AtomicBool::new(false));
+    let presence = Arc::new(AtomicBool::new(has_presence(&shared.capabilities)));
+    let (inbox_tx, inbox_rx) = mpsc::unbounded_channel();
     let handle = ShareHandle {
         id: shared.id.clone(),
         host_key: shared.host_key.clone(),
@@ -259,14 +298,20 @@ pub async fn start_checked(opts: HostOptions) -> Result<ShareHandle, StartError>
         status,
         cmds,
         git: git.clone(),
+        presence: presence.clone(),
+        inbox: Mutex::new(Some(inbox_rx)),
     };
     let link = Link {
         pushes: opts.engine.pushes(),
         opts,
         git,
+        presence,
+        inbox_tx,
         id: shared.id,
         host_key: shared.host_key,
         path: None,
+        slide: None,
+        stage: None,
         viewers: HashMap::new(),
         fetches: HashMap::new(),
         viewers_tx,
@@ -278,6 +323,10 @@ pub async fn start_checked(opts: HostOptions) -> Result<ShareHandle, StartError>
     };
     tokio::spawn(link.run(ws));
     Ok(handle)
+}
+
+fn has_presence(capabilities: &[String]) -> bool {
+    capabilities.iter().any(|c| c == "presence")
 }
 
 /// What goes out on the socket, queued by viewer and fetch tasks.
@@ -315,9 +364,15 @@ struct Link {
     opts: HostOptions,
     /// Shared with the handle: whether viewers see git history.
     git: Arc<AtomicBool>,
+    /// Shared with the handle: whether the relay takes slide and stage.
+    presence: Arc<AtomicBool>,
+    /// Presence for the host's own tab.
+    inbox_tx: mpsc::UnboundedSender<ServerMessage>,
     id: String,
     host_key: String,
     path: Option<String>,
+    slide: Option<Slide>,
+    stage: Option<StageRef>,
     viewers: HashMap<String, ViewerLink>,
     fetches: HashMap<u32, FetchLink>,
     pushes: broadcast::Receiver<(SessionId, ServerMessage)>,
@@ -361,6 +416,18 @@ impl Link {
                     Some(Cmd::Path(path)) => {
                         self.path = path.clone();
                         if ws.send(text(&HostToRelay::Path { path })).await.is_err() {
+                            return Stop::Lost;
+                        }
+                    }
+                    Some(Cmd::Slide(slide)) => {
+                        self.slide = slide.clone();
+                        if ws.send(text(&HostToRelay::Slide { slide })).await.is_err() {
+                            return Stop::Lost;
+                        }
+                    }
+                    Some(Cmd::Stage(stage)) => {
+                        self.stage = stage.clone();
+                        if ws.send(text(&HostToRelay::Stage { stage })).await.is_err() {
                             return Stop::Lost;
                         }
                     }
@@ -525,11 +592,27 @@ impl Link {
                     let _ = f.paused.send(false);
                 }
             }
+            RelayToHost::Presence { viewers } => {
+                let host = Peer {
+                    id: HOST_ID.into(),
+                    name: self.opts.name.clone(),
+                    color: color_for(&self.opts.name),
+                    path: None,
+                };
+                let _ = self.inbox_tx.send(ServerMessage::Presence {
+                    host,
+                    host_path: self.path.clone(),
+                    viewers,
+                    you: HOST_ID.into(),
+                    slide: self.slide.clone(),
+                    stage: self.stage.clone(),
+                    in_reply_to: None,
+                });
+            }
             RelayToHost::Shared { .. }
             | RelayToHost::Ping
             | RelayToHost::Error { .. }
-            // The host does not act on presence or a viewer's pointer yet.
-            | RelayToHost::Presence { .. }
+            // The host does not act on a viewer's pointer yet.
             | RelayToHost::Pointer { .. } => {}
         }
     }
@@ -588,6 +671,8 @@ impl Link {
                     _ = &mut wait => break,
                     cmd = self.cmd_rx.recv() => match cmd {
                         Some(Cmd::Path(path)) => self.path = path,
+                        Some(Cmd::Slide(slide)) => self.slide = slide,
+                        Some(Cmd::Stage(stage)) => self.stage = stage,
                         Some(Cmd::End) | None => {
                             let _ = self.status_tx.send(LinkStatus::Ended);
                             return None;
@@ -602,14 +687,9 @@ impl Link {
             match open_link(&self.opts, Some(resume)).await {
                 Ok((mut ws, shared)) => {
                     self.keep_only(&shared.viewers);
-                    if self.path.is_some()
-                        && ws
-                            .send(text(&HostToRelay::Path {
-                                path: self.path.clone(),
-                            }))
-                            .await
-                            .is_err()
-                    {
+                    let capable = has_presence(&shared.capabilities);
+                    self.presence.store(capable, Ordering::Relaxed);
+                    if !self.resend(&mut ws, capable).await {
                         continue;
                     }
                     tracing::info!(share = %self.id, "back on the relay");
@@ -626,6 +706,35 @@ impl Link {
                 }
             }
         }
+    }
+
+    /// After a resume: tells the relay the host's path, slide and stage again (the last two
+    /// only if the relay takes them). False if the socket failed.
+    async fn resend(&self, ws: &mut Ws, capable: bool) -> bool {
+        let mut msgs = Vec::new();
+        if self.path.is_some() {
+            msgs.push(text(&HostToRelay::Path {
+                path: self.path.clone(),
+            }));
+        }
+        if capable {
+            if self.slide.is_some() {
+                msgs.push(text(&HostToRelay::Slide {
+                    slide: self.slide.clone(),
+                }));
+            }
+            if self.stage.is_some() {
+                msgs.push(text(&HostToRelay::Stage {
+                    stage: self.stage.clone(),
+                }));
+            }
+        }
+        for m in msgs {
+            if ws.send(m).await.is_err() {
+                return false;
+            }
+        }
+        true
     }
 
     /// The share is over: every viewer session and task goes.
@@ -869,6 +978,46 @@ mod tests {
     fn the_host_url_follows_the_relay_scheme() {
         assert_eq!(host_url("https://r.example/"), "wss://r.example/host");
         assert_eq!(host_url("http://127.0.0.1:9"), "ws://127.0.0.1:9/host");
+    }
+
+    impl ShareHandle {
+        /// A handle with no link behind it: the commands it would send come out of the
+        /// returned receiver.
+        fn for_test(presence: bool) -> (ShareHandle, mpsc::UnboundedReceiver<Cmd>) {
+            let (cmds, rx) = mpsc::unbounded_channel();
+            let (_, viewers) = watch::channel(Vec::new());
+            let (_, status) = watch::channel(LinkStatus::Connected);
+            let handle = ShareHandle {
+                id: "t".into(),
+                host_key: "k".into(),
+                web_url: String::new(),
+                app_url: String::new(),
+                viewers,
+                status,
+                cmds,
+                git: Arc::new(AtomicBool::new(false)),
+                presence: Arc::new(AtomicBool::new(presence)),
+                inbox: Mutex::new(None),
+            };
+            (handle, rx)
+        }
+    }
+
+    #[test]
+    fn a_relay_without_presence_keeps_the_host_quiet() {
+        let slide = || {
+            Some(Slide {
+                path: "d.md".into(),
+                index: 1,
+            })
+        };
+        let (quiet, mut rx) = ShareHandle::for_test(false);
+        quiet.set_slide(slide());
+        quiet.set_stage(None);
+        assert!(rx.try_recv().is_err(), "nothing is sent");
+        let (loud, mut rx) = ShareHandle::for_test(true);
+        loud.set_slide(slide());
+        assert!(matches!(rx.try_recv(), Ok(Cmd::Slide(Some(_)))));
     }
 
     #[test]

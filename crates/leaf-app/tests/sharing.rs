@@ -9,7 +9,7 @@ use leaf_app::relay::{self, RelayOptions, RelayStarted};
 use leaf_app::sharing::{self, HostOptions, LinkStatus, ShareHandle};
 use leaf_core::engine::Engine;
 use leaf_protocol::relay::ShareMode;
-use leaf_protocol::{ClientMessage, PROTOCOL_VERSION};
+use leaf_protocol::{ClientMessage, PROTOCOL_VERSION, ServerMessage, Slide};
 use serde_json::{Value, json};
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio_tungstenite::tungstenite::Message;
@@ -447,9 +447,53 @@ async fn the_host_reconnects_and_keeps_its_id() {
         "its engine session is gone"
     );
 
+    assert!(h.presence_capable(), "still capable after the resume");
     let (mut v, welcome) = viewer(r.port, &h.id).await;
     assert_eq!(welcome["share"]["id"], h.id);
     assert_eq!(read(&mut v, "README.md", "r").await["type"], "file");
+    h.end();
+    r.stop().await;
+}
+
+#[tokio::test]
+async fn the_host_hears_where_viewers_are_and_viewers_hear_the_hosts_slide() {
+    let f = folder();
+    let r = relay::start(options(0)).await.unwrap();
+    let h = share(&r, &f.engine).await;
+    assert!(h.presence_capable());
+    let mut inbox = h.take_inbox().expect("inbox once");
+    assert!(h.take_inbox().is_none());
+    let (mut v, _) = viewer(r.port, &h.id).await;
+    send(&mut v, json!({"type": "at", "path": "README.md"})).await;
+    let you = tokio::time::timeout(WAIT, async {
+        loop {
+            if let Some(ServerMessage::Presence { viewers, you, .. }) = inbox.recv().await
+                && viewers
+                    .iter()
+                    .any(|p| p.path.as_deref() == Some("README.md"))
+            {
+                break you;
+            }
+        }
+    })
+    .await
+    .expect("the host hears the viewer's path");
+    assert_eq!(you, "host");
+    h.set_slide(Some(Slide {
+        path: "deck.md".into(),
+        index: 2,
+    }));
+    let m = tokio::time::timeout(WAIT, async {
+        loop {
+            let m = next_of(&mut v, "presence").await;
+            if m["slide"]["index"] == 2 {
+                break m;
+            }
+        }
+    })
+    .await
+    .expect("the viewer hears the slide");
+    assert_eq!(m["slide"]["path"], "deck.md");
     h.end();
     r.stop().await;
 }
