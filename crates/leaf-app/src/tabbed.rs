@@ -44,7 +44,7 @@ fn home() -> PathBuf {
         .unwrap_or_default()
 }
 
-fn chrome_label(window: &str) -> String {
+pub(crate) fn chrome_label(window: &str) -> String {
     format!("{window}-chrome")
 }
 

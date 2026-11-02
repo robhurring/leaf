@@ -41,7 +41,6 @@ import { useDeckMode } from '../store/deckMode.js';
 import { Check, Code, Copy, File, Slides, X } from '../icons/index.js';
 import { SourceView } from './SourceView.js';
 
-const ShareMenu = lazy(() => import('../share/ShareMenu.js'));
 const ShareBanner = lazy(() => import('../share/ShareBanner.js'));
 const SpeakerView = lazy(() => import('../viewers/deck/SpeakerView.js'));
 /** A deck's speaker window, opened with ?speaker. Read once, before the router rewrites the address. */
@@ -112,7 +111,6 @@ export function Reader(props: ReaderProps) {
   const native = inTauri();
   // In a tab of an app window the window's chrome holds the title row.
   const tabbed = inTab();
-  const shareable = tabbed && !!docs.config?.relayUrl;
   // Viewing a relay's share in a browser; once it ends, only the notice is left.
   const viewing = !tabbed && !!docs.share;
   const ended = viewing && docs.shareStatus === 'ended';
@@ -567,14 +565,6 @@ export function Reader(props: ReaderProps) {
                   />
                 )}
                 <BlameShownContext.Provider value={blameShown}>
-                  {toolsEl &&
-                    shareable &&
-                    createPortal(
-                      <Suspense fallback={null}>
-                        <ShareMenu />
-                      </Suspense>,
-                      toolsEl,
-                    )}
                   {marp &&
                     toolsEl &&
                     createPortal(

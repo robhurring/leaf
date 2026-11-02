@@ -1,6 +1,7 @@
-//! Sharing a tab: the commands the page sends, and the bookkeeping that keeps a tab's
-//! `ShareHandle` while it lives. A closed tab's share is released, not ended: the relay
-//! keeps it for its grace period and `RecentShares` remembers how to take it back.
+//! Sharing a tab: the title row's Share button and the app's own menu under it, and the
+//! bookkeeping that keeps a tab's `ShareHandle` while it lives. A closed tab's share is
+//! released, not ended: the relay keeps it for its grace period and `RecentShares`
+//! remembers how to take it back.
 use std::time::Instant;
 
 use serde::Serialize;
@@ -12,7 +13,7 @@ use leaf_app::sharing::{self, HostOptions, LinkStatus, ShareHandle, StartError};
 use leaf_protocol::ShareMode;
 use leaf_protocol::relay::{Peer, Resume};
 
-/// What the page shows of a tab's share.
+/// What the title row shows of a tab's share.
 #[derive(Serialize, Clone, Debug, PartialEq)]
 #[serde(rename_all = "camelCase")]
 pub struct TabShare {
@@ -56,12 +57,98 @@ fn idle(resumable: Option<String>) -> TabShare {
     }
 }
 
+/// Tells the chrome of `tab`'s window about its share, as it starts, changes and ends.
 fn announce(app: &AppHandle, tab: &str, share: &TabShare) {
+    let state = app.state::<AppState>();
+    let window = state.tabs.lock().unwrap().window_of(tab);
+    let Some(window) = window else { return };
     let _ = app.emit_to(
-        EventTarget::AnyLabel { label: tab.into() },
-        &format!("leaf://share/{tab}"),
-        share.clone(),
+        EventTarget::AnyLabel {
+            label: tabbed::chrome_label(&window),
+        },
+        &format!("leaf://share/{window}"),
+        serde_json::json!({ "tab": tab, "share": share }),
     );
+}
+
+/// One line of the Share menu.
+#[derive(Debug, PartialEq)]
+pub enum MenuEntry {
+    Item {
+        id: String,
+        text: String,
+        enabled: bool,
+    },
+    Separator,
+}
+
+/// What a Share menu line does.
+#[derive(Debug, PartialEq, Clone, Copy)]
+pub enum ShareAction {
+    CopyApp,
+    CopyWeb,
+    OpenWeb,
+    End,
+    Resume,
+    Start,
+}
+
+const COPY_APP: &str = "share:copy-app";
+const COPY_WEB: &str = "share:copy-web";
+const OPEN_WEB: &str = "share:open-web";
+const END: &str = "share:end";
+const RESUME: &str = "share:resume";
+const START: &str = "share:start";
+
+/// The Share menu for a tab's share: its links, the end, and who is watching while it
+/// is live; resume or a fresh share after a tab closed on one; nothing while idle (the
+/// button starts a share straight away).
+pub fn menu_items(share: &TabShare) -> Vec<MenuEntry> {
+    let item = |id: &str, text: &str| MenuEntry::Item {
+        id: id.into(),
+        text: text.into(),
+        enabled: true,
+    };
+    match share.status.as_str() {
+        "live" | "reconnecting" => {
+            let mut items = vec![
+                item(COPY_APP, "Copy app link"),
+                item(COPY_WEB, "Copy web link"),
+                item(OPEN_WEB, "Open web link"),
+                MenuEntry::Separator,
+                item(END, "End session"),
+            ];
+            if !share.viewers.is_empty() {
+                items.push(MenuEntry::Separator);
+                items.extend(share.viewers.iter().map(|v| MenuEntry::Item {
+                    id: format!("share:viewer:{}", v.id),
+                    text: v.name.clone(),
+                    enabled: false,
+                }));
+            }
+            items
+        }
+        _ if share.resumable.is_some() => {
+            vec![
+                item(RESUME, "Resume sharing"),
+                item(START, "Share this tab"),
+            ]
+        }
+        _ => Vec::new(),
+    }
+}
+
+/// The action a Share menu line's id names; None for a viewer's line or another menu's.
+pub fn menu_action(id: &str) -> Option<ShareAction> {
+    Some(match id {
+        COPY_APP => ShareAction::CopyApp,
+        COPY_WEB => ShareAction::CopyWeb,
+        OPEN_WEB => ShareAction::OpenWeb,
+        END => ShareAction::End,
+        RESUME => ShareAction::Resume,
+        START => ShareAction::Start,
+        _ => return None,
+    })
 }
 
 /// The tab's tab closed: let go of its share without ending it, and remember it.
@@ -81,7 +168,7 @@ pub fn release(app: &AppHandle, tab: &str) {
     }
 }
 
-/// Tells the page about `tab`'s share as its viewers or link change, until it goes.
+/// Tells the title row about `tab`'s share as its viewers or link change, until it goes.
 fn watch_share(app: &AppHandle, tab: &str, h: &ShareHandle) {
     let runtime = app.state::<AppState>().runtime.clone();
     let (app, tab, id) = (app.clone(), tab.to_string(), h.id.clone());
@@ -190,12 +277,10 @@ async fn start_tab(
     Ok(share)
 }
 
-/// The tab's share; `idle` when it isn't sharing, with `resumable` naming a share its
-/// root left when a tab closed (the page offers to resume it).
-#[tauri::command]
-pub fn leaf_share_state(webview: Webview<Wry>) -> TabShare {
-    let tab = webview.label();
-    let state = webview.app_handle().state::<AppState>();
+/// `tab`'s share; `idle` when it isn't sharing, with `resumable` naming a share its
+/// root left when a tab closed (the menu offers to resume it).
+fn share_of(app: &AppHandle, tab: &str) -> TabShare {
+    let state = app.state::<AppState>();
     if let Some(h) = state.shares.lock().unwrap().get(tab) {
         return snapshot(h);
     }
@@ -206,17 +291,14 @@ pub fn leaf_share_state(webview: Webview<Wry>) -> TabShare {
     idle(resumable)
 }
 
-#[tauri::command]
-pub async fn leaf_share_start(webview: Webview<Wry>) -> Result<TabShare, String> {
-    start_tab(webview.app_handle(), webview.label(), None)
-        .await
-        .map_err(|e| e.message)
+/// `window`'s active tab and its share.
+fn active_share_of(app: &AppHandle, window: &str) -> Option<(String, TabShare)> {
+    let tab = tabbed::active_tab(app, window)?;
+    let share = share_of(app, &tab);
+    Some((tab, share))
 }
 
-#[tauri::command]
-pub async fn leaf_share_resume(webview: Webview<Wry>) -> Result<TabShare, String> {
-    let app = webview.app_handle();
-    let tab = webview.label();
+async fn resume_tab(app: &AppHandle, tab: &str) -> Result<TabShare, String> {
     let state = app.state::<AppState>();
     let root = state.windows.opened(tab).ok_or("no such tab")?;
     let recent = state
@@ -246,19 +328,130 @@ pub async fn leaf_share_resume(webview: Webview<Wry>) -> Result<TabShare, String
     }
 }
 
-#[tauri::command]
-pub fn leaf_share_end(webview: Webview<Wry>) {
-    let app = webview.app_handle();
-    let tab = webview.label();
+/// Starts (or resumes) `tab`'s share in the background. The title row hears the outcome
+/// through the share event; a failure is told in a dialog.
+fn begin(app: &AppHandle, tab: &str, resume: bool) {
+    let (app, tab) = (app.clone(), tab.to_string());
+    let runtime = app.state::<AppState>().runtime.clone();
+    runtime.spawn(async move {
+        let result = if resume {
+            resume_tab(&app, &tab).await
+        } else {
+            start_tab(&app, &tab, None).await.map_err(|e| e.message)
+        };
+        match result {
+            Ok(share) => announce(&app, &tab, &share),
+            Err(message) => {
+                use tauri_plugin_dialog::{DialogExt, MessageDialogKind};
+                app.dialog()
+                    .message(message)
+                    .title("Sharing")
+                    .kind(MessageDialogKind::Error)
+                    .show(|_| {});
+            }
+        }
+    });
+}
+
+fn end_tab(app: &AppHandle, tab: &str) {
     let state = app.state::<AppState>();
-    let Some(h) = state.shares.lock().unwrap().remove(tab) else {
-        return;
-    };
+    let removed = state.shares.lock().unwrap().remove(tab);
+    let Some(h) = removed else { return };
     h.end();
     let mut ended = snapshot(&h);
     ended.status = "ended".into();
     announce(app, tab, &ended);
     tabbed::changed(app);
+}
+
+/// Puts a link on the clipboard and tells `window`'s title row, which shows a check.
+fn copy(app: &AppHandle, window: &str, text: &str) {
+    let state = app.state::<AppState>();
+    let ok = {
+        let mut clipboard = state.clipboard.lock().unwrap();
+        if clipboard.is_none() {
+            *clipboard = arboard::Clipboard::new().ok();
+        }
+        clipboard.as_mut().is_some_and(|c| c.set_text(text).is_ok())
+    };
+    if ok {
+        let _ = app.emit_to(
+            EventTarget::AnyLabel {
+                label: tabbed::chrome_label(window),
+            },
+            &format!("leaf://share-copied/{window}"),
+            (),
+        );
+    }
+}
+
+/// The active tab's share, for the title row; None when this leaf has no relay to share
+/// through, so the row shows no Share button.
+#[tauri::command]
+pub fn leaf_active_share(webview: Webview<Wry>) -> Option<TabShare> {
+    let app = webview.app_handle();
+    app.state::<AppState>().windows.relay_url()?;
+    let share = active_share_of(app, webview.window().label()).map(|(_, s)| s);
+    Some(share.unwrap_or_else(|| idle(None)))
+}
+
+/// The title row's Share button. Idle, it starts sharing the active tab; otherwise the
+/// app's own menu at the pointer (a dropdown would be cut off by the title row's height).
+#[tauri::command]
+pub fn leaf_share_button(webview: Webview<Wry>) {
+    use tauri::menu::{MenuBuilder, MenuItem};
+    let app = webview.app_handle();
+    let window = webview.window();
+    let Some((tab, share)) = active_share_of(app, window.label()) else {
+        return;
+    };
+    let entries = menu_items(&share);
+    if entries.is_empty() {
+        begin(app, &tab, false);
+        return;
+    }
+    let mut menu = MenuBuilder::new(app);
+    for entry in entries {
+        menu = match entry {
+            MenuEntry::Separator => menu.separator(),
+            MenuEntry::Item { id, text, enabled } => {
+                match MenuItem::with_id(app, id, text, enabled, None::<&str>) {
+                    Ok(item) => menu.item(&item),
+                    Err(_) => return,
+                }
+            }
+        };
+    }
+    if let Ok(menu) = menu.build() {
+        let _ = window.popup_menu(&menu);
+    }
+}
+
+/// Runs a Share menu line for the front window's active tab; false when `id` isn't one.
+pub fn on_menu(app: &AppHandle, id: &str) -> bool {
+    let Some(action) = menu_action(id) else {
+        return false;
+    };
+    let Some(window) = tabbed::front_window(app) else {
+        return true;
+    };
+    let window = window.label().to_string();
+    let Some((tab, share)) = active_share_of(app, &window) else {
+        return true;
+    };
+    match action {
+        ShareAction::CopyApp => copy(app, &window, &share.app_url),
+        ShareAction::CopyWeb => copy(app, &window, &share.web_url),
+        ShareAction::OpenWeb => {
+            if !share.web_url.is_empty() {
+                let _ = open::that_detached(&share.web_url);
+            }
+        }
+        ShareAction::End => end_tab(app, &tab),
+        ShareAction::Resume => begin(app, &tab, true),
+        ShareAction::Start => begin(app, &tab, false),
+    }
+    true
 }
 
 #[cfg(test)]
@@ -272,5 +465,116 @@ mod tests {
         assert_eq!(json["appUrl"], "");
         assert_eq!(json["resumable"], "abc");
         assert_eq!(json["status"], "idle");
+    }
+
+    fn live(viewers: &[&str]) -> TabShare {
+        TabShare {
+            id: "abc".into(),
+            web_url: "https://relay.test/s/abc".into(),
+            app_url: "leaf://join/abc".into(),
+            status: "live".into(),
+            viewers: viewers
+                .iter()
+                .map(|n| Peer {
+                    id: format!("v-{n}"),
+                    name: n.to_string(),
+                    color: "#e5484d".into(),
+                })
+                .collect(),
+            resumable: None,
+        }
+    }
+
+    /// The menu as a reader sees it: `—` a separator, `(off)` a line that can't be chosen.
+    fn lines(share: &TabShare) -> Vec<String> {
+        menu_items(share)
+            .iter()
+            .map(|e| match e {
+                MenuEntry::Separator => "—".to_string(),
+                MenuEntry::Item {
+                    text,
+                    enabled: true,
+                    ..
+                } => text.clone(),
+                MenuEntry::Item {
+                    text,
+                    enabled: false,
+                    ..
+                } => format!("{text} (off)"),
+            })
+            .collect()
+    }
+
+    #[test]
+    fn a_live_share_offers_its_links_the_end_then_who_is_watching() {
+        assert_eq!(
+            lines(&live(&["Ada", "Bob"])),
+            [
+                "Copy app link",
+                "Copy web link",
+                "Open web link",
+                "—",
+                "End session",
+                "—",
+                "Ada (off)",
+                "Bob (off)"
+            ]
+        );
+    }
+
+    #[test]
+    fn a_reconnecting_share_keeps_its_menu_without_a_watching_section() {
+        let mut s = live(&[]);
+        s.status = "reconnecting".into();
+        assert_eq!(
+            lines(&s),
+            [
+                "Copy app link",
+                "Copy web link",
+                "Open web link",
+                "—",
+                "End session"
+            ]
+        );
+    }
+
+    #[test]
+    fn a_resumable_share_offers_to_resume_or_start_afresh() {
+        assert_eq!(
+            lines(&idle(Some("abc".into()))),
+            ["Resume sharing", "Share this tab"]
+        );
+    }
+
+    #[test]
+    fn an_idle_share_has_no_menu_so_the_button_starts_it() {
+        assert!(lines(&idle(None)).is_empty());
+    }
+
+    #[test]
+    fn menu_ids_name_share_actions_and_nothing_else() {
+        let ids: Vec<String> = menu_items(&live(&["Ada"]))
+            .into_iter()
+            .chain(menu_items(&idle(Some("abc".into()))))
+            .filter_map(|e| match e {
+                MenuEntry::Item { id, .. } => Some(id),
+                MenuEntry::Separator => None,
+            })
+            .collect();
+        let actions: Vec<Option<ShareAction>> = ids.iter().map(|id| menu_action(id)).collect();
+        assert_eq!(
+            actions,
+            [
+                Some(ShareAction::CopyApp),
+                Some(ShareAction::CopyWeb),
+                Some(ShareAction::OpenWeb),
+                Some(ShareAction::End),
+                None, // a viewer's line
+                Some(ShareAction::Resume),
+                Some(ShareAction::Start),
+            ]
+        );
+        assert_eq!(menu_action("cmd:openSettings"), None);
+        assert_eq!(menu_action("appearance:dark"), None);
     }
 }

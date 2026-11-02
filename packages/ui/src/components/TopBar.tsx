@@ -1,4 +1,5 @@
 import {
+  Check,
   Chevron,
   LeafMark,
   Numbering,
@@ -43,13 +44,42 @@ export type TopBarProps = {
   onAppearanceMenu?(): void;
   /** Extra handlers for the leaf mark: in a one-tab window it drags the tab. */
   brand?: React.HTMLAttributes<HTMLButtonElement>;
-  /** The tab is being shared: a mark beside the leaf mark. */
-  shared?: boolean;
+  /** The active tab's share, for the Share button; absent when this leaf can't share. */
+  share?: ShareState;
+  onShare?(): void;
   canGoBack?: boolean;
   canGoForward?: boolean;
   onBack?(): void;
   onForward?(): void;
 };
+
+/** What the Share button shows: the tab's share, and a check just after a link is copied. */
+export type ShareState = {
+  status: 'idle' | 'live' | 'reconnecting' | 'ended';
+  viewers: number;
+  copied?: boolean;
+};
+
+/** The Share button: sharing the active tab, who is watching, and a check after a copy.
+ * The app answers the click itself (a share, or its own menu). */
+export function ShareButton({ share, onClick }: { share: ShareState; onClick(): void }) {
+  const sharing = share.status === 'live' || share.status === 'reconnecting';
+  const label = sharing ? 'Sharing' : 'Share this tab';
+  return (
+    <button
+      type="button"
+      className="leaf-ib leaf-share-button"
+      aria-label={label}
+      title={share.status === 'reconnecting' ? 'Reconnecting to the relay…' : label}
+      data-status={share.status === 'reconnecting' ? 'reconnecting' : undefined}
+      data-copied={share.copied ? 'true' : undefined}
+      onClick={onClick}
+    >
+      {share.copied ? <Check /> : <Share />}
+      {sharing && share.viewers > 0 && <span className="leaf-share-badge">{share.viewers}</span>}
+    </button>
+  );
+}
 
 export function TopBar(p: TopBarProps) {
   // In the app window the bar moves the window. Tauri drags only from the element pressed,
@@ -73,11 +103,6 @@ export function TopBar(p: TopBarProps) {
           <LeafMark size={20} className="leaf-mark" />
           <span className="leaf-wordmark">leaf</span>
         </button>
-        {p.shared && (
-          <span className="leaf-shared-mark" role="img" aria-label="Shared" title="Shared">
-            <Share size={14} />
-          </span>
-        )}
         {p.onBack && (
           <div className="leaf-history" role="group" aria-label="History">
             <IconButton
@@ -116,6 +141,7 @@ export function TopBar(p: TopBarProps) {
             </IconButton>
           </>
         )}
+        {p.share && p.onShare && <ShareButton share={p.share} onClick={p.onShare} />}
         <ThemeMenu
           native={p.native}
           theme={p.theme}

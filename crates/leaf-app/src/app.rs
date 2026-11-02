@@ -48,6 +48,9 @@ pub(crate) struct AppState {
     pub(crate) recent: Mutex<RecentShares>,
     /// The name viewers see for this host.
     pub(crate) name: String,
+    /// The system clipboard, held once a Share link is copied (on X11 the copy lives
+    /// only as long as this does).
+    pub(crate) clipboard: Mutex<Option<arboard::Clipboard>>,
 }
 
 /// How long after the last move or resize the window places are written.
@@ -330,7 +333,7 @@ pub(crate) fn build_menu(app: &AppHandle) -> tauri::Result<Menu<Wry>> {
 
 /// Menu items name commands; the focused window runs them.
 fn on_menu(app: &AppHandle, id: &str) {
-    if tabbed::on_menu(app, id) {
+    if tabbed::on_menu(app, id) || tabbed_share::on_menu(app, id) {
         return;
     }
     if id == "open-folder" {
@@ -559,10 +562,8 @@ pub fn run(config: Config, link: Option<String>, welcome: bool) -> i32 {
             tabbed::leaf_tree_menu,
             tabbed::leaf_window_tabs,
             tabbed::leaf_appearance_menu,
-            tabbed_share::leaf_share_state,
-            tabbed_share::leaf_share_start,
-            tabbed_share::leaf_share_resume,
-            tabbed_share::leaf_share_end
+            tabbed_share::leaf_active_share,
+            tabbed_share::leaf_share_button
         ])
         .menu(build_menu)
         .on_menu_event(|app, event| on_menu(app, event.id().as_ref()))
@@ -616,6 +617,7 @@ pub fn run(config: Config, link: Option<String>, welcome: bool) -> i32 {
                 shares: Mutex::new(HashMap::new()),
                 recent: Mutex::new(RecentShares::new(std::time::Duration::from_secs(60))),
                 name: leaf_app::sharing::host_name(&std::env::vars().collect()),
+                clipboard: Mutex::new(None),
             });
             // The tabs open at the last quit come back first (when asked for), then
             // what this launch names opens among them.

@@ -1,7 +1,7 @@
 import { describe, it, expect, vi } from 'vitest';
 import { act, fireEvent, render, screen, within } from '@testing-library/react';
 import { Chrome } from '../src/chrome/Chrome.js';
-import type { Bridge, Hover, TabInfo, TabState } from '../src/chrome/bridge.js';
+import type { Bridge, Hover, TabInfo, TabShare, TabState } from '../src/chrome/bridge.js';
 
 const tab = (
   id: string,
@@ -18,6 +18,8 @@ const tab = (
   active,
   shared,
 });
+
+const IDLE: TabShare = { id: '', webUrl: '', appUrl: '', status: 'idle', viewers: [] };
 
 function fakeBridge(tabs: TabInfo[], shown: TabState | null = null) {
   const subs = {
@@ -37,9 +39,13 @@ function fakeBridge(tabs: TabInfo[], shown: TabState | null = null) {
     dragMove: vi.fn(),
     dragEnd: vi.fn(),
     appearanceMenu: vi.fn(),
+    activeShare: vi.fn(async (): Promise<TabShare | null> => IDLE),
+    shareButton: vi.fn(),
     onTabs: (fn) => (subs.tabs.push(fn), () => {}),
     onHover: (fn) => (subs.hover.push(fn), () => {}),
     onTabState: (fn) => (subs.state.push(fn), () => {}),
+    onShare: () => () => {},
+    onCopied: () => () => {},
   };
   return { bridge, subs };
 }
@@ -169,9 +175,8 @@ describe('the window chrome', () => {
     expect(screen.getAllByLabelText('Shared')).toHaveLength(1);
   });
 
-  it('a_lone_shared_tab_marks_the_title_row', async () => {
+  it('the title row has no shared mark of its own: the Share button carries the state', async () => {
     await mount([tab('t1', '~/a', true, 'folder', true)]);
-    expect(screen.queryByRole('tablist')).toBeNull();
-    expect(within(screen.getByRole('banner')).getAllByLabelText('Shared')).toHaveLength(1);
+    expect(within(screen.getByRole('banner')).queryByLabelText('Shared')).toBeNull();
   });
 });

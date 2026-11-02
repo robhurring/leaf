@@ -139,13 +139,15 @@ Share a tab and others read it with you, live: they land where you are and brows
 LEAF_RELAY_URL=https://my-relay.herokuapp.com leaf open docs/
 ```
 
-Or put `LEAF_RELAY_URL` in your `.env` or pass `--relay-url`. With a relay set, the window gains a Share menu (without one there is no Share button). **Share this tab** starts a session for the tab you're on, then the menu offers:
+Or put `LEAF_RELAY_URL` in your `.env` or pass `--relay-url`. With a relay set, the window's title row gains a Share button (without one there is no button). A share covers the tab you're on, every document in it. **Share this tab** starts a session, then the button opens a menu:
 
 - **Copy app link**: a `leaf://relay/<relay-host>/s/<id>` link. It opens in leaf once `leaf connect` ships, in the next release.
 - **Copy web link**: `https://<relay>/s/<id>`, which opens the reader in any browser, with a banner naming the host, who's here, and what the host is reading.
+- **Open web link**: the same link, in your browser, to see what viewers see.
 - **End session**: stops sharing and disconnects everyone.
+- Under those, who is watching.
 
-A shared tab wears a mark in the tab row (in the title row when the window has one tab).
+The button shows how many are watching, and a shared tab wears a mark in the tab row.
 
 What viewers can and can't do:
 
