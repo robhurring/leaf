@@ -1,0 +1,36 @@
+{
+  "$ref": "#/definitions/slide",
+  "definitions": {
+    "slide": {
+      "type": "object",
+      "properties": {
+        "type": {
+          "type": "string",
+          "const": "slide"
+        },
+        "slide": {
+          "type": "object",
+          "properties": {
+            "path": {
+              "type": "string"
+            },
+            "index": {
+              "type": "integer",
+              "minimum": 0
+            }
+          },
+          "required": [
+            "path",
+            "index"
+          ],
+          "additionalProperties": false
+        }
+      },
+      "required": [
+        "type"
+      ],
+      "additionalProperties": false
+    }
+  },
+  "$schema": "http://json-schema.org/draft-07/schema#"
+}

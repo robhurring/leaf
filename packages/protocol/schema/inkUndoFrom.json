@@ -1,0 +1,33 @@
+{
+  "$ref": "#/definitions/inkUndoFrom",
+  "definitions": {
+    "inkUndoFrom": {
+      "type": "object",
+      "properties": {
+        "type": {
+          "type": "string",
+          "const": "inkUndo"
+        },
+        "docPath": {
+          "type": "string"
+        },
+        "blockHash": {
+          "type": "string"
+        },
+        "id": {
+          "type": "string"
+        },
+        "inReplyTo": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "type",
+        "docPath",
+        "blockHash"
+      ],
+      "additionalProperties": false
+    }
+  },
+  "$schema": "http://json-schema.org/draft-07/schema#"
+}

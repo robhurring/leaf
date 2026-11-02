@@ -340,6 +340,14 @@ impl Engine {
                 }
                 Err(e) => vec![error_message(e)],
             },
+            // Presence is the relay's and the page's business; the engine has nothing to say.
+            ClientMessage::At { .. }
+            | ClientMessage::Slide { .. }
+            | ClientMessage::Stage { .. }
+            | ClientMessage::Pointer { .. }
+            | ClientMessage::Ink { .. }
+            | ClientMessage::InkUndo { .. }
+            | ClientMessage::InkClear { .. } => Vec::new(),
         };
         for m in &reply {
             tracing::debug!(client = session.0, msg = ?m, "send");

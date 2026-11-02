@@ -113,6 +113,37 @@ export const BlameHunk = z.object({
 });
 export type BlameHunk = z.infer<typeof BlameHunk>;
 
+/** One freehand mark drawn over a block of a document. */
+export const Stroke = z.object({
+  id: z.string(),
+  docPath: z.string(),
+  blockHash: z.string(),
+  points: z.array(z.tuple([z.number(), z.number()])),
+  color: z.enum(['red', 'green', 'blue']),
+  width: z.number(),
+  /** Kept until cleared, rather than fading away. */
+  sticky: z.boolean(),
+  createdAt: z.number(),
+});
+export type Stroke = z.infer<typeof Stroke>;
+
+/** A slide of a deck: the document and the slide's position in it. */
+export const Slide = z.object({ path: z.string(), index: z.number().int().min(0) });
+export type Slide = z.infer<typeof Slide>;
+
+/** A block (a diagram, say) opened full size, named by its document and content hash. */
+export const StageRef = z.object({ docPath: z.string(), blockHash: z.string() });
+export type StageRef = z.infer<typeof StageRef>;
+
+/** Where a pointer is on a block, in the block's own coordinates. */
+export const PointerAt = z.object({
+  docPath: z.string(),
+  blockHash: z.string(),
+  x: z.number(),
+  y: z.number(),
+});
+export type PointerAt = z.infer<typeof PointerAt>;
+
 export const RootInfo = z.object({ kind: z.enum(['file', 'dir']), name: z.string() });
 export type RootInfo = z.infer<typeof RootInfo>;
 

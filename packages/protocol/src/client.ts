@@ -1,5 +1,13 @@
 import { z } from 'zod';
-import { PROTOCOL_VERSION, Preferences, envelope } from './common.js';
+import {
+  PROTOCOL_VERSION,
+  PointerAt,
+  Preferences,
+  Slide,
+  StageRef,
+  Stroke,
+  envelope,
+} from './common.js';
 
 export const HelloMessage = z.object({
   type: z.literal('hello'),
@@ -53,6 +61,38 @@ export const PreferencesMessage = z.object({
   ...envelope,
 });
 
+/** Where a peer is reading; absent: nowhere. */
+export const AtMessage = z.object({ type: z.literal('at'), path: z.string().optional() });
+
+/** The slide the host is on; absent: none. */
+export const SlideMessage = z.object({ type: z.literal('slide'), slide: Slide.optional() });
+
+/** The block the host has open full size; absent: none. */
+export const StageMessage = z.object({ type: z.literal('stage'), stage: StageRef.optional() });
+
+/** Where a peer's pointer is on the open block; absent: it left. */
+export const PointerMessage = z.object({
+  type: z.literal('pointer'),
+  pointer: PointerAt.optional(),
+});
+
+/** A stroke the host has drawn. */
+export const InkMessage = z.object({ type: z.literal('ink'), stroke: Stroke });
+
+/** Take back the host's last stroke on a block. */
+export const InkUndoMessage = z.object({
+  type: z.literal('inkUndo'),
+  docPath: z.string(),
+  blockHash: z.string(),
+});
+
+/** Wipe the host's strokes on a block. */
+export const InkClearMessage = z.object({
+  type: z.literal('inkClear'),
+  docPath: z.string(),
+  blockHash: z.string(),
+});
+
 export const ClientMessage = z.discriminatedUnion('type', [
   HelloMessage,
   ListMessage,
@@ -63,6 +103,13 @@ export const ClientMessage = z.discriminatedUnion('type', [
   SearchTextMessage,
   PreferencesMessage,
   BlameMessage,
+  AtMessage,
+  SlideMessage,
+  StageMessage,
+  PointerMessage,
+  InkMessage,
+  InkUndoMessage,
+  InkClearMessage,
 ]);
 
 export type HelloMessage = z.infer<typeof HelloMessage>;
@@ -74,6 +121,13 @@ export type SearchMessage = z.infer<typeof SearchMessage>;
 export type SearchTextMessage = z.infer<typeof SearchTextMessage>;
 export type PreferencesMessage = z.infer<typeof PreferencesMessage>;
 export type BlameMessage = z.infer<typeof BlameMessage>;
+export type AtMessage = z.infer<typeof AtMessage>;
+export type SlideMessage = z.infer<typeof SlideMessage>;
+export type StageMessage = z.infer<typeof StageMessage>;
+export type PointerMessage = z.infer<typeof PointerMessage>;
+export type InkMessage = z.infer<typeof InkMessage>;
+export type InkUndoMessage = z.infer<typeof InkUndoMessage>;
+export type InkClearMessage = z.infer<typeof InkClearMessage>;
 export type ClientMessage = z.infer<typeof ClientMessage>;
 export type ClientMessageType = ClientMessage['type'];
 

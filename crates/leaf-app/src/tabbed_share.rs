@@ -515,6 +515,7 @@ mod tests {
                     id: format!("v-{n}"),
                     name: n.to_string(),
                     color: "#e5484d".into(),
+                    path: None,
                 })
                 .collect(),
             resumable: None,

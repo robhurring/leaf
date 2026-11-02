@@ -419,3 +419,19 @@ async fn welcome_carries_the_relay_url() {
         other => panic!("{other:?}"),
     }
 }
+
+#[tokio::test]
+async fn presence_messages_are_accepted_and_answered_with_nothing() {
+    let (e, _d) = engine().await;
+    let s = e.connect();
+    e.handle(s, hello("h")).await;
+    for raw in [
+        r#"{"type":"at","path":"a.md"}"#,
+        r#"{"type":"slide"}"#,
+        r#"{"type":"pointer"}"#,
+        r#"{"type":"inkClear","docPath":"a.md","blockHash":"h"}"#,
+    ] {
+        let msg: ClientMessage = serde_json::from_str(raw).unwrap();
+        assert!(e.handle(s, msg).await.is_empty(), "{raw}");
+    }
+}

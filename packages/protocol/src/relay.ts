@@ -9,6 +9,8 @@ export const Peer = z.object({
   id: z.string(),
   name: z.string(),
   color: z.string(),
+  /** The document this peer is reading, when they have said. */
+  path: z.string().optional(),
 });
 export type Peer = z.infer<typeof Peer>;
 

@@ -10,6 +10,20 @@ import {
   DEFAULT_LINK_SCHEMES,
 } from '../src/index.js';
 
+const STROKE = {
+  id: 'host:1',
+  docPath: 'a.mmd',
+  blockHash: 'h',
+  points: [
+    [0, 0],
+    [10.5, 4],
+  ],
+  color: 'red',
+  width: 4,
+  sticky: true,
+  createdAt: 1,
+};
+
 describe('protocol', () => {
   it('version is 1', () => expect(PROTOCOL_VERSION).toBe(1));
 
@@ -192,5 +206,56 @@ describe('protocol', () => {
     expect(() =>
       parseClientMessage({ type: 'preferences', preferences: { linkSchemes: ['vscode://'] } }),
     ).toThrow();
+  });
+
+  it('presence may carry each viewer’s path, the host’s slide and open canvas', () => {
+    const m = parseServerMessage({
+      type: 'presence',
+      host: { id: 'host', name: 'Rob', color: '#000' },
+      viewers: [{ id: 'v1', name: 'Ada', color: '#111', path: 'docs/a.md' }],
+      you: 'v1',
+      slide: { path: 'deck.md', index: 3 },
+      stage: { docPath: 'docs/a.md', blockHash: 'h1' },
+    });
+    expect(m).toMatchObject({
+      viewers: [{ path: 'docs/a.md' }],
+      slide: { index: 3 },
+      stage: { blockHash: 'h1' },
+    });
+  });
+
+  it('peers say where they are and what they point at; the host says its slide, canvas and ink', () => {
+    for (const m of [
+      { type: 'at', path: 'docs/a.md' },
+      { type: 'at' },
+      { type: 'slide', slide: { path: 'deck.md', index: 0 } },
+      { type: 'slide' },
+      { type: 'stage', stage: { docPath: 'a.mmd', blockHash: 'h' } },
+      { type: 'stage' },
+      { type: 'pointer', pointer: { docPath: 'a.mmd', blockHash: 'h', x: 10.5, y: 20 } },
+      { type: 'pointer' },
+      { type: 'ink', stroke: STROKE },
+      { type: 'inkUndo', docPath: 'a.mmd', blockHash: 'h' },
+      { type: 'inkClear', docPath: 'a.mmd', blockHash: 'h' },
+    ])
+      expect(parseClientMessage(m)).toEqual(m);
+    expect(() => parseClientMessage({ type: 'ink' })).toThrow();
+  });
+
+  it('a server relays a peer’s pointer and the host’s ink', () => {
+    expect(
+      parseServerMessage({
+        type: 'pointer',
+        peer: 'v1',
+        pointer: { docPath: 'a.mmd', blockHash: 'h', x: 1, y: 2 },
+      }),
+    ).toMatchObject({ peer: 'v1' });
+    expect(parseServerMessage({ type: 'pointer', peer: 'host' })).toMatchObject({ peer: 'host' });
+    expect(parseServerMessage({ type: 'ink', stroke: STROKE })).toMatchObject({
+      stroke: { sticky: true },
+    });
+    expect(parseServerMessage({ type: 'inkClear', docPath: 'a.mmd', blockHash: 'h' }).type).toBe(
+      'inkClear',
+    );
   });
 });

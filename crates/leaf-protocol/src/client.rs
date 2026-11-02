@@ -1,6 +1,6 @@
 use serde::{Deserialize, Serialize};
 
-use crate::Preferences;
+use crate::{PointerAt, Preferences, Slide, StageRef, Stroke};
 
 /// What a client sends. `id` lets the server mark its reply with `inReplyTo`.
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq)]
@@ -69,6 +69,45 @@ pub enum ClientMessage {
         #[serde(skip_serializing_if = "Option::is_none")]
         id: Option<String>,
     },
+    /// Where a peer is reading; absent: nowhere.
+    #[serde(rename_all = "camelCase")]
+    At {
+        #[serde(skip_serializing_if = "Option::is_none")]
+        path: Option<String>,
+    },
+    /// The slide the host is on; absent: none.
+    #[serde(rename_all = "camelCase")]
+    Slide {
+        #[serde(skip_serializing_if = "Option::is_none")]
+        slide: Option<Slide>,
+    },
+    /// The block the host has open full size; absent: none.
+    #[serde(rename_all = "camelCase")]
+    Stage {
+        #[serde(skip_serializing_if = "Option::is_none")]
+        stage: Option<StageRef>,
+    },
+    /// Where a peer's pointer is on the open block; absent: it left.
+    #[serde(rename_all = "camelCase")]
+    Pointer {
+        #[serde(skip_serializing_if = "Option::is_none")]
+        pointer: Option<PointerAt>,
+    },
+    /// A stroke the host has drawn.
+    #[serde(rename_all = "camelCase")]
+    Ink { stroke: Stroke },
+    /// Take back the host's last stroke on a block.
+    #[serde(rename_all = "camelCase")]
+    InkUndo {
+        doc_path: String,
+        block_hash: String,
+    },
+    /// Wipe the host's strokes on a block.
+    #[serde(rename_all = "camelCase")]
+    InkClear {
+        doc_path: String,
+        block_hash: String,
+    },
 }
 
 impl ClientMessage {
@@ -83,6 +122,13 @@ impl ClientMessage {
             | ClientMessage::SearchText { id, .. }
             | ClientMessage::Preferences { id, .. }
             | ClientMessage::Blame { id, .. } => id.as_deref(),
+            ClientMessage::At { .. }
+            | ClientMessage::Slide { .. }
+            | ClientMessage::Stage { .. }
+            | ClientMessage::Pointer { .. }
+            | ClientMessage::Ink { .. }
+            | ClientMessage::InkUndo { .. }
+            | ClientMessage::InkClear { .. } => None,
         }
     }
 }
@@ -97,6 +143,13 @@ pub const CLIENT_MESSAGE_TYPES: &[&str] = &[
     "searchText",
     "preferences",
     "blame",
+    "at",
+    "slide",
+    "stage",
+    "pointer",
+    "ink",
+    "inkUndo",
+    "inkClear",
 ];
 
 pub fn is_known_client_type(t: &str) -> bool {

@@ -19,6 +19,9 @@
             },
             "color": {
               "type": "string"
+            },
+            "path": {
+              "type": "string"
             }
           },
           "required": [
@@ -39,6 +42,39 @@
         },
         "you": {
           "type": "string"
+        },
+        "slide": {
+          "type": "object",
+          "properties": {
+            "path": {
+              "type": "string"
+            },
+            "index": {
+              "type": "integer",
+              "minimum": 0
+            }
+          },
+          "required": [
+            "path",
+            "index"
+          ],
+          "additionalProperties": false
+        },
+        "stage": {
+          "type": "object",
+          "properties": {
+            "docPath": {
+              "type": "string"
+            },
+            "blockHash": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "docPath",
+            "blockHash"
+          ],
+          "additionalProperties": false
         },
         "id": {
           "type": "string"

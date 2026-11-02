@@ -2,7 +2,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::{
     BlameHunk, Capabilities, Change, Config, Encoding, Entry, ErrorCode, GitInfo, Participant,
-    Peer, Preferences, RootInfo, ShareInfo,
+    Peer, PointerAt, Preferences, RootInfo, ShareInfo, Slide, StageRef, Stroke,
 };
 
 /// One line containing a text query: 1-based line number and the line's text.
@@ -113,6 +113,44 @@ pub enum ServerMessage {
         viewers: Vec<Peer>,
         /// The receiving viewer's own id.
         you: String,
+        /// The slide the host is on.
+        #[serde(skip_serializing_if = "Option::is_none")]
+        slide: Option<Slide>,
+        /// The block the host has open full size.
+        #[serde(skip_serializing_if = "Option::is_none")]
+        stage: Option<StageRef>,
+        #[serde(skip_serializing_if = "Option::is_none")]
+        in_reply_to: Option<String>,
+    },
+    /// Where a peer's pointer is; absent: it left.
+    #[serde(rename_all = "camelCase")]
+    Pointer {
+        peer: String,
+        #[serde(skip_serializing_if = "Option::is_none")]
+        pointer: Option<PointerAt>,
+        #[serde(skip_serializing_if = "Option::is_none")]
+        in_reply_to: Option<String>,
+    },
+    /// A stroke the host drew.
+    #[serde(rename_all = "camelCase")]
+    Ink {
+        stroke: Stroke,
+        #[serde(skip_serializing_if = "Option::is_none")]
+        in_reply_to: Option<String>,
+    },
+    /// The host took back its last stroke on a block.
+    #[serde(rename_all = "camelCase")]
+    InkUndo {
+        doc_path: String,
+        block_hash: String,
+        #[serde(skip_serializing_if = "Option::is_none")]
+        in_reply_to: Option<String>,
+    },
+    /// The host wiped its strokes on a block.
+    #[serde(rename_all = "camelCase")]
+    InkClear {
+        doc_path: String,
+        block_hash: String,
         #[serde(skip_serializing_if = "Option::is_none")]
         in_reply_to: Option<String>,
     },
@@ -147,6 +185,10 @@ impl ServerMessage {
             | ServerMessage::TextMatches { in_reply_to, .. }
             | ServerMessage::BlameHunks { in_reply_to, .. }
             | ServerMessage::Presence { in_reply_to, .. }
+            | ServerMessage::Pointer { in_reply_to, .. }
+            | ServerMessage::Ink { in_reply_to, .. }
+            | ServerMessage::InkUndo { in_reply_to, .. }
+            | ServerMessage::InkClear { in_reply_to, .. }
             | ServerMessage::ShareStatus { in_reply_to, .. }
             | ServerMessage::Error { in_reply_to, .. } => in_reply_to,
         };

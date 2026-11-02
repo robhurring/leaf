@@ -193,6 +193,7 @@ async fn open_link(
             web_url,
             app_url,
             viewers,
+            ..
         }) => Ok((
             ws,
             Shared {
@@ -472,6 +473,7 @@ impl Link {
                             id: viewer,
                             name,
                             color,
+                            path: None,
                         },
                         sid,
                         inbox,
@@ -523,7 +525,12 @@ impl Link {
                     let _ = f.paused.send(false);
                 }
             }
-            RelayToHost::Shared { .. } | RelayToHost::Ping | RelayToHost::Error { .. } => {}
+            RelayToHost::Shared { .. }
+            | RelayToHost::Ping
+            | RelayToHost::Error { .. }
+            // The host does not act on presence or a viewer's pointer yet.
+            | RelayToHost::Presence { .. }
+            | RelayToHost::Pointer { .. } => {}
         }
     }
 

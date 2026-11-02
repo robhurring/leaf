@@ -182,6 +182,7 @@ async fn a_host_gets_an_id_and_urls() {
         web_url,
         app_url,
         viewers,
+        ..
     } = shared
     else {
         unreachable!()

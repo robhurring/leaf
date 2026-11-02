@@ -1,0 +1,10 @@
+{
+  "type": "pointer",
+  "peer": "v1",
+  "pointer": {
+    "docPath": "a.mmd",
+    "blockHash": "h",
+    "x": 10.5,
+    "y": 20.0
+  }
+}

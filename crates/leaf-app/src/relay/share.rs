@@ -223,6 +223,8 @@ impl Share {
                 host_path: self.host_path.clone(),
                 viewers: viewers.clone(),
                 you: id.clone(),
+                slide: None,
+                stage: None,
                 in_reply_to: None,
             });
             if !offer(&v.tx, m) {
@@ -376,6 +378,7 @@ impl Relay {
             id: HOST_ID.into(),
             name: name.to_string(),
             color: color_for(name),
+            path: None,
         };
         let mut shares = self.lock();
         let id = match resume {
@@ -456,6 +459,7 @@ impl Relay {
             web_url,
             app_url,
             viewers,
+            capabilities: Vec::new(),
         });
         Ok(Accepted { id, shared, replay })
     }
@@ -584,6 +588,7 @@ impl Relay {
             id: vid.clone(),
             color: color_for(&name),
             name,
+            path: None,
         };
         share.for_host(
             &vid,

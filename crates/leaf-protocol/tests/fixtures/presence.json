@@ -10,8 +10,17 @@
     {
       "id": "v1",
       "name": "Brisk Otter",
-      "color": "#10b981"
+      "color": "#10b981",
+      "path": "docs/plan.md"
     }
   ],
-  "you": "v1"
+  "you": "v1",
+  "slide": {
+    "path": "deck.md",
+    "index": 3
+  },
+  "stage": {
+    "docPath": "docs/plan.md",
+    "blockHash": "h1"
+  }
 }

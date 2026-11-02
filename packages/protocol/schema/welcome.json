@@ -180,6 +180,9 @@
                 },
                 "color": {
                   "type": "string"
+                },
+                "path": {
+                  "type": "string"
                 }
               },
               "required": [
