@@ -15,7 +15,8 @@ use leaf_protocol::relay::{
     CHUNK_BYTES, HostToRelay, Peer, RELAY_PROTOCOL, RelayToHost, ShareMode,
 };
 use leaf_protocol::{
-    ClientMessage, ErrorCode, PROTOCOL_VERSION, RootInfo, ServerMessage, Slide, StageRef,
+    ClientMessage, ErrorCode, PROTOCOL_VERSION, PointerAt, RootInfo, ServerMessage, Slide,
+    StageRef, Stroke,
 };
 use serde_json::{Value, json};
 use tokio::io::AsyncReadExt;
@@ -71,6 +72,15 @@ enum Cmd {
     Path(Option<String>),
     Slide(Option<Slide>),
     Stage(Option<StageRef>),
+    Ink(Stroke),
+    InkUndo {
+        doc_path: String,
+        block_hash: String,
+    },
+    InkClear {
+        doc_path: String,
+        block_hash: String,
+    },
     End,
 }
 
@@ -84,6 +94,9 @@ pub struct ShareHandle {
     pub viewers: watch::Receiver<Vec<Peer>>,
     pub status: watch::Receiver<LinkStatus>,
     cmds: mpsc::UnboundedSender<Cmd>,
+    /// The latest pointer not yet sent (outer `None`: nothing pending); a newer one
+    /// replaces it, so a busy socket never queues pointers.
+    pointer: watch::Sender<Option<Option<PointerAt>>>,
     /// Viewers see git history (each file's last commit, blame). Off unless the host asks.
     git: Arc<AtomicBool>,
     /// The relay announced the `presence` capability: slide and stage may be sent.
@@ -109,6 +122,41 @@ impl ShareHandle {
     pub fn set_stage(&self, stage: Option<StageRef>) {
         if self.presence_capable() {
             let _ = self.cmds.send(Cmd::Stage(stage));
+        }
+    }
+
+    /// Where the host's pointer is on the open block (`None`: it left). Only the latest
+    /// is sent when the socket is free; silent when the relay can't take it.
+    pub fn pointer(&self, pointer: Option<PointerAt>) {
+        if self.presence_capable() {
+            self.pointer.send_replace(Some(pointer));
+        }
+    }
+
+    /// A stroke the host drew, for viewers; silent when the relay can't take it.
+    pub fn ink(&self, stroke: Stroke) {
+        if self.presence_capable() {
+            let _ = self.cmds.send(Cmd::Ink(stroke));
+        }
+    }
+
+    /// Takes back the host's last stroke on a block; silent when the relay can't take it.
+    pub fn ink_undo(&self, doc_path: String, block_hash: String) {
+        if self.presence_capable() {
+            let _ = self.cmds.send(Cmd::InkUndo {
+                doc_path,
+                block_hash,
+            });
+        }
+    }
+
+    /// Wipes the host's strokes on a block; silent when the relay can't take it.
+    pub fn ink_clear(&self, doc_path: String, block_hash: String) {
+        if self.presence_capable() {
+            let _ = self.cmds.send(Cmd::InkClear {
+                doc_path,
+                block_hash,
+            });
         }
     }
 
@@ -289,6 +337,7 @@ pub async fn start_checked(opts: HostOptions) -> Result<ShareHandle, StartError>
     let git = Arc::new(AtomicBool::new(false));
     let presence = Arc::new(AtomicBool::new(has_presence(&shared.capabilities)));
     let (inbox_tx, inbox_rx) = mpsc::unbounded_channel();
+    let (pointer, pointer_rx) = watch::channel(None);
     let handle = ShareHandle {
         id: shared.id.clone(),
         host_key: shared.host_key.clone(),
@@ -297,6 +346,7 @@ pub async fn start_checked(opts: HostOptions) -> Result<ShareHandle, StartError>
         viewers,
         status,
         cmds,
+        pointer,
         git: git.clone(),
         presence: presence.clone(),
         inbox: Mutex::new(Some(inbox_rx)),
@@ -307,6 +357,7 @@ pub async fn start_checked(opts: HostOptions) -> Result<ShareHandle, StartError>
         git,
         presence,
         inbox_tx,
+        pointer_rx,
         id: shared.id,
         host_key: shared.host_key,
         path: None,
@@ -368,6 +419,8 @@ struct Link {
     presence: Arc<AtomicBool>,
     /// Presence for the host's own tab.
     inbox_tx: mpsc::UnboundedSender<ServerMessage>,
+    /// The handle's pending pointer; only the latest is ever sent.
+    pointer_rx: watch::Receiver<Option<Option<PointerAt>>>,
     id: String,
     host_key: String,
     path: Option<String>,
@@ -408,6 +461,8 @@ impl Link {
                 return Stop::Lost;
             }
         }
+        // A pointer is ephemeral: whatever piled up while the link was away is stale.
+        self.pointer_rx.mark_unchanged();
         let silence = tokio::time::sleep(SILENT_FOR);
         tokio::pin!(silence);
         loop {
@@ -431,6 +486,23 @@ impl Link {
                             return Stop::Lost;
                         }
                     }
+                    Some(Cmd::Ink(stroke)) => {
+                        if ws.send(text(&HostToRelay::Ink { stroke })).await.is_err() {
+                            return Stop::Lost;
+                        }
+                    }
+                    Some(Cmd::InkUndo { doc_path, block_hash }) => {
+                        let m = HostToRelay::InkUndo { doc_path, block_hash };
+                        if ws.send(text(&m)).await.is_err() {
+                            return Stop::Lost;
+                        }
+                    }
+                    Some(Cmd::InkClear { doc_path, block_hash }) => {
+                        let m = HostToRelay::InkClear { doc_path, block_hash };
+                        if ws.send(text(&m)).await.is_err() {
+                            return Stop::Lost;
+                        }
+                    }
                     Some(Cmd::End) => {
                         tracing::info!(share = %self.id, "ending the share");
                         let _ = ws.send(text(&HostToRelay::End)).await;
@@ -444,6 +516,14 @@ impl Link {
                         return Stop::Done;
                     }
                 },
+                Ok(()) = self.pointer_rx.changed() => {
+                    let latest = self.pointer_rx.borrow_and_update().clone();
+                    if let Some(pointer) = latest
+                        && ws.send(text(&HostToRelay::Pointer { pointer })).await.is_err()
+                    {
+                        return Stop::Lost;
+                    }
+                }
                 out = self.out_rx.recv() => {
                     let m = match out {
                         Some(Out::Viewer(m) | Out::Fetch(m)) => m,
@@ -609,11 +689,14 @@ impl Link {
                     in_reply_to: None,
                 });
             }
-            RelayToHost::Shared { .. }
-            | RelayToHost::Ping
-            | RelayToHost::Error { .. }
-            // The host does not act on a viewer's pointer yet.
-            | RelayToHost::Pointer { .. } => {}
+            RelayToHost::Pointer { viewer, pointer } => {
+                let _ = self.inbox_tx.send(ServerMessage::Pointer {
+                    peer: viewer,
+                    pointer,
+                    in_reply_to: None,
+                });
+            }
+            RelayToHost::Shared { .. } | RelayToHost::Ping | RelayToHost::Error { .. } => {}
         }
     }
 
@@ -673,6 +756,8 @@ impl Link {
                         Some(Cmd::Path(path)) => self.path = path,
                         Some(Cmd::Slide(slide)) => self.slide = slide,
                         Some(Cmd::Stage(stage)) => self.stage = stage,
+                        // Ink is not kept for a link that is away.
+                        Some(Cmd::Ink(_) | Cmd::InkUndo { .. } | Cmd::InkClear { .. }) => {}
                         Some(Cmd::End) | None => {
                             let _ = self.status_tx.send(LinkStatus::Ended);
                             return None;
@@ -995,6 +1080,7 @@ mod tests {
                 viewers,
                 status,
                 cmds,
+                pointer: watch::channel(None).0,
                 git: Arc::new(AtomicBool::new(false)),
                 presence: Arc::new(AtomicBool::new(presence)),
                 inbox: Mutex::new(None),

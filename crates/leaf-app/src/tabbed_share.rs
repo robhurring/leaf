@@ -320,7 +320,17 @@ pub fn from_host_tab(app: &AppHandle, tab: &str, msg: ClientMessage) {
     match msg {
         ClientMessage::Slide { slide } => handle.set_slide(slide),
         ClientMessage::Stage { stage } => handle.set_stage(stage),
-        // Pointer and ink have no handle methods until Task 9 adds them.
+        ClientMessage::Pointer { pointer } => handle.pointer(pointer),
+        ClientMessage::Ink { stroke } => handle.ink(stroke),
+        ClientMessage::InkUndo {
+            doc_path,
+            block_hash,
+        } => handle.ink_undo(doc_path, block_hash),
+        ClientMessage::InkClear {
+            doc_path,
+            block_hash,
+        } => handle.ink_clear(doc_path, block_hash),
+        // `host_bound` lets nothing else through.
         _ => {}
     }
 }

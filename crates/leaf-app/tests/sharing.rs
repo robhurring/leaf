@@ -9,7 +9,7 @@ use leaf_app::relay::{self, RelayOptions, RelayStarted};
 use leaf_app::sharing::{self, HostOptions, LinkStatus, ShareHandle};
 use leaf_core::engine::Engine;
 use leaf_protocol::relay::ShareMode;
-use leaf_protocol::{ClientMessage, PROTOCOL_VERSION, ServerMessage, Slide};
+use leaf_protocol::{ClientMessage, PROTOCOL_VERSION, PointerAt, ServerMessage, Slide, Stroke};
 use serde_json::{Value, json};
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio_tungstenite::tungstenite::Message;
@@ -45,6 +45,7 @@ fn folder() -> Folder {
     let root = tempfile::tempdir().unwrap();
     let r = root.path().canonicalize().unwrap();
     std::fs::write(r.join("README.md"), "# shared\n").unwrap();
+    std::fs::write(r.join("a.mmd"), "graph TD; A-->B\n").unwrap();
     std::fs::create_dir_all(r.join("pics")).unwrap();
     std::fs::write(r.join("pics/a.png"), b"0123456789").unwrap();
     std::fs::write(r.join(".gitignore"), "secret.md\n").unwrap();
@@ -499,6 +500,78 @@ async fn the_host_hears_where_viewers_are_and_viewers_hear_the_hosts_slide() {
 }
 
 /// Makes `root` a git repository with everything in it committed.
+fn stroke_sticky(id: &str, doc: &str, block: &str) -> Stroke {
+    Stroke {
+        id: id.into(),
+        doc_path: doc.into(),
+        block_hash: block.into(),
+        points: vec![[0.0, 0.0], [1.0, 1.0]],
+        color: "red".into(),
+        width: 4.0,
+        sticky: true,
+        created_at: 1.0,
+    }
+}
+
+#[tokio::test]
+async fn pointers_and_ink_cross_the_relay_both_ways() {
+    let f = folder();
+    let r = relay::start(options(0)).await.unwrap();
+    let h = share(&r, &f.engine).await;
+    assert!(h.presence_capable());
+    let mut inbox = h.take_inbox().expect("inbox once");
+    let (mut v, _) = viewer(r.port, &h.id).await;
+    // Pointers and ink reach whoever is on the same document: both are on a.mmd.
+    h.set_path(Some("a.mmd".into()));
+    send(&mut v, json!({"type": "at", "path": "a.mmd"})).await;
+    tokio::time::timeout(WAIT, async {
+        loop {
+            if let Some(ServerMessage::Presence { viewers, .. }) = inbox.recv().await
+                && viewers.iter().any(|p| p.path.as_deref() == Some("a.mmd"))
+            {
+                break;
+            }
+        }
+    })
+    .await
+    .expect("the host hears the viewer arrive");
+    h.pointer(Some(PointerAt {
+        doc_path: "a.mmd".into(),
+        block_hash: "h".into(),
+        x: 1.0,
+        y: 2.0,
+    }));
+    let m = next_of(&mut v, "pointer").await;
+    assert_eq!(m["peer"], "host");
+    assert_eq!(m["pointer"]["x"], 1.0);
+    h.ink(stroke_sticky("host:1", "a.mmd", "h"));
+    let m = next_of(&mut v, "ink").await;
+    assert_eq!(m["stroke"]["id"], "host:1");
+    send(
+        &mut v,
+        json!({"type":"pointer","pointer":{"docPath":"a.mmd","blockHash":"h","x":3.0,"y":4.0}}),
+    )
+    .await;
+    let (peer, p) = tokio::time::timeout(WAIT, async {
+        loop {
+            if let Some(ServerMessage::Pointer {
+                peer,
+                pointer: Some(p),
+                ..
+            }) = inbox.recv().await
+            {
+                break (peer, p);
+            }
+        }
+    })
+    .await
+    .expect("the host hears the viewer's pointer");
+    assert_eq!(p.x, 3.0);
+    assert_ne!(peer, "host");
+    h.end();
+    r.stop().await;
+}
+
 fn commit_all(root: &std::path::Path) {
     let git = |args: &[&str]| {
         let st = std::process::Command::new("git")
