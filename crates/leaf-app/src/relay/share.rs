@@ -830,7 +830,7 @@ impl Relay {
                 return;
             }
             if msg.get("type").and_then(Value::as_str) == Some("pointer") {
-                self.viewer_pointer(id, share, viewer, &msg);
+                Self::viewer_pointer(share, viewer, &msg);
                 return;
             }
             share.for_host(
@@ -845,8 +845,9 @@ impl Relay {
     }
 
     /// A viewer's `pointer`: thinned to one frame per `POINTER_MIN_GAP`, then shown to the
-    /// other viewers on its document and to the host. Never sent back to its sender.
-    fn viewer_pointer(self: &Arc<Self>, id: &str, share: &mut Share, viewer: &str, msg: &Value) {
+    /// other viewers on its document and to the host if it is present. Never sent back to
+    /// its sender.
+    fn viewer_pointer(share: &mut Share, viewer: &str, msg: &Value) {
         let pointer = match msg.get("pointer") {
             None | Some(Value::Null) => None,
             Some(p) => match serde_json::from_value::<PointerAt>(p.clone()) {
@@ -879,14 +880,17 @@ impl Relay {
                 in_reply_to: None,
             },
         );
-        share.for_host(
-            viewer,
-            &RelayToHost::Pointer {
-                viewer: viewer.to_string(),
-                pointer,
-            },
-        );
-        self.settle(id, share, Vec::new());
+        // Only to a host that is here and keeping up: a pointer is never buffered for a
+        // host that is away, and never marks a full host behind.
+        if let Some(tx) = share.host.as_ref().filter(|_| !share.host_full) {
+            offer_drop(
+                tx,
+                text(&RelayToHost::Pointer {
+                    viewer: viewer.to_string(),
+                    pointer,
+                }),
+            );
+        }
     }
 
     /// A viewer's socket closed. Nothing to do when it was already dropped or the share ended.
@@ -1292,6 +1296,83 @@ mod tests {
         let share = shares.get(&id).unwrap();
         assert!(share.viewers.contains_key(&cy), "still a viewer");
         assert!(!share.host_full);
+        drop(shares);
+        r.shutdown();
+    }
+
+    #[tokio::test]
+    async fn a_viewers_pointer_is_never_buffered_for_an_away_host_nor_marks_a_full_one_behind() {
+        let r = relay();
+        let (htx, mut hrx) = mpsc::channel(1);
+        let id = r
+            .share(1, htx, "Rob", ShareMode::ReadOnly, None)
+            .ok()
+            .unwrap()
+            .id;
+        let (vtx, _vrx) = mpsc::channel(QUEUE_FRAMES);
+        let ann = r
+            .join(&id, Some("Ann".into()), json!({"type": "hello"}), vtx)
+            .unwrap();
+        // The host's one slot holds `joined`; the hello overflowed it, so it is away.
+        assert_eq!(kind(&hrx.try_recv().unwrap()), "joined");
+        let frame = json!({"type": "pointer", "pointer": {"docPath": "a.mmd", "blockHash": "h", "x": 1.0, "y": 2.0}});
+        let before = r.lock().get(&id).unwrap().buffered[&ann].len();
+        for _ in 0..3 {
+            r.from_viewer(&id, &ann, frame.clone());
+            std::thread::sleep(POINTER_MIN_GAP);
+        }
+        assert_eq!(r.lock().get(&id).unwrap().buffered[&ann].len(), before);
+        let (htx, _hrx) = mpsc::channel(QUEUE_FRAMES);
+        let resume = Resume {
+            id: id.clone(),
+            host_key: hostkey::host_key(b"s", &id),
+        };
+        let a = r
+            .share(2, htx, "Rob", ShareMode::ReadOnly, Some(resume))
+            .ok()
+            .unwrap();
+        assert!(
+            a.replay.iter().all(|f| !f.contains("\"pointer\"")),
+            "{:?}",
+            a.replay
+        );
+        r.shutdown();
+
+        // A present host whose queue is full is not marked behind by a pointer.
+        let r = relay();
+        let (htx, _hrx) = mpsc::channel(1);
+        let id = r
+            .share(1, htx, "Rob", ShareMode::ReadOnly, None)
+            .ok()
+            .unwrap()
+            .id;
+        let (vtx, _vrx) = mpsc::channel(QUEUE_FRAMES);
+        let tx_only = r.lock().get(&id).unwrap().host.clone().unwrap();
+        tx_only.try_send(Message::Text("x".into())).unwrap();
+        let ann = {
+            // Join through the share directly so the host's overflow doesn't happen yet.
+            let mut shares = r.lock();
+            let share = shares.get_mut(&id).unwrap();
+            share.viewers.insert(
+                "v9".into(),
+                Viewer {
+                    seq: 9,
+                    peer: Peer {
+                        id: "v9".into(),
+                        name: "Ann".into(),
+                        color: color_for("Ann"),
+                        path: None,
+                    },
+                    tx: vtx,
+                },
+            );
+            "v9"
+        };
+        r.from_viewer(&id, ann, frame);
+        let shares = r.lock();
+        let share = shares.get(&id).unwrap();
+        assert!(!share.host_full);
+        assert!(share.buffered.is_empty());
         drop(shares);
         r.shutdown();
     }
