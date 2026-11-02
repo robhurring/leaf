@@ -14,7 +14,7 @@ use std::time::Duration;
 use axum::body::Bytes;
 use axum::extract::ws::{CloseFrame, Message};
 use leaf_protocol::relay::{Peer, RelayToHost, Resume, ShareInfo, ShareMode};
-use leaf_protocol::{ServerMessage, ShareState};
+use leaf_protocol::{ServerMessage, ShareState, Slide, StageRef};
 use serde_json::Value;
 use tokio::sync::mpsc::error::TrySendError;
 use tokio::sync::mpsc::{self, Sender};
@@ -167,6 +167,10 @@ pub struct Share {
     buffered: HashMap<String, VecDeque<String>>,
     info: ShareInfo,
     host_path: Option<String>,
+    /// The host's open slide, shown to every viewer; gone with the share.
+    slide: Option<Slide>,
+    /// The block open on the host's canvas.
+    stage: Option<StageRef>,
     grace_timer: Option<JoinHandle<()>>,
     /// Raw fetches waiting on the host, by `req`.
     fetches: HashMap<u32, Fetch>,
@@ -213,8 +217,15 @@ impl Share {
         v.into_iter().map(|v| v.peer.clone()).collect()
     }
 
-    /// Sends everyone presence; returns the viewers whose queues were full.
-    fn presence(&self) -> Vec<String> {
+    /// What the host is told about the viewers: who they are and where they are.
+    fn presence_for_host(&self) -> RelayToHost {
+        RelayToHost::Presence {
+            viewers: self.peers(),
+        }
+    }
+
+    /// Sends everyone, the host included, presence; returns the viewers whose queues were full.
+    fn presence(&mut self) -> Vec<String> {
         let viewers = self.peers();
         let mut full = Vec::new();
         for (id, v) in &self.viewers {
@@ -223,14 +234,16 @@ impl Share {
                 host_path: self.host_path.clone(),
                 viewers: viewers.clone(),
                 you: id.clone(),
-                slide: None,
-                stage: None,
+                slide: self.slide.clone(),
+                stage: self.stage.clone(),
                 in_reply_to: None,
             });
             if !offer(&v.tx, m) {
                 full.push(id.clone());
             }
         }
+        let for_host = self.presence_for_host();
+        self.for_host(HOST_ID, &for_host);
         full
     }
 
@@ -264,6 +277,24 @@ fn status(state: ShareState, reason: Option<&str>) -> Message {
         reason: reason.map(str::to_string),
         in_reply_to: None,
     })
+}
+
+/// A path a viewer names, kept only when it stays inside the share: relative, with no
+/// `.`, `..`, empty or backslash parts. Returns it joined cleanly.
+pub fn clean_share_path(p: &str) -> Option<String> {
+    if p.contains('\\') {
+        return None;
+    }
+    let mut parts = Vec::new();
+    for (i, part) in p.split('/').enumerate() {
+        match part {
+            ".." => return None,
+            "" if i == 0 => return None,
+            "" | "." => {}
+            part => parts.push(part),
+        }
+    }
+    (!parts.is_empty()).then(|| parts.join("/"))
 }
 
 fn viewer_seq(id: &str) -> u64 {
@@ -445,6 +476,8 @@ impl Relay {
                             app_url: app_url.clone(),
                         },
                         host_path: None,
+                        slide: None,
+                        stage: None,
                         grace_timer: None,
                         fetches: HashMap::new(),
                         next_req: 1,
@@ -459,7 +492,7 @@ impl Relay {
             web_url,
             app_url,
             viewers,
-            capabilities: Vec::new(),
+            capabilities: vec!["presence".into()],
         });
         Ok(Accepted { id, shared, replay })
     }
@@ -523,6 +556,26 @@ impl Relay {
         let mut shares = self.lock();
         if let Some(share) = shares.get_mut(id).filter(|s| s.host_conn == conn) {
             share.host_path = path;
+            let full = share.presence();
+            self.settle(id, share, full);
+        }
+    }
+
+    /// The host's `slide`: the slide it has open, or none.
+    pub fn slide(self: &Arc<Self>, id: &str, conn: u64, slide: Option<Slide>) {
+        let mut shares = self.lock();
+        if let Some(share) = shares.get_mut(id).filter(|s| s.host_conn == conn) {
+            share.slide = slide;
+            let full = share.presence();
+            self.settle(id, share, full);
+        }
+    }
+
+    /// The host's `stage`: the block open on its canvas, or none.
+    pub fn stage(self: &Arc<Self>, id: &str, conn: u64, stage: Option<StageRef>) {
+        let mut shares = self.lock();
+        if let Some(share) = shares.get_mut(id).filter(|s| s.host_conn == conn) {
+            share.stage = stage;
             let full = share.presence();
             self.settle(id, share, full);
         }
@@ -622,6 +675,20 @@ impl Relay {
         if let Some(share) = shares.get_mut(id)
             && share.viewers.contains_key(viewer)
         {
+            if msg.get("type").and_then(Value::as_str) == Some("at") {
+                // Where the viewer is reading: told to everyone, never to the host as a
+                // message. A path outside the share is ignored, not stored.
+                let at = msg
+                    .get("path")
+                    .and_then(Value::as_str)
+                    .and_then(clean_share_path);
+                if let (Some(at), Some(v)) = (at, share.viewers.get_mut(viewer)) {
+                    v.peer.path = Some(at);
+                    let full = share.presence();
+                    self.settle(id, share, full);
+                }
+                return;
+            }
             share.for_host(
                 viewer,
                 &RelayToHost::FromViewer {
@@ -799,6 +866,7 @@ pub fn unknown_share_close() -> Message {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use serde_json::json;
     use tokio::sync::mpsc;
 
     fn relay() -> Arc<Relay> {
@@ -818,6 +886,140 @@ mod tests {
                 .to_string(),
             Message::Close(_) => "close".into(),
             other => format!("{other:?}"),
+        }
+    }
+
+    fn payload(m: &Message) -> Value {
+        match m {
+            Message::Text(t) => serde_json::from_str(t).unwrap(),
+            other => panic!("not a text frame: {other:?}"),
+        }
+    }
+
+    /// A share by "Rob" with Ann and Bob joined and every queue drained.
+    async fn crowd() -> (
+        Arc<Relay>,
+        String,
+        (String, mpsc::Receiver<Message>),
+        (String, mpsc::Receiver<Message>),
+        mpsc::Receiver<Message>,
+    ) {
+        let r = relay();
+        let (htx, mut hrx) = mpsc::channel(QUEUE_FRAMES);
+        let id = r
+            .share(1, htx, "Rob", ShareMode::ReadOnly, None)
+            .ok()
+            .unwrap()
+            .id;
+        let join = |name: &str| {
+            let (tx, rx) = mpsc::channel(QUEUE_FRAMES);
+            let vid = r
+                .join(&id, Some(name.into()), json!({"type": "hello"}), tx)
+                .unwrap();
+            (vid, rx)
+        };
+        let (ann, mut arx) = join("Ann");
+        let (bob, mut brx) = join("Bob");
+        while arx.try_recv().is_ok() {}
+        while brx.try_recv().is_ok() {}
+        while hrx.try_recv().is_ok() {}
+        (r, id, (ann, arx), (bob, brx), hrx)
+    }
+
+    #[tokio::test]
+    async fn a_viewer_says_where_it_is_and_everyone_hears_including_the_host() {
+        let (r, id, (ann, mut arx), (_bob, mut brx), mut hrx) = crowd().await;
+        r.from_viewer(&id, &ann, json!({"type": "at", "path": "docs/a.md"}));
+        for rx in [&mut arx, &mut brx] {
+            let p = payload(&rx.try_recv().unwrap());
+            assert_eq!(p["type"], "presence");
+            assert_eq!(p["viewers"][0]["path"], "docs/a.md");
+            assert!(p["viewers"][1]["path"].is_null());
+        }
+        let p = payload(&hrx.try_recv().unwrap());
+        assert_eq!(p["type"], "presence");
+        assert_eq!(p["viewers"][0]["path"], "docs/a.md");
+        assert_eq!(p["viewers"].as_array().unwrap().len(), 2);
+        assert!(hrx.try_recv().is_err(), "an `at` is not forwarded");
+        r.shutdown();
+    }
+
+    #[tokio::test]
+    async fn an_at_outside_the_share_is_ignored() {
+        let (r, id, (ann, mut arx), (_bob, mut brx), mut hrx) = crowd().await;
+        for bad in ["../x", "/etc/passwd", "a/../../b", "a\\b"] {
+            r.from_viewer(&id, &ann, json!({"type": "at", "path": bad}));
+        }
+        assert!(brx.try_recv().is_err());
+        assert!(arx.try_recv().is_err());
+        assert!(hrx.try_recv().is_err());
+        r.from_viewer(&id, &ann, json!({"type": "at"}));
+        assert!(brx.try_recv().is_err(), "a missing path is ignored too");
+        r.slide(&id, 1, None);
+        let p = payload(&brx.try_recv().unwrap());
+        assert!(p["viewers"][0]["path"].is_null());
+        r.shutdown();
+    }
+
+    #[tokio::test]
+    async fn the_hosts_slide_and_canvas_ride_in_presence_and_reach_a_late_viewer() {
+        let (r, id, (_ann, mut arx), _bob, _hrx) = crowd().await;
+        r.slide(
+            &id,
+            1,
+            Some(Slide {
+                path: "deck.md".into(),
+                index: 4,
+            }),
+        );
+        r.stage(
+            &id,
+            1,
+            Some(StageRef {
+                doc_path: "a.mmd".into(),
+                block_hash: "h".into(),
+            }),
+        );
+        assert_eq!(payload(&arx.try_recv().unwrap())["slide"]["index"], 4);
+        assert_eq!(payload(&arx.try_recv().unwrap())["stage"]["blockHash"], "h");
+        let (tx, mut late) = mpsc::channel(QUEUE_FRAMES);
+        r.join(&id, Some("Cy".into()), json!({"type": "hello"}), tx)
+            .unwrap();
+        let p = payload(&late.try_recv().unwrap());
+        assert_eq!(p["slide"]["index"], 4);
+        assert_eq!(p["stage"]["blockHash"], "h");
+        r.slide(&id, 1, None);
+        while arx.try_recv().is_ok() {}
+        let p = payload(&late.try_recv().unwrap());
+        assert!(p["slide"].is_null());
+        assert_eq!(p["stage"]["blockHash"], "h");
+        r.shutdown();
+    }
+
+    #[tokio::test]
+    async fn shared_announces_the_presence_capability() {
+        let r = relay();
+        let (htx, _hrx) = mpsc::channel(QUEUE_FRAMES);
+        let a = r
+            .share(1, htx, "Rob", ShareMode::ReadOnly, None)
+            .ok()
+            .unwrap();
+        match serde_json::from_value::<RelayToHost>(payload(&a.shared)).unwrap() {
+            RelayToHost::Shared { capabilities, .. } => assert_eq!(capabilities, ["presence"]),
+            other => panic!("{other:?}"),
+        }
+        r.shutdown();
+    }
+
+    #[test]
+    fn clean_share_path_accepts_relative_paths_only() {
+        assert_eq!(clean_share_path("docs/a.md").as_deref(), Some("docs/a.md"));
+        assert_eq!(
+            clean_share_path("./docs//a.md").as_deref(),
+            Some("docs/a.md")
+        );
+        for bad in ["", "../a", "/a", "a/../b", "a\\b", "."] {
+            assert!(clean_share_path(bad).is_none(), "{bad}");
         }
     }
 
@@ -844,7 +1046,10 @@ mod tests {
         let host: Vec<String> = std::iter::from_fn(|| hrx.try_recv().ok())
             .map(|m| kind(&m))
             .collect();
-        assert_eq!(host, ["joined", "fromViewer", "left"]);
+        assert_eq!(
+            host,
+            ["joined", "fromViewer", "presence", "left", "presence"]
+        );
         assert_eq!(kind(&vrx.try_recv().unwrap()), "presence");
         assert!(vrx.try_recv().is_err(), "the viewer's queue is closed");
         r.shutdown();
@@ -888,8 +1093,9 @@ mod tests {
             .share(2, htx, "Rob", ShareMode::ReadOnly, Some(resume))
             .ok()
             .unwrap();
-        assert_eq!(a.replay.len(), 1);
+        assert_eq!(a.replay.len(), 2);
         assert!(a.replay[0].contains("\"hello\""), "{:?}", a.replay);
+        assert!(a.replay[1].contains("\"presence\""), "{:?}", a.replay);
         r.shutdown();
     }
 

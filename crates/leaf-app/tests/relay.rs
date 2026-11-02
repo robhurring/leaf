@@ -132,7 +132,7 @@ async fn hello(ws: &mut Ws, name: Option<&str>) {
     .unwrap();
 }
 
-/// A viewer that has said hello, with the host having seen Joined and the hello.
+/// A viewer that has said hello, with the host having seen Joined, the hello and the presence that follows.
 async fn joined_viewer(port: u16, id: &str, host: &mut Ws, name: &str) -> (Ws, String) {
     let mut v = viewer(port, id).await;
     hello(&mut v, Some(name)).await;
@@ -143,6 +143,10 @@ async fn joined_viewer(port: u16, id: &str, host: &mut Ws, name: &str) -> (Ws, S
     assert!(matches!(
         next_host(host).await,
         RelayToHost::FromViewer { .. }
+    ));
+    assert!(matches!(
+        next_host(host).await,
+        RelayToHost::Presence { .. }
     ));
     (v, vid)
 }
@@ -394,6 +398,10 @@ async fn the_host_can_expel_one_viewer() {
     closed(&mut v1).await;
     match next_host(&mut host).await {
         RelayToHost::Left { viewer } => assert_eq!(viewer, id1),
+        other => panic!("{other:?}"),
+    }
+    match next_host(&mut host).await {
+        RelayToHost::Presence { viewers } => assert_eq!(viewers.len(), 1),
         other => panic!("{other:?}"),
     }
 
@@ -987,6 +995,11 @@ async fn a_resumed_host_ends_the_old_fetches_and_takes_new_ones() {
     assert!(matches!(
         next_host(&mut host).await,
         RelayToHost::Shared { .. }
+    ));
+    // The resumed host hears who is here (nobody) before anything else.
+    assert!(matches!(
+        next_host(&mut host).await,
+        RelayToHost::Presence { .. }
     ));
     let path = format!("/s/{id}/raw/b.png");
     let get = tokio::spawn(async move { http_reply(port, &path, "").await });

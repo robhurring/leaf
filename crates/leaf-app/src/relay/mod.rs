@@ -572,6 +572,8 @@ async fn host_session(mut socket: WebSocket, s: RelayState) {
                     Ok(HostToRelay::ToViewer { viewer, msg }) => s.relay.to_viewer(&id, conn, &viewer, msg),
                     Ok(HostToRelay::Fetched { req, status, headers }) => s.relay.fetched(&id, conn, req, (status, headers)),
                     Ok(HostToRelay::Path { path }) => s.relay.path(&id, conn, path),
+                    Ok(HostToRelay::Slide { slide }) => s.relay.slide(&id, conn, slide),
+                    Ok(HostToRelay::Stage { stage }) => s.relay.stage(&id, conn, stage),
                     Ok(HostToRelay::End) => s.relay.end(&id, conn),
                     Ok(HostToRelay::Pong) => pong_due = None,
                     Ok(other) => tracing::debug!(share = %id, msg = ?other, "host message ignored"),
