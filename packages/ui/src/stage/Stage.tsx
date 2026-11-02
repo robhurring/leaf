@@ -413,7 +413,9 @@ export function StageCanvas({
           {canDraw && (
             <Draw docPath={open.docPath} blockHash={open.blockHash} current={drawing.current} />
           )}
-          {!embedded && <PeerDots docPath={open.docPath} blockHash={open.blockHash} scale={t.scale} />}
+          {!embedded && (
+            <PeerDots docPath={open.docPath} blockHash={open.blockHash} scale={t.scale} />
+          )}
         </div>
       </div>
       {toolsSlot ? createPortal(toolbox, toolsSlot) : toolbox}
