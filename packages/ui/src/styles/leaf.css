@@ -2083,17 +2083,15 @@ a.leaf-pill:hover {
   overflow: visible;
   pointer-events: none;
 }
+/* Radius, stroke width and font size are attributes, counter-scaled to the zoom. */
 .leaf-peer-dot {
   stroke: var(--leaf-bg);
-  stroke-width: 2;
 }
 .leaf-peer-tag {
   font-family: var(--leaf-font-ui);
-  font-size: 12px;
   font-weight: 600;
   paint-order: stroke;
   stroke: var(--leaf-bg);
-  stroke-width: 3px;
   stroke-linejoin: round;
 }
 .leaf-toolbox {

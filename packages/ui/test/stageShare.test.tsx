@@ -123,6 +123,28 @@ describe('pointers and ink on a shared canvas', () => {
     expect(dots().queryByRole('img', { name: 'Ada' })).toBeNull();
   });
 
+  it('keeps the dots and name tags the same size on screen at any zoom', async () => {
+    const s = await openFile('a.mmd', SHARE);
+    act(() => s.emit(presence({ viewers: [v('v1', 'Ada', 'a.mmd'), v('v2', 'Grace')] })));
+    act(() => s.emit({ type: 'pointer', peer: 'v1', pointer: at(10, 20) }));
+    const gesture = (type: string, scale: number) => {
+      const ev = new Event(type, { bubbles: true, cancelable: true });
+      Object.assign(ev, { scale, clientX: 0, clientY: 0 });
+      act(() => {
+        viewport().dispatchEvent(ev);
+      });
+    };
+    gesture('gesturestart', 1);
+    gesture('gesturechange', 2);
+    gesture('gestureend', 2);
+    expect(screen.getByTestId('stage-layer').style.transform).toContain('scale(2)');
+    const dot = dots().getByRole('img', { name: 'Ada' });
+    expect(dot.querySelector('circle')!.getAttribute('r')).toBe('3');
+    const tag = dot.querySelector('text')!;
+    expect(tag.getAttribute('font-size')).toBe('6');
+    expect(tag.getAttribute('x')).toBe('15');
+  });
+
   it('never draws the page’s own pointer', async () => {
     const s = await openFile('a.mmd', SHARE);
     act(() => s.emit(presence({ viewers: [v('v2', 'Grace', 'a.mmd')] })));
