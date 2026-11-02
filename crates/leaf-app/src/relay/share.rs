@@ -106,6 +106,10 @@ pub const MAX_STICKY_CANVASES: usize = 50;
 pub const MAX_STICKY_STROKES: usize = 200;
 /// A viewer's pointer frames closer together than this are dropped (twenty a second).
 pub const POINTER_MIN_GAP: Duration = Duration::from_millis(50);
+/// A viewer's `at` frames closer together than this are dropped (four a second).
+pub const AT_MIN_GAP: Duration = Duration::from_millis(250);
+/// Longest path (or block hash) a viewer may name, in bytes.
+pub const MAX_PATH_LEN: usize = 1024;
 
 /// Why a host's `share` was refused: the `RelayToHost::Error` to send before closing.
 pub struct Refused {
@@ -190,6 +194,8 @@ pub struct Share {
     sticky_order: VecDeque<(String, String)>,
     /// When each viewer's last pointer frame was let through.
     last_pointer_at: HashMap<String, Instant>,
+    /// When each viewer's last `at` was let through.
+    last_at_at: HashMap<String, Instant>,
     grace_timer: Option<JoinHandle<()>>,
     /// Raw fetches waiting on the host, by `req`.
     fetches: HashMap<u32, Fetch>,
@@ -346,9 +352,10 @@ fn status(state: ShareState, reason: Option<&str>) -> Message {
 }
 
 /// A path a viewer names, kept only when it stays inside the share: relative, with no
-/// `.`, `..`, empty or backslash parts. Returns it joined cleanly.
+/// `.`, `..`, empty or backslash parts, and at most `MAX_PATH_LEN` bytes. Returns it
+/// joined cleanly.
 pub fn clean_share_path(p: &str) -> Option<String> {
-    if p.contains('\\') {
+    if p.len() > MAX_PATH_LEN || p.contains('\\') {
         return None;
     }
     let mut parts = Vec::new();
@@ -547,6 +554,7 @@ impl Relay {
                         sticky: HashMap::new(),
                         sticky_order: VecDeque::new(),
                         last_pointer_at: HashMap::new(),
+                        last_at_at: HashMap::new(),
                         grace_timer: None,
                         fetches: HashMap::new(),
                         next_req: 1,
@@ -815,14 +823,7 @@ impl Relay {
             && share.viewers.contains_key(viewer)
         {
             if msg.get("type").and_then(Value::as_str) == Some("at") {
-                // Where the viewer is reading: told to everyone, never to the host as a
-                // message. A path outside the share is ignored, not stored.
-                let at = msg
-                    .get("path")
-                    .and_then(Value::as_str)
-                    .and_then(clean_share_path);
-                if let (Some(at), Some(v)) = (at, share.viewers.get_mut(viewer)) {
-                    v.peer.path = Some(at.clone());
+                if let Some(at) = Self::viewer_at(share, viewer, &msg) {
                     let full = share.presence();
                     share.send_kept(viewer, &at);
                     self.settle(id, share, full);
@@ -844,9 +845,39 @@ impl Relay {
         }
     }
 
-    /// A viewer's `pointer`: thinned to one frame per `POINTER_MIN_GAP`, then shown to the
-    /// other viewers on its document and to the host if it is present. Never sent back to
-    /// its sender.
+    /// A viewer's `at`: where it is reading, told to everyone, never to the host as a
+    /// message. Stores and returns the new path; `None` (nothing to tell) for a path
+    /// outside the share or too long, the path it is already on, or a frame within
+    /// `AT_MIN_GAP` of the last one let through.
+    fn viewer_at(share: &mut Share, viewer: &str, msg: &Value) -> Option<String> {
+        let at = msg
+            .get("path")
+            .and_then(Value::as_str)
+            .and_then(clean_share_path)?;
+        let v = share.viewers.get_mut(viewer)?;
+        if v.peer.path.as_deref() == Some(at.as_str()) {
+            return None;
+        }
+        let now = Instant::now();
+        if share
+            .last_at_at
+            .get(viewer)
+            .is_some_and(|t| now.duration_since(*t) < AT_MIN_GAP)
+        {
+            return None;
+        }
+        v.peer.path = Some(at.clone());
+        share
+            .last_at_at
+            .retain(|v, _| share.viewers.contains_key(v));
+        share.last_at_at.insert(viewer.to_string(), now);
+        Some(at)
+    }
+
+    /// A viewer's `pointer`: accepted only on the document the viewer said it is on and
+    /// with a path and hash of at most `MAX_PATH_LEN` bytes, thinned to one frame per
+    /// `POINTER_MIN_GAP`, then shown to the other viewers on its document and to the host
+    /// if it is present with room to spare. Never sent back to its sender.
     fn viewer_pointer(share: &mut Share, viewer: &str, msg: &Value) {
         let pointer = match msg.get("pointer") {
             None | Some(Value::Null) => None,
@@ -855,6 +886,18 @@ impl Relay {
                 Err(_) => return,
             },
         };
+        if let Some(p) = &pointer {
+            let here = share
+                .viewers
+                .get(viewer)
+                .and_then(|v| v.peer.path.as_deref());
+            if p.doc_path.len() > MAX_PATH_LEN
+                || p.block_hash.len() > MAX_PATH_LEN
+                || here != Some(p.doc_path.as_str())
+            {
+                return;
+            }
+        }
         // A gone pointer always goes through, or it would linger on the others' screens.
         if pointer.is_some() {
             let now = Instant::now();
@@ -880,9 +923,14 @@ impl Relay {
                 in_reply_to: None,
             },
         );
-        // Only to a host that is here and keeping up: a pointer is never buffered for a
-        // host that is away, and never marks a full host behind.
-        if let Some(tx) = share.host.as_ref().filter(|_| !share.host_full) {
+        // Only to a host that is here and keeping up, with half its queue free: a pointer
+        // is never buffered for a host that is away, and a burst of them never fills the
+        // queue so that the next real frame marks the host behind.
+        if let Some(tx) = share
+            .host
+            .as_ref()
+            .filter(|tx| !share.host_full && tx.capacity() >= QUEUE_FRAMES / 2)
+        {
             offer_drop(
                 tx,
                 text(&RelayToHost::Pointer {
@@ -901,6 +949,7 @@ impl Relay {
         {
             share.viewers.remove(viewer);
             share.last_pointer_at.remove(viewer);
+            share.last_at_at.remove(viewer);
             share.for_host(
                 viewer,
                 &RelayToHost::Left {
@@ -1226,7 +1275,13 @@ mod tests {
         while arx.try_recv().is_ok() {}
         while brx.try_recv().is_ok() {}
         while hrx.try_recv().is_ok() {}
+        forget_at(&r, &id);
         (r, id, (ann, arx), (bob, brx), hrx)
+    }
+
+    /// Forgets when each viewer last moved, so the next `at` isn't thinned.
+    fn forget_at(r: &Relay, id: &str) {
+        r.lock().get_mut(id).unwrap().last_at_at.clear();
     }
 
     #[tokio::test]
@@ -1315,6 +1370,7 @@ mod tests {
             .unwrap();
         // The host's one slot holds `joined`; the hello overflowed it, so it is away.
         assert_eq!(kind(&hrx.try_recv().unwrap()), "joined");
+        r.from_viewer(&id, &ann, json!({"type": "at", "path": "a.mmd"}));
         let frame = json!({"type": "pointer", "pointer": {"docPath": "a.mmd", "blockHash": "h", "x": 1.0, "y": 2.0}});
         let before = r.lock().get(&id).unwrap().buffered[&ann].len();
         for _ in 0..3 {
@@ -1361,7 +1417,7 @@ mod tests {
                         id: "v9".into(),
                         name: "Ann".into(),
                         color: color_for("Ann"),
-                        path: None,
+                        path: Some("a.mmd".into()),
                     },
                     tx: vtx,
                 },
@@ -1390,6 +1446,90 @@ mod tests {
         r.from_viewer(&id, &ann, frame);
         assert_eq!(payload(&hrx.try_recv().unwrap())["type"], "pointer");
         assert!(hrx.try_recv().is_err());
+        r.shutdown();
+    }
+
+    fn pointer_frame(doc: &str, hash: &str) -> Value {
+        json!({"type": "pointer", "pointer": {"docPath": doc, "blockHash": hash, "x": 1.0, "y": 2.0}})
+    }
+
+    fn path_of(r: &Relay, id: &str, viewer: &str) -> Option<String> {
+        r.lock().get(id).unwrap().viewers[viewer].peer.path.clone()
+    }
+
+    #[tokio::test]
+    async fn an_at_for_the_path_a_viewer_is_on_says_nothing() {
+        let (r, id, (ann, mut arx), (_bob, mut brx), mut hrx) = placed().await;
+        r.ink(&id, 1, stroke("s1", "a.mmd", "h", true));
+        while arx.try_recv().is_ok() {}
+        r.from_viewer(&id, &ann, json!({"type": "at", "path": "./a.mmd"}));
+        assert!(
+            arx.try_recv().is_err(),
+            "no presence, no kept strokes again"
+        );
+        assert!(brx.try_recv().is_err());
+        assert!(hrx.try_recv().is_err());
+        r.shutdown();
+    }
+
+    #[tokio::test]
+    async fn ats_faster_than_four_a_second_are_thinned() {
+        let (r, id, _ann, (bob, mut brx), _hrx) = placed().await;
+        r.from_viewer(&id, &bob, json!({"type": "at", "path": "c.md"}));
+        assert_eq!(kind(&brx.try_recv().unwrap()), "presence");
+        r.from_viewer(&id, &bob, json!({"type": "at", "path": "d.md"}));
+        assert!(brx.try_recv().is_err(), "too soon: dropped");
+        assert_eq!(path_of(&r, &id, &bob).as_deref(), Some("c.md"));
+        tokio::time::sleep(AT_MIN_GAP).await;
+        r.from_viewer(&id, &bob, json!({"type": "at", "path": "d.md"}));
+        assert_eq!(kind(&brx.try_recv().unwrap()), "presence");
+        assert_eq!(path_of(&r, &id, &bob).as_deref(), Some("d.md"));
+        r.shutdown();
+    }
+
+    #[tokio::test]
+    async fn over_long_paths_and_hashes_are_ignored() {
+        let long = "a".repeat(MAX_PATH_LEN + 1);
+        assert!(clean_share_path(&long).is_none());
+        let longest = "a".repeat(MAX_PATH_LEN);
+        assert_eq!(clean_share_path(&longest), Some(longest.clone()));
+        let (r, id, (ann, _arx), (_bob, mut brx), mut hrx) = placed().await;
+        r.from_viewer(&id, &ann, json!({"type": "at", "path": long}));
+        assert!(brx.try_recv().is_err());
+        assert_eq!(path_of(&r, &id, &ann).as_deref(), Some("a.mmd"));
+        r.from_viewer(&id, &ann, pointer_frame("a.mmd", &long));
+        r.from_viewer(&id, &ann, pointer_frame(&long, "h"));
+        assert!(hrx.try_recv().is_err(), "neither pointer went through");
+        r.from_viewer(&id, &ann, pointer_frame("a.mmd", "h"));
+        assert_eq!(payload(&hrx.try_recv().unwrap())["type"], "pointer");
+        r.shutdown();
+    }
+
+    #[tokio::test]
+    async fn a_viewers_pointer_counts_only_on_the_document_it_is_on() {
+        let (r, id, (ann, _arx), (_bob, mut brx), mut hrx) = placed().await;
+        // Ann is on a.mmd; Bob is on b.md.
+        r.from_viewer(&id, &ann, pointer_frame("b.md", "h"));
+        assert!(
+            brx.try_recv().is_err(),
+            "not shown on a document Ann isn't on"
+        );
+        assert!(hrx.try_recv().is_err());
+        r.shutdown();
+    }
+
+    #[tokio::test]
+    async fn a_viewers_pointer_reaches_the_host_only_with_half_its_queue_free() {
+        let (r, id, (ann, _arx), _bob, _hrx) = placed().await;
+        let tx = r.lock().get(&id).unwrap().host.clone().unwrap();
+        for _ in 0..=QUEUE_FRAMES / 2 {
+            tx.try_send(Message::Text("x".into())).unwrap();
+        }
+        let room = tx.capacity();
+        assert!(room < QUEUE_FRAMES / 2);
+        r.from_viewer(&id, &ann, pointer_frame("a.mmd", "h"));
+        assert_eq!(tx.capacity(), room, "the pointer was dropped");
+        assert!(!r.lock().get(&id).unwrap().host_full);
         r.shutdown();
     }
 
@@ -1434,8 +1574,10 @@ mod tests {
                 stroke(&format!("c{i}"), "c.mmd", &format!("h{i}"), true),
             );
         }
+        forget_at(&r, &id);
         r.from_viewer(&id, &bob, json!({"type": "at", "path": "b.md"}));
         while brx.try_recv().is_ok() {}
+        forget_at(&r, &id);
         r.from_viewer(&id, &bob, json!({"type": "at", "path": "c.mmd"}));
         let ids: Vec<String> = std::iter::from_fn(|| brx.try_recv().ok())
             .filter(|m| kind(m) == "ink")
@@ -1465,7 +1607,9 @@ mod tests {
         while arx.try_recv().is_ok() {}
         r.ink_clear(&id, 1, "a.mmd".into(), "h".into());
         assert_eq!(kind(&arx.try_recv().unwrap()), "inkClear");
+        forget_at(&r, &id);
         r.from_viewer(&id, &bob, json!({"type": "at", "path": "b.md"}));
+        forget_at(&r, &id);
         r.from_viewer(&id, &bob, json!({"type": "at", "path": "a.mmd"}));
         let kinds: Vec<String> = std::iter::from_fn(|| brx.try_recv().ok())
             .map(|m| kind(&m))
