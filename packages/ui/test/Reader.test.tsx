@@ -68,13 +68,15 @@ describe('Reader', () => {
   });
 
   it('clicking a tree file opens it and updates the url', async () => {
-    render(<Reader source={dir().source} />);
+    const s = dir();
+    render(<Reader source={s.source} />);
     await screen.findByRole('heading', { level: 1 });
     const files = screen.getByRole('navigation', { name: 'Files' });
     fireEvent.click(within(files).getByText('docs'));
     fireEvent.click(await within(files).findByText('guide.md'));
     expect(await screen.findByRole('heading', { name: 'Guide', level: 1 })).toBeTruthy();
     expect(location.pathname).toBe('/docs/guide.md');
+    expect(s.sent.some((m) => m.type === 'at')).toBe(false);
   });
 
   it('an in-document relative link navigates', async () => {

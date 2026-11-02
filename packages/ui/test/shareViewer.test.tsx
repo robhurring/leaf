@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
-import { act, render, screen, fireEvent, waitFor } from '@testing-library/react';
+import { act, render, screen, fireEvent, waitFor, within } from '@testing-library/react';
 import type { PresenceMessage, ShareInfo } from '@leaf/protocol';
 import { Reader } from '../src/components/Reader.js';
 import { useDocuments } from '../src/store/documents.js';
@@ -45,6 +45,15 @@ async function open() {
 const banner = () => screen.findByRole('region', { name: 'Share' });
 
 describe('viewing a share', () => {
+  it('tells the relay which file it is on, and again when it moves', async () => {
+    const s = await open();
+    await waitFor(() => expect(s.sent).toContainEqual({ type: 'at', path: 'README.md' }));
+    const files = screen.getByRole('navigation', { name: 'Files' });
+    fireEvent.click(within(files).getByText('docs'));
+    fireEvent.click(await within(files).findByText('plan.md'));
+    await waitFor(() => expect(s.sent).toContainEqual({ type: 'at', path: 'docs/plan.md' }));
+  });
+
   it('the_banner_names_the_host_and_counts_viewers', async () => {
     const s = await open();
     expect((await banner()).textContent).toContain('Rob’s share · brisk-otter-lantern');

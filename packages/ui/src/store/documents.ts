@@ -6,6 +6,7 @@ import { applyRemotePreferences, syncPreferences } from './preferences.js';
 import { useAssets } from './assets.js';
 import type {
   BlameHunk,
+  ClientMessage,
   Capabilities,
   Config,
   Entry,
@@ -21,6 +22,7 @@ import type {
 import type { DocumentSource, SourceStatus } from '../source/DocumentSource.js';
 import type { Heading } from '../render/headings.js';
 import { NAME_KEY } from '../share/path.js';
+import { liveRole } from '../share/live.js';
 
 export type DocumentsState = {
   status: SourceStatus;
@@ -66,6 +68,8 @@ export type DocumentsState = {
   search(q: string): void;
   /** Text search across the folder; under two characters clears the results. */
   searchText(q: string): void;
+  /** A one-way send to the source: no id, no reply to wait for. */
+  tell(msg: ClientMessage): void;
   reset(): void;
 };
 
@@ -277,7 +281,11 @@ export const useDocuments = create<DocumentsState>((set, get) => {
       const prev = get().path;
       if (prev !== null && prev !== path) send({ type: 'unsubscribe', path: prev });
       set({ path, ...(prev !== path ? { headings: [], frontmatter: undefined } : {}) });
-      if (prev !== path) send({ type: 'subscribe', path });
+      if (prev !== path) {
+        send({ type: 'subscribe', path });
+        // A viewer of a share tells the relay where it is, so the others can see.
+        if (liveRole(get().share) === 'viewer') send({ type: 'at', path });
+      }
       read(path);
     },
 
@@ -336,6 +344,10 @@ export const useDocuments = create<DocumentsState>((set, get) => {
       textQuery = q;
       if (q.length < 2) return set({ textHits: [] });
       send({ type: 'searchText', q, id: nextId() });
+    },
+
+    tell(msg) {
+      send(msg);
     },
 
     reset() {
