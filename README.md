@@ -150,11 +150,11 @@ Or put `LEAF_RELAY_URL` in your `.env` or pass `--relay-url`. With a relay set, 
 
 The button shows who is watching, and a shared tab wears a mark in the tab row. Everyone sees small avatars on the files others are reading, in the tree and on the Share button.
 
-In a diagram everyone sees each other's cursors; viewers also see the host's ink, and a block the host has open large wears the host's avatar.
+In a diagram everyone sees each other's cursors; viewers also see the host's ink, and a block the host has open large wears the host's avatar. Viewers who open the deck you are on follow your slide.
 
 What viewers can and can't do:
 
-- They browse the tab's tree on their own: open other files in it without moving you, and the other way round.
+- They browse the tab's tree on their own: opening another file doesn't move you, and opening one yourself doesn't move them. Only on your deck do they follow you, slide by slide.
 - It's read-only. Nothing they do changes your files.
 - Code runs only when they ask: live blocks and notebook outputs in a share don't start by themselves. **Run** runs one block; **Allow for this session** runs every block of the share until the page is closed (nothing is saved yet).
 - Files your ignore rules skip, and anything outside the tab's folder, stay private.
