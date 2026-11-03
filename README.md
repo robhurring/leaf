@@ -150,7 +150,7 @@ Or put `LEAF_RELAY_URL` in your `.env` or pass `--relay-url`. With a relay set, 
 
 The button shows who is watching, and a shared tab wears a mark in the tab row. Everyone sees small avatars on the files others are reading, in the tree and on the Share button.
 
-In a diagram everyone sees each other's cursors and ink: a stroke shows up on the others' screens as it is drawn, and each person's undo and clear take back only their own. A block the host has open large wears the host's avatar. Viewers who open the deck you are on follow your slide.
+In a diagram everyone sees each other's cursors and ink: a stroke shows up on the others' screens as it is drawn, and each person's undo and clear take back only their own, while the host's Clear wipes the canvas for everyone. A block the host has open large wears the host's avatar. Viewers who open the deck you are on follow your slide.
 
 What viewers can and can't do:
 

@@ -148,16 +148,18 @@ pub enum ServerMessage {
         #[serde(skip_serializing_if = "Option::is_none")]
         in_reply_to: Option<String>,
     },
-    /// A peer took back its last stroke on a block.
+    /// A peer took back one of its strokes on a block: the one named, or its latest.
     #[serde(rename_all = "camelCase")]
     InkUndo {
         peer: String,
         doc_path: String,
         block_hash: String,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        stroke_id: Option<String>,
         #[serde(skip_serializing_if = "Option::is_none")]
         in_reply_to: Option<String>,
     },
-    /// A peer wiped its strokes on a block.
+    /// A peer wiped its strokes on a block; from the host, everyone's.
     #[serde(rename_all = "camelCase")]
     InkClear {
         peer: String,

@@ -100,13 +100,15 @@ pub enum ClientMessage {
     /// this stroke id; the finished stroke follows as `ink`.
     #[serde(rename_all = "camelCase")]
     Inking { stroke: Stroke },
-    /// Take back this peer's last stroke on a block.
+    /// Take back one of this peer's strokes on a block: the one named, or its latest.
     #[serde(rename_all = "camelCase")]
     InkUndo {
         doc_path: String,
         block_hash: String,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        stroke_id: Option<String>,
     },
-    /// Wipe this peer's strokes on a block.
+    /// Wipe this peer's strokes on a block; from the host, everyone's.
     #[serde(rename_all = "camelCase")]
     InkClear {
         doc_path: String,

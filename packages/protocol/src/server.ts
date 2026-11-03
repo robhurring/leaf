@@ -124,15 +124,16 @@ export const InkingFromMessage = z.object({
   stroke: Stroke,
   ...replyEnvelope,
 });
-/** A peer took back its last stroke on a block. */
+/** A peer took back one of its strokes on a block: the one named, or its latest. */
 export const InkUndoFromMessage = z.object({
   type: z.literal('inkUndo'),
   peer: z.string(),
   docPath: z.string(),
   blockHash: z.string(),
+  strokeId: z.string().optional(),
   ...replyEnvelope,
 });
-/** A peer wiped its strokes on a block. */
+/** A peer wiped its strokes on a block; from the host, everyone's. */
 export const InkClearFromMessage = z.object({
   type: z.literal('inkClear'),
   peer: z.string(),

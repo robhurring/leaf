@@ -17,6 +17,9 @@
         "blockHash": {
           "type": "string"
         },
+        "strokeId": {
+          "type": "string"
+        },
         "id": {
           "type": "string"
         },

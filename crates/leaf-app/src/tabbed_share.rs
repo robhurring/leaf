@@ -370,7 +370,8 @@ pub fn from_host_tab(app: &AppHandle, tab: &str, msg: ClientMessage) {
         ClientMessage::InkUndo {
             doc_path,
             block_hash,
-        } => handle.ink_undo(doc_path, block_hash),
+            stroke_id,
+        } => handle.ink_undo(doc_path, block_hash, stroke_id),
         ClientMessage::InkClear {
             doc_path,
             block_hash,

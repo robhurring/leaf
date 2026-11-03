@@ -222,6 +222,7 @@ export const useDocuments = create<DocumentsState>((set, get) => {
         return;
       case 'presence':
         set({ presence: msg });
+        useAnnotations.getState().dropDraftsExcept(['host', ...msg.viewers.map((v) => v.id)]);
         // The relay names a viewer who came without one; keep that name for next time.
         try {
           const me = msg.viewers.find((v) => v.id === msg.you);
@@ -241,7 +242,7 @@ export const useDocuments = create<DocumentsState>((set, get) => {
         useAnnotations.getState().addRemote({ ...msg.stroke, peer: msg.peer });
         return;
       case 'inkUndo':
-        useAnnotations.getState().undoRemote(msg.docPath, msg.blockHash, msg.peer);
+        useAnnotations.getState().undoRemote(msg.docPath, msg.blockHash, msg.peer, msg.strokeId);
         return;
       case 'inkClear':
         useAnnotations.getState().clearRemote(msg.docPath, msg.blockHash, msg.peer);

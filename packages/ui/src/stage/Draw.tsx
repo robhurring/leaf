@@ -3,7 +3,7 @@
 // transformed layer, so they pan and zoom with the diagram. Invisible ink fades
 // and is dropped by a timer; sticky strokes stay for the session. In a share, a
 // stroke streams to the others as it is drawn, then goes whole when it is done.
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import {
   INK_GONE_MS,
   draftsFor,
@@ -62,34 +62,26 @@ export function useDrawing(docPath: string, blockHash: string, share = false) {
   };
   useEffect(() => stopStreaming, []);
 
-  const start = useCallback(
-    (p: ContentPoint) => {
-      live.current = [[round(p[0]), round(p[1])]];
-      setCurrent(live.current);
-      id.current = newId();
-      pending.current = streaming() ? [...live.current] : [];
-      lastFrame.current = 0;
-      // eslint-disable-next-line react-hooks/exhaustive-deps
-    },
-    [share],
-  );
-  const move = useCallback(
-    (p: ContentPoint) => {
-      if (!live.current) return;
-      const point: ContentPoint = [round(p[0]), round(p[1])];
-      live.current = [...live.current, point];
-      setCurrent(live.current);
-      if (!streaming()) return;
-      pending.current.push(point);
-      if (timer.current) return;
-      const wait = INKING_EVERY_MS - (Date.now() - lastFrame.current);
-      if (wait <= 0) flush();
-      else timer.current = setTimeout(flush, wait);
-    },
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    [docPath, blockHash, share],
-  );
-  const end = useCallback(() => {
+  const start = (p: ContentPoint) => {
+    live.current = [[round(p[0]), round(p[1])]];
+    setCurrent(live.current);
+    id.current = newId();
+    pending.current = streaming() ? [...live.current] : [];
+    lastFrame.current = 0;
+  };
+  const move = (p: ContentPoint) => {
+    if (!live.current) return;
+    const point: ContentPoint = [round(p[0]), round(p[1])];
+    live.current = [...live.current, point];
+    setCurrent(live.current);
+    if (!streaming()) return;
+    pending.current.push(point);
+    if (timer.current) return;
+    const wait = INKING_EVERY_MS - (Date.now() - lastFrame.current);
+    if (wait <= 0) flush();
+    else timer.current = setTimeout(flush, wait);
+  };
+  const end = () => {
     const points = live.current;
     live.current = null;
     setCurrent(null);
@@ -98,8 +90,7 @@ export function useDrawing(docPath: string, blockHash: string, share = false) {
     const whole = stroke(points);
     useAnnotations.getState().add(whole);
     if (streaming()) useDocuments.getState().tell({ type: 'ink', stroke: whole });
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [docPath, blockHash, share]);
+  };
 
   return { current, start, move, end, drawing: live.current !== null };
 }

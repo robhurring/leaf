@@ -468,6 +468,9 @@
             },
             "blockHash": {
               "type": "string"
+            },
+            "strokeId": {
+              "type": "string"
             }
           },
           "required": [

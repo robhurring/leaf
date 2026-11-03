@@ -1,5 +1,11 @@
 import { describe, it, expect, beforeEach } from 'vitest';
-import { INK_GONE_MS, strokesFor, useAnnotations, type Stroke } from '../src/store/annotations.js';
+import {
+  INK_GONE_MS,
+  MAX_DRAFT_POINTS,
+  strokesFor,
+  useAnnotations,
+  type Stroke,
+} from '../src/store/annotations.js';
 
 const stroke = (over: Partial<Stroke> = {}): Stroke => ({
   id: Math.random().toString(36).slice(2),
@@ -16,7 +22,7 @@ const stroke = (over: Partial<Stroke> = {}): Stroke => ({
   ...over,
 });
 
-beforeEach(() => useAnnotations.setState({ strokes: [] }));
+beforeEach(() => useAnnotations.setState({ strokes: [], drafts: {} }));
 
 describe('annotations store', () => {
   it('keeps strokes per document and block', () => {
@@ -116,11 +122,11 @@ describe('ink from the relay', () => {
 
   it('clearRemote removes only that peer’s strokes on that canvas', () => {
     const s = useAnnotations.getState();
-    s.addRemote({ ...stroke({ id: 'r1' }), peer: 'host' });
-    s.addRemote({ ...stroke({ id: 'other', blockHash: 'h2' }), peer: 'host' });
-    s.addRemote({ ...stroke({ id: 'v' }), peer: 'v1' });
+    s.addRemote({ ...stroke({ id: 'r1' }), peer: 'v1' });
+    s.addRemote({ ...stroke({ id: 'other', blockHash: 'h2' }), peer: 'v1' });
+    s.addRemote({ ...stroke({ id: 'v' }), peer: 'v2' });
     s.add(stroke({ id: 'mine' }));
-    useAnnotations.getState().clearRemote('a.md', 'h1', 'host');
+    useAnnotations.getState().clearRemote('a.md', 'h1', 'v1');
     expect(useAnnotations.getState().strokes.map((k) => k.id)).toEqual(['other', 'v', 'mine']);
   });
 
@@ -132,5 +138,43 @@ describe('ink from the relay', () => {
     s.add(stroke({ id: 'mine' }));
     useAnnotations.getState().clearRemoteFor('a.md');
     expect(useAnnotations.getState().strokes.map((k) => k.id)).toEqual(['elsewhere', 'mine']);
+  });
+
+  it('an undo that names a stroke takes that one, and only that peer’s', () => {
+    const s = useAnnotations.getState();
+    s.addRemote({ ...stroke({ id: 'r1' }), peer: 'host' });
+    s.addRemote({ ...stroke({ id: 'r2' }), peer: 'host' });
+    s.addRemote({ ...stroke({ id: 'v1' }), peer: 'v1' });
+    useAnnotations.getState().undoRemote('a.md', 'h1', 'host', 'r1');
+    expect(useAnnotations.getState().strokes.map((k) => k.id)).toEqual(['r2', 'v1']);
+    useAnnotations.getState().undoRemote('a.md', 'h1', 'host', 'v1');
+    expect(useAnnotations.getState().strokes.map((k) => k.id)).toEqual(['r2', 'v1']);
+  });
+
+  it('the host’s clear wipes the canvas for everyone, this page’s own strokes included', () => {
+    const s = useAnnotations.getState();
+    s.add(stroke({ id: 'mine' }));
+    s.addRemote({ ...stroke({ id: 'r1' }), peer: 'host' });
+    s.addRemote({ ...stroke({ id: 'v1' }), peer: 'v1' });
+    s.addRemote({ ...stroke({ id: 'other', blockHash: 'h2' }), peer: 'v1' });
+    useAnnotations.getState().clearRemote('a.md', 'h1', 'host');
+    expect(useAnnotations.getState().strokes.map((k) => k.id)).toEqual(['other']);
+  });
+
+  it('undo returns the stroke it took back, or nothing', () => {
+    const s = useAnnotations.getState();
+    s.add(stroke({ id: 'mine' }));
+    expect(useAnnotations.getState().undo('a.md', 'h1')?.id).toBe('mine');
+    expect(useAnnotations.getState().undo('a.md', 'h1')).toBeUndefined();
+  });
+
+  it('a draft stops growing at MAX_DRAFT_POINTS', () => {
+    const s = useAnnotations.getState();
+    const many = Array.from({ length: MAX_DRAFT_POINTS }, (_, i) => [i, i] as [number, number]);
+    s.draft('v1', stroke({ id: 'd', points: many }));
+    s.draft('v1', stroke({ id: 'd', points: [[1, 1]] }));
+    expect(Object.values(useAnnotations.getState().drafts)[0]!.points).toHaveLength(
+      MAX_DRAFT_POINTS,
+    );
   });
 });

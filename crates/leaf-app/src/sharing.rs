@@ -77,6 +77,7 @@ enum Cmd {
     InkUndo {
         doc_path: String,
         block_hash: String,
+        stroke_id: Option<String>,
     },
     InkClear {
         doc_path: String,
@@ -149,12 +150,14 @@ impl ShareHandle {
         }
     }
 
-    /// Takes back the host's last stroke on a block; silent when the relay can't take it.
-    pub fn ink_undo(&self, doc_path: String, block_hash: String) {
+    /// Takes back one of the host's strokes on a block (the one named, or its latest);
+    /// silent when the relay can't take it.
+    pub fn ink_undo(&self, doc_path: String, block_hash: String, stroke_id: Option<String>) {
         if self.presence_capable() {
             let _ = self.cmds.send(Cmd::InkUndo {
                 doc_path,
                 block_hash,
+                stroke_id,
             });
         }
     }
@@ -505,8 +508,8 @@ impl Link {
                             return Stop::Lost;
                         }
                     }
-                    Some(Cmd::InkUndo { doc_path, block_hash }) => {
-                        let m = HostToRelay::InkUndo { doc_path, block_hash };
+                    Some(Cmd::InkUndo { doc_path, block_hash, stroke_id }) => {
+                        let m = HostToRelay::InkUndo { doc_path, block_hash, stroke_id };
                         if ws.send(text(&m)).await.is_err() {
                             return Stop::Lost;
                         }
@@ -722,11 +725,13 @@ impl Link {
                 viewer,
                 doc_path,
                 block_hash,
+                stroke_id,
             } => {
                 let _ = self.inbox_tx.send(ServerMessage::InkUndo {
                     peer: viewer,
                     doc_path,
                     block_hash,
+                    stroke_id,
                     in_reply_to: None,
                 });
             }
@@ -1187,7 +1192,7 @@ mod tests {
         }));
         quiet.ink(stroke());
         quiet.inking(stroke());
-        quiet.ink_undo("a.mmd".into(), "h".into());
+        quiet.ink_undo("a.mmd".into(), "h".into(), None);
         quiet.ink_clear("a.mmd".into(), "h".into());
         assert!(rx.try_recv().is_err(), "nothing is sent");
         assert!(quiet.pointer.borrow().is_none(), "no pointer is pending");

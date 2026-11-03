@@ -804,6 +804,9 @@
             "blockHash": {
               "type": "string"
             },
+            "strokeId": {
+              "type": "string"
+            },
             "id": {
               "$ref": "#/definitions/server/anyOf/0/properties/id"
             },

@@ -2,5 +2,6 @@
   "type": "inkUndo",
   "peer": "host",
   "docPath": "a.mmd",
-  "blockHash": "h"
+  "blockHash": "h",
+  "strokeId": "host:1"
 }

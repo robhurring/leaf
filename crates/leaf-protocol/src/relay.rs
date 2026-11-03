@@ -102,11 +102,13 @@ pub enum HostToRelay {
     Inking {
         stroke: Stroke,
     },
-    /// The host took back its last stroke on a block.
+    /// The host took back one of its strokes on a block: the one named, or its latest.
     #[serde(rename_all = "camelCase")]
     InkUndo {
         doc_path: String,
         block_hash: String,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        stroke_id: Option<String>,
     },
     /// The host wiped its strokes on a block.
     #[serde(rename_all = "camelCase")]
@@ -195,12 +197,14 @@ pub enum RelayToHost {
         viewer: String,
         stroke: Stroke,
     },
-    /// A viewer took back its last stroke on a block.
+    /// A viewer took back one of its strokes on a block: the one named, or its latest.
     #[serde(rename_all = "camelCase")]
     InkUndo {
         viewer: String,
         doc_path: String,
         block_hash: String,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        stroke_id: Option<String>,
     },
     /// A viewer wiped its strokes on a block.
     #[serde(rename_all = "camelCase")]
@@ -288,6 +292,7 @@ mod tests {
             HostToRelay::InkUndo {
                 doc_path: "a.mmd".into(),
                 block_hash: "h".into(),
+                stroke_id: Some("host:1".into()),
             },
             HostToRelay::InkClear {
                 doc_path: "a.mmd".into(),

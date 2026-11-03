@@ -83,14 +83,15 @@ export const InkMessage = z.object({ type: z.literal('ink'), stroke: Stroke });
  * frame (its `id` ties the frames together); the finished stroke follows as `ink`. */
 export const InkingMessage = z.object({ type: z.literal('inking'), stroke: Stroke });
 
-/** Take back this peer's last stroke on a block. */
+/** Take back one of this peer's strokes on a block: the one named, or its latest. */
 export const InkUndoMessage = z.object({
   type: z.literal('inkUndo'),
   docPath: z.string(),
   blockHash: z.string(),
+  strokeId: z.string().optional(),
 });
 
-/** Wipe this peer's strokes on a block. */
+/** Wipe this peer's strokes on a block; from the host, everyone's. */
 export const InkClearMessage = z.object({
   type: z.literal('inkClear'),
   docPath: z.string(),

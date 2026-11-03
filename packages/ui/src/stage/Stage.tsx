@@ -92,8 +92,14 @@ export function StageCanvas({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [role, open.docPath, open.blockHash, embedded]);
   const undo = () => {
-    useAnnotations.getState().undo(open.docPath, open.blockHash);
-    if (role) tell({ type: 'inkUndo', docPath: open.docPath, blockHash: open.blockHash });
+    const gone = useAnnotations.getState().undo(open.docPath, open.blockHash);
+    if (role && gone)
+      tell({
+        type: 'inkUndo',
+        docPath: open.docPath,
+        blockHash: open.blockHash,
+        strokeId: gone.id,
+      });
   };
   const clear = () => {
     useAnnotations.getState().clear(open.docPath, open.blockHash);
