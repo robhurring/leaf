@@ -230,18 +230,21 @@ export const useDocuments = create<DocumentsState>((set, get) => {
           // No storage: the relay names us again next time.
         }
         return;
-      // The other peers' pointers, and the host's ink, on the canvases of a share.
+      // The other peers' pointers and ink on the canvases of a share.
       case 'pointer':
         usePointers.getState().move(msg.peer, msg.pointer);
         return;
+      case 'inking':
+        useAnnotations.getState().draft(msg.peer, msg.stroke);
+        return;
       case 'ink':
-        useAnnotations.getState().addRemote({ ...msg.stroke, peer: 'host' });
+        useAnnotations.getState().addRemote({ ...msg.stroke, peer: msg.peer });
         return;
       case 'inkUndo':
-        useAnnotations.getState().undoRemote(msg.docPath, msg.blockHash);
+        useAnnotations.getState().undoRemote(msg.docPath, msg.blockHash, msg.peer);
         return;
       case 'inkClear':
-        useAnnotations.getState().clearRemote(msg.docPath, msg.blockHash);
+        useAnnotations.getState().clearRemote(msg.docPath, msg.blockHash, msg.peer);
         return;
       case 'shareStatus':
         set({ shareStatus: msg.state, shareReason: msg.reason ?? null });

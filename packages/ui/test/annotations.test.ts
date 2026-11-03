@@ -80,7 +80,7 @@ describe('invisible ink timing', () => {
 
 describe('ink from the relay', () => {
   it('addRemote adds a stroke marked with its peer, once per id', () => {
-    const k = stroke({ id: 'r1', peer: 'host' });
+    const k = { ...stroke({ id: 'r1' }), peer: 'host' };
     useAnnotations.getState().addRemote(k);
     useAnnotations.getState().addRemote(k); // a reconnecting viewer gets the kept strokes again
     const strokes = useAnnotations.getState().strokes;
@@ -90,7 +90,7 @@ describe('ink from the relay', () => {
 
   it('undo and clear leave remote strokes alone', () => {
     useAnnotations.getState().add(stroke({ id: 'mine' }));
-    useAnnotations.getState().addRemote(stroke({ id: 'theirs', peer: 'host' }));
+    useAnnotations.getState().addRemote({ ...stroke({ id: 'theirs' }), peer: 'host' });
     useAnnotations.getState().undo('a.md', 'h1');
     expect(useAnnotations.getState().strokes.map((k) => k.id)).toEqual(['theirs']);
     useAnnotations.getState().add(stroke({ id: 'mine2' }));
@@ -98,30 +98,37 @@ describe('ink from the relay', () => {
     expect(useAnnotations.getState().strokes.map((k) => k.id)).toEqual(['theirs']);
   });
 
-  it('undoRemote removes only the last remote stroke of that canvas', () => {
+  it('undoRemote removes only that peer’s last stroke on that canvas', () => {
     const s = useAnnotations.getState();
-    s.addRemote(stroke({ id: 'r1', peer: 'host' }));
-    s.addRemote(stroke({ id: 'r2', peer: 'host' }));
-    s.addRemote(stroke({ id: 'other', peer: 'host', blockHash: 'h2' }));
+    s.addRemote({ ...stroke({ id: 'r1' }), peer: 'host' });
+    s.addRemote({ ...stroke({ id: 'r2' }), peer: 'host' });
+    s.addRemote({ ...stroke({ id: 'other', blockHash: 'h2' }), peer: 'host' });
+    s.addRemote({ ...stroke({ id: 'v' }), peer: 'v1' });
     s.add(stroke({ id: 'mine' }));
-    useAnnotations.getState().undoRemote('a.md', 'h1');
-    expect(useAnnotations.getState().strokes.map((k) => k.id)).toEqual(['r1', 'other', 'mine']);
+    useAnnotations.getState().undoRemote('a.md', 'h1', 'host');
+    expect(useAnnotations.getState().strokes.map((k) => k.id)).toEqual([
+      'r1',
+      'other',
+      'v',
+      'mine',
+    ]);
   });
 
-  it('clearRemote removes only remote strokes of that canvas', () => {
+  it('clearRemote removes only that peer’s strokes on that canvas', () => {
     const s = useAnnotations.getState();
-    s.addRemote(stroke({ id: 'r1', peer: 'host' }));
-    s.addRemote(stroke({ id: 'other', peer: 'host', blockHash: 'h2' }));
+    s.addRemote({ ...stroke({ id: 'r1' }), peer: 'host' });
+    s.addRemote({ ...stroke({ id: 'other', blockHash: 'h2' }), peer: 'host' });
+    s.addRemote({ ...stroke({ id: 'v' }), peer: 'v1' });
     s.add(stroke({ id: 'mine' }));
-    useAnnotations.getState().clearRemote('a.md', 'h1');
-    expect(useAnnotations.getState().strokes.map((k) => k.id)).toEqual(['other', 'mine']);
+    useAnnotations.getState().clearRemote('a.md', 'h1', 'host');
+    expect(useAnnotations.getState().strokes.map((k) => k.id)).toEqual(['other', 'v', 'mine']);
   });
 
   it('clearRemoteFor removes every remote stroke of that document and nothing else', () => {
     const s = useAnnotations.getState();
-    s.addRemote(stroke({ id: 'r1', peer: 'host' }));
-    s.addRemote(stroke({ id: 'r2', peer: 'host', blockHash: 'h2' }));
-    s.addRemote(stroke({ id: 'elsewhere', peer: 'host', docPath: 'b.md' }));
+    s.addRemote({ ...stroke({ id: 'r1' }), peer: 'host' });
+    s.addRemote({ ...stroke({ id: 'r2', blockHash: 'h2' }), peer: 'host' });
+    s.addRemote({ ...stroke({ id: 'elsewhere', docPath: 'b.md' }), peer: 'host' });
     s.add(stroke({ id: 'mine' }));
     useAnnotations.getState().clearRemoteFor('a.md');
     expect(useAnnotations.getState().strokes.map((k) => k.id)).toEqual(['elsewhere', 'mine']);

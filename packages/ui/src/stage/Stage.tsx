@@ -61,8 +61,8 @@ export function StageCanvas({
   const drag = useRef<{ x: number; y: number } | null>(null);
   const drawing = useDrawing(open.docPath, open.blockHash, !embedded);
 
-  // In a share (but not on a draw board), the pointer goes to the others; the host also
-  // says which canvas it has open, and its undo and clear reach the viewers' copies.
+  // In a share (but not on a draw board), the pointer, undo and clear go to the others;
+  // the host also says which canvas it has open.
   const role = useDocuments((s) => (embedded ? null : liveRole(s.share)));
   const tell = (msg: ClientMessage) => useDocuments.getState().tell(msg);
   const lastPointer = useRef(0);
@@ -93,13 +93,11 @@ export function StageCanvas({
   }, [role, open.docPath, open.blockHash, embedded]);
   const undo = () => {
     useAnnotations.getState().undo(open.docPath, open.blockHash);
-    if (role === 'host')
-      tell({ type: 'inkUndo', docPath: open.docPath, blockHash: open.blockHash });
+    if (role) tell({ type: 'inkUndo', docPath: open.docPath, blockHash: open.blockHash });
   };
   const clear = () => {
     useAnnotations.getState().clear(open.docPath, open.blockHash);
-    if (role === 'host')
-      tell({ type: 'inkClear', docPath: open.docPath, blockHash: open.blockHash });
+    if (role) tell({ type: 'inkClear', docPath: open.docPath, blockHash: open.blockHash });
   };
   const undoRef = useRef(undo);
   undoRef.current = undo;

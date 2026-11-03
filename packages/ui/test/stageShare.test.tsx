@@ -3,7 +3,7 @@ import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testi
 import type { ClientMessage, PresenceMessage, ShareInfo } from '@leaf/protocol';
 import { Reader } from '../src/components/Reader.js';
 import { useDocuments } from '../src/store/documents.js';
-import { useAnnotations, type Stroke } from '../src/store/annotations.js';
+import { INK_DRAFT_STALE_MS, useAnnotations, type Stroke } from '../src/store/annotations.js';
 import { useStage } from '../src/store/stage.js';
 import { contentHash } from '../src/viewers/hash.js';
 import { scripted } from './helpers/scripted.js';
@@ -60,7 +60,7 @@ const hostStroke = (over: Partial<Stroke> = {}) => ({
 
 beforeEach(() => {
   useDocuments.getState().reset();
-  useAnnotations.setState({ strokes: [] });
+  useAnnotations.setState({ strokes: [], drafts: {} });
   useStage.setState({ open: null, tool: 'hand', color: 'blue', brush: 'large', sticky: false });
 });
 afterEach(() => {
@@ -102,7 +102,8 @@ const ofType = (s: { sent: ClientMessage[] }, ...types: string[]) =>
   s.sent.filter((m) => types.includes(m.type));
 // The dots are on the canvas; the same names are on avatars elsewhere on the page.
 const dots = () => within(screen.getByTestId('stage-layer'));
-const inks = () => document.querySelectorAll('path.leaf-ink');
+const inks = () => document.querySelectorAll('path.leaf-ink:not(.leaf-ink-live)');
+const liveInks = () => document.querySelectorAll('path.leaf-ink-live');
 
 describe('pointers and ink on a shared canvas', () => {
   it('draws another peer’s pointer on the same canvas and not elsewhere', async () => {
@@ -170,22 +171,22 @@ describe('pointers and ink on a shared canvas', () => {
 
   it('shows the host’s ink and lets the host clear it, leaving the viewer’s own strokes', async () => {
     const s = await openFile('a.mmd', SHARE);
-    act(() => s.emit({ type: 'ink', stroke: hostStroke({ id: 'k1' }) }));
-    act(() => s.emit({ type: 'ink', stroke: hostStroke({ id: 'k2' }) }));
+    act(() => s.emit({ type: 'ink', peer: 'host', stroke: hostStroke({ id: 'k1' }) }));
+    act(() => s.emit({ type: 'ink', peer: 'host', stroke: hostStroke({ id: 'k2' }) }));
     expect(inks()).toHaveLength(2);
     act(() => useStage.setState({ tool: 'pencil' }));
     drawOne();
     expect(inks()).toHaveLength(3);
-    act(() => s.emit({ type: 'inkUndo', docPath: 'a.mmd', blockHash: HASH }));
+    act(() => s.emit({ type: 'inkUndo', peer: 'host', docPath: 'a.mmd', blockHash: HASH }));
     expect(inks()).toHaveLength(2);
-    act(() => s.emit({ type: 'inkClear', docPath: 'a.mmd', blockHash: HASH }));
+    act(() => s.emit({ type: 'inkClear', peer: 'host', docPath: 'a.mmd', blockHash: HASH }));
     expect(inks()).toHaveLength(1);
     expect(useAnnotations.getState().strokes[0]!.peer).toBeUndefined();
   });
 
   it('a viewer back on a document keeps only the host ink the relay sends again', async () => {
     const s = await openFile('a.mmd', SHARE);
-    act(() => s.emit({ type: 'ink', stroke: hostStroke({ id: 'k1' }) }));
+    act(() => s.emit({ type: 'ink', peer: 'host', stroke: hostStroke({ id: 'k1' }) }));
     expect(inks()).toHaveLength(1);
     // Away on another file, the host clears a.mmd; the viewer, not on it, never hears.
     act(() => useDocuments.getState().open('note.md'));
@@ -193,7 +194,7 @@ describe('pointers and ink on a shared canvas', () => {
     const remote = () => useAnnotations.getState().strokes.filter((k) => k.peer);
     expect(remote()).toEqual([]);
     await waitFor(() => expect(ofType(s, 'at').at(-1)).toEqual({ type: 'at', path: 'a.mmd' }));
-    act(() => s.emit({ type: 'ink', stroke: hostStroke({ id: 'k1' }) }));
+    act(() => s.emit({ type: 'ink', peer: 'host', stroke: hostStroke({ id: 'k1' }) }));
     expect(remote().map((k) => k.id)).toEqual(['k1']);
   });
 
@@ -247,14 +248,107 @@ describe('pointers and ink on a shared canvas', () => {
     expect(ofType(s, 'stage')).toEqual([]);
   });
 
-  it('a viewer never sends stage or ink', async () => {
+  it('a viewer sends each finished stroke, its undo and its clear, but never a stage', async () => {
     const s = await openFile('a.mmd', SHARE);
     act(() => useStage.setState({ tool: 'pencil' }));
     drawOne();
+    const mine = useAnnotations.getState().strokes[0]!;
+    expect(ofType(s, 'ink')).toEqual([{ type: 'ink', stroke: mine }]);
     fireEvent.click(screen.getByRole('button', { name: 'Undo' }));
+    expect(s.sent.at(-1)).toEqual({ type: 'inkUndo', docPath: 'a.mmd', blockHash: HASH });
     fireEvent.click(screen.getByRole('button', { name: 'Clear drawings' }));
+    expect(s.sent.at(-1)).toEqual({ type: 'inkClear', docPath: 'a.mmd', blockHash: HASH });
     cleanup();
-    expect(ofType(s, 'stage', 'ink', 'inkUndo', 'inkClear')).toEqual([]);
+    expect(ofType(s, 'stage')).toEqual([]);
+  });
+
+  it('a stroke streams while it is drawn: inking frames carry the new points, then ink the whole', async () => {
+    const s = await openFile('a.mmd', SHARE);
+    vi.useFakeTimers();
+    act(() => useStage.setState({ tool: 'pencil' }));
+    const t = viewport();
+    fireEvent.pointerDown(t, { clientX: 20, clientY: 20, button: 0, pointerId: 1 });
+    fireEvent.pointerMove(t, { clientX: 40, clientY: 30, pointerId: 1 });
+    expect(ofType(s, 'inking')).toHaveLength(1);
+    expect(ofType(s, 'inking')[0]).toMatchObject({ stroke: { docPath: 'a.mmd', blockHash: HASH } });
+    fireEvent.pointerMove(t, { clientX: 50, clientY: 40, pointerId: 1 });
+    expect(ofType(s, 'inking')).toHaveLength(1);
+    act(() => vi.advanceTimersByTime(60));
+    expect(ofType(s, 'inking')).toHaveLength(2);
+    fireEvent.pointerMove(t, { clientX: 60, clientY: 60, pointerId: 1 });
+    fireEvent.pointerUp(t, { pointerId: 1 });
+    act(() => vi.advanceTimersByTime(100));
+    const frames = ofType(s, 'inking') as { stroke: Stroke }[];
+    const whole = (ofType(s, 'ink')[0] as { stroke: Stroke }).stroke;
+    expect(frames.every((f) => f.stroke.id === whole.id)).toBe(true);
+    expect(frames.flatMap((f) => f.stroke.points)).toEqual(whole.points.slice(0, -1));
+    expect(whole.points).toHaveLength(4);
+    expect(ofType(s, 'inking')).toHaveLength(2);
+  });
+
+  it('another peer’s stroke in progress is drawn live, then replaced by the finished stroke', async () => {
+    const s = await openFile('a.mmd', SHARE);
+    const draft = (points: [number, number][]) => hostStroke({ id: 'd1', points, sticky: false });
+    act(() =>
+      s.emit({
+        type: 'inking',
+        peer: 'v1',
+        stroke: draft([
+          [1, 1],
+          [2, 2],
+        ]),
+      }),
+    );
+    expect(liveInks()).toHaveLength(1);
+    act(() => s.emit({ type: 'inking', peer: 'v1', stroke: draft([[3, 3]]) }));
+    expect(liveInks()[0]!.getAttribute('d')).toBe('M1 1 L2 2 L3 3');
+    // A frame for another canvas is not drawn here.
+    act(() =>
+      s.emit({
+        type: 'inking',
+        peer: 'v3',
+        stroke: { ...draft([[1, 1]]), id: 'd2', blockHash: 'x' },
+      }),
+    );
+    expect(liveInks()).toHaveLength(1);
+    act(() =>
+      s.emit({
+        type: 'ink',
+        peer: 'v1',
+        stroke: draft([
+          [1, 1],
+          [2, 2],
+          [3, 3],
+          [4, 4],
+        ]),
+      }),
+    );
+    expect(liveInks()).toHaveLength(0);
+    expect(inks()).toHaveLength(1);
+    expect(useAnnotations.getState().strokes[0]).toMatchObject({ id: 'd1', peer: 'v1' });
+  });
+
+  it('a stroke in progress that stops arriving is dropped', async () => {
+    const s = await openFile('a.mmd', SHARE);
+    vi.useFakeTimers();
+    act(() =>
+      s.emit({ type: 'inking', peer: 'v1', stroke: hostStroke({ id: 'd1', sticky: false }) }),
+    );
+    expect(liveInks()).toHaveLength(1);
+    act(() => vi.advanceTimersByTime(INK_DRAFT_STALE_MS + 1000));
+    expect(liveInks()).toHaveLength(0);
+  });
+
+  it('a peer’s undo and clear touch only that peer’s strokes', async () => {
+    const s = await openFile('a.mmd', SHARE);
+    act(() => s.emit({ type: 'ink', peer: 'host', stroke: hostStroke({ id: 'k1' }) }));
+    act(() => s.emit({ type: 'ink', peer: 'v1', stroke: hostStroke({ id: 'a1' }) }));
+    act(() => s.emit({ type: 'ink', peer: 'v1', stroke: hostStroke({ id: 'a2' }) }));
+    const ids = () => useAnnotations.getState().strokes.map((k) => k.id);
+    act(() => s.emit({ type: 'inkUndo', peer: 'v1', docPath: 'a.mmd', blockHash: HASH }));
+    expect(ids()).toEqual(['k1', 'a1']);
+    act(() => s.emit({ type: 'inkClear', peer: 'host', docPath: 'a.mmd', blockHash: HASH }));
+    expect(ids()).toEqual(['a1']);
   });
 
   it('a page outside a share sends nothing', async () => {
@@ -263,6 +357,6 @@ describe('pointers and ink on a shared canvas', () => {
     act(() => useStage.setState({ tool: 'pencil' }));
     drawOne();
     cleanup();
-    expect(ofType(s, 'stage', 'pointer', 'ink', 'inkUndo', 'inkClear')).toEqual([]);
+    expect(ofType(s, 'stage', 'pointer', 'ink', 'inking', 'inkUndo', 'inkClear')).toEqual([]);
   });
 });
