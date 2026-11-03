@@ -576,6 +576,7 @@ async fn host_session(mut socket: WebSocket, s: RelayState) {
                     Ok(HostToRelay::Stage { stage }) => s.relay.stage(&id, conn, stage),
                     Ok(HostToRelay::Pointer { pointer }) => s.relay.pointer(&id, conn, pointer),
                     Ok(HostToRelay::Ink { stroke }) => s.relay.ink(&id, conn, stroke),
+                    Ok(HostToRelay::Inking { stroke }) => s.relay.inking(&id, conn, stroke),
                     Ok(HostToRelay::InkUndo { doc_path, block_hash }) => s.relay.ink_undo(&id, conn, doc_path, block_hash),
                     Ok(HostToRelay::InkClear { doc_path, block_hash }) => s.relay.ink_clear(&id, conn, doc_path, block_hash),
                     Ok(HostToRelay::End) => s.relay.end(&id, conn),

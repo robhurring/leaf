@@ -76,17 +76,21 @@ export const PointerMessage = z.object({
   pointer: PointerAt.optional(),
 });
 
-/** A stroke the host has drawn. */
+/** A stroke this peer has finished. */
 export const InkMessage = z.object({ type: z.literal('ink'), stroke: Stroke });
 
-/** Take back the host's last stroke on a block. */
+/** A stroke this peer is still drawing: `points` are those added since its last `inking`
+ * frame (its `id` ties the frames together); the finished stroke follows as `ink`. */
+export const InkingMessage = z.object({ type: z.literal('inking'), stroke: Stroke });
+
+/** Take back this peer's last stroke on a block. */
 export const InkUndoMessage = z.object({
   type: z.literal('inkUndo'),
   docPath: z.string(),
   blockHash: z.string(),
 });
 
-/** Wipe the host's strokes on a block. */
+/** Wipe this peer's strokes on a block. */
 export const InkClearMessage = z.object({
   type: z.literal('inkClear'),
   docPath: z.string(),
@@ -108,6 +112,7 @@ export const ClientMessage = z.discriminatedUnion('type', [
   StageMessage,
   PointerMessage,
   InkMessage,
+  InkingMessage,
   InkUndoMessage,
   InkClearMessage,
 ]);
@@ -126,6 +131,7 @@ export type SlideMessage = z.infer<typeof SlideMessage>;
 export type StageMessage = z.infer<typeof StageMessage>;
 export type PointerMessage = z.infer<typeof PointerMessage>;
 export type InkMessage = z.infer<typeof InkMessage>;
+export type InkingMessage = z.infer<typeof InkingMessage>;
 export type InkUndoMessage = z.infer<typeof InkUndoMessage>;
 export type InkClearMessage = z.infer<typeof InkClearMessage>;
 export type ClientMessage = z.infer<typeof ClientMessage>;

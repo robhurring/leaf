@@ -346,6 +346,7 @@ impl Engine {
             | ClientMessage::Stage { .. }
             | ClientMessage::Pointer { .. }
             | ClientMessage::Ink { .. }
+            | ClientMessage::Inking { .. }
             | ClientMessage::InkUndo { .. }
             | ClientMessage::InkClear { .. } => Vec::new(),
         };

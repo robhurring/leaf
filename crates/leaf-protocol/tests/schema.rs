@@ -30,6 +30,7 @@ fn every_client_fixture_round_trips_and_validates() {
         "stage",
         "pointer",
         "ink",
+        "inking",
         "inkUndo",
         "inkClear",
     ] {
@@ -61,6 +62,7 @@ fn every_server_fixture_round_trips_and_validates() {
         "presence",
         "pointerFrom",
         "inkFrom",
+        "inkingFrom",
         "inkUndoFrom",
         "inkClearFrom",
         "shareStatus",

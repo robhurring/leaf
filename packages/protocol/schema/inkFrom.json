@@ -8,6 +8,9 @@
           "type": "string",
           "const": "ink"
         },
+        "peer": {
+          "type": "string"
+        },
         "stroke": {
           "type": "object",
           "properties": {
@@ -75,6 +78,7 @@
       },
       "required": [
         "type",
+        "peer",
         "stroke"
       ],
       "additionalProperties": false

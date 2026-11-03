@@ -314,6 +314,7 @@ pub fn host_bound(msg: &ClientMessage) -> bool {
             | ClientMessage::Stage { .. }
             | ClientMessage::Pointer { .. }
             | ClientMessage::Ink { .. }
+            | ClientMessage::Inking { .. }
             | ClientMessage::InkUndo { .. }
             | ClientMessage::InkClear { .. }
     )
@@ -365,6 +366,7 @@ pub fn from_host_tab(app: &AppHandle, tab: &str, msg: ClientMessage) {
         ClientMessage::Stage { stage } => handle.set_stage(stage),
         ClientMessage::Pointer { pointer } => handle.pointer(pointer),
         ClientMessage::Ink { stroke } => handle.ink(stroke),
+        ClientMessage::Inking { stroke } => handle.inking(stroke),
         ClientMessage::InkUndo {
             doc_path,
             block_hash,

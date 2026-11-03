@@ -104,6 +104,15 @@ fn offer_drop(tx: &Sender<Message>, m: Message) {
 pub const MAX_STICKY_CANVASES: usize = 50;
 /// Most sticky strokes kept per canvas; the oldest stroke goes first.
 pub const MAX_STICKY_STROKES: usize = 200;
+/// Most points one `inking` frame may carry; a sender adds a few per frame at 20 a second.
+pub const MAX_INKING_POINTS: usize = 256;
+
+/// A sticky stroke the relay keeps for viewers who arrive later, and who drew it.
+#[derive(Debug, Clone)]
+struct Kept {
+    peer: String,
+    stroke: Stroke,
+}
 /// A viewer's pointer frames closer together than this are dropped (twenty a second).
 pub const POINTER_MIN_GAP: Duration = Duration::from_millis(50);
 /// A viewer's `at` frames closer together than this are dropped (four a second).
@@ -188,8 +197,8 @@ pub struct Share {
     slide: Option<Slide>,
     /// The block open on the host's canvas.
     stage: Option<StageRef>,
-    /// The host's sticky strokes by `(doc_path, block_hash)`, for viewers who arrive later.
-    sticky: HashMap<(String, String), VecDeque<Stroke>>,
+    /// Everyone's sticky strokes by `(doc_path, block_hash)`, for viewers who arrive later.
+    sticky: HashMap<(String, String), VecDeque<Kept>>,
     /// The canvases in `sticky`, oldest first.
     sticky_order: VecDeque<(String, String)>,
     /// When each viewer's last pointer frame was let through.
@@ -250,7 +259,7 @@ impl Share {
 
     /// Keeps a sticky stroke, dropping the canvas's oldest stroke, or the oldest canvas,
     /// when over the bounds.
-    fn keep(&mut self, stroke: Stroke) {
+    fn keep(&mut self, peer: &str, stroke: Stroke) {
         let key = (stroke.doc_path.clone(), stroke.block_hash.clone());
         if !self.sticky.contains_key(&key) {
             if self.sticky_order.len() == MAX_STICKY_CANVASES
@@ -264,7 +273,77 @@ impl Share {
         if strokes.len() == MAX_STICKY_STROKES {
             strokes.pop_front();
         }
-        strokes.push_back(stroke);
+        strokes.push_back(Kept {
+            peer: peer.to_string(),
+            stroke,
+        });
+    }
+
+    /// A peer's finished stroke: to the viewers on its document (never back to the peer),
+    /// and kept when sticky.
+    fn ink_from(&mut self, peer: &str, stroke: Stroke) {
+        let doc_path = stroke.doc_path.clone();
+        self.to_viewers_on(
+            Some(&doc_path),
+            Some(peer),
+            &ServerMessage::Ink {
+                peer: peer.to_string(),
+                stroke: stroke.clone(),
+                in_reply_to: None,
+            },
+        );
+        if stroke.sticky {
+            self.keep(peer, stroke);
+        }
+    }
+
+    /// A peer's stroke in progress: to the viewers on its document, and forgotten.
+    fn inking_from(&self, peer: &str, stroke: Stroke) {
+        let doc_path = stroke.doc_path.clone();
+        self.to_viewers_on(
+            Some(&doc_path),
+            Some(peer),
+            &ServerMessage::Inking {
+                peer: peer.to_string(),
+                stroke,
+                in_reply_to: None,
+            },
+        );
+    }
+
+    /// A peer's undo: its last kept stroke on the canvas goes; the viewers on the document are told.
+    fn ink_undo_from(&mut self, peer: &str, doc_path: String, block_hash: String) {
+        if let Some(strokes) = self.sticky.get_mut(&(doc_path.clone(), block_hash.clone()))
+            && let Some(i) = strokes.iter().rposition(|k| k.peer == peer)
+        {
+            strokes.remove(i);
+        }
+        let m = ServerMessage::InkUndo {
+            peer: peer.to_string(),
+            doc_path: doc_path.clone(),
+            block_hash,
+            in_reply_to: None,
+        };
+        self.to_viewers_on(Some(&doc_path), Some(peer), &m);
+    }
+
+    /// A peer's clear: its kept strokes on the canvas go; the viewers on the document are told.
+    fn ink_clear_from(&mut self, peer: &str, doc_path: String, block_hash: String) {
+        let key = (doc_path.clone(), block_hash.clone());
+        if let Some(strokes) = self.sticky.get_mut(&key) {
+            strokes.retain(|k| k.peer != peer);
+            if strokes.is_empty() {
+                self.sticky.remove(&key);
+                self.sticky_order.retain(|k| *k != key);
+            }
+        }
+        let m = ServerMessage::InkClear {
+            peer: peer.to_string(),
+            doc_path: doc_path.clone(),
+            block_hash,
+            in_reply_to: None,
+        };
+        self.to_viewers_on(Some(&doc_path), Some(peer), &m);
     }
 
     /// Sends one viewer the kept strokes of every canvas on document `path`.
@@ -273,9 +352,10 @@ impl Share {
             return;
         };
         for key in self.sticky_order.iter().filter(|(doc, _)| doc == path) {
-            for stroke in self.sticky.get(key).into_iter().flatten() {
+            for kept in self.sticky.get(key).into_iter().flatten() {
                 let m = ServerMessage::Ink {
-                    stroke: stroke.clone(),
+                    peer: kept.peer.clone(),
+                    stroke: kept.stroke.clone(),
                     in_reply_to: None,
                 };
                 offer_drop(&v.tx, text(&m));
@@ -679,52 +759,31 @@ impl Relay {
     pub fn ink(self: &Arc<Self>, id: &str, conn: u64, stroke: Stroke) {
         let mut shares = self.lock();
         if let Some(share) = shares.get_mut(id).filter(|s| s.host_conn == conn) {
-            share.to_viewers_on(
-                Some(&stroke.doc_path),
-                None,
-                &ServerMessage::Ink {
-                    stroke: stroke.clone(),
-                    in_reply_to: None,
-                },
-            );
-            if stroke.sticky {
-                share.keep(stroke);
-            }
+            share.ink_from(HOST_ID, stroke);
         }
     }
 
-    /// The host's `inkUndo`: the canvas's last kept stroke goes; viewers on it are told.
+    /// The host's `inking`: a stroke in progress, for the viewers on its document.
+    pub fn inking(self: &Arc<Self>, id: &str, conn: u64, stroke: Stroke) {
+        let mut shares = self.lock();
+        if let Some(share) = shares.get_mut(id).filter(|s| s.host_conn == conn) {
+            share.inking_from(HOST_ID, stroke);
+        }
+    }
+
+    /// The host's `inkUndo`: its last kept stroke on the canvas goes; viewers on it are told.
     pub fn ink_undo(self: &Arc<Self>, id: &str, conn: u64, doc_path: String, block_hash: String) {
         let mut shares = self.lock();
         if let Some(share) = shares.get_mut(id).filter(|s| s.host_conn == conn) {
-            if let Some(strokes) = share
-                .sticky
-                .get_mut(&(doc_path.clone(), block_hash.clone()))
-            {
-                strokes.pop_back();
-            }
-            let m = ServerMessage::InkUndo {
-                doc_path: doc_path.clone(),
-                block_hash,
-                in_reply_to: None,
-            };
-            share.to_viewers_on(Some(&doc_path), None, &m);
+            share.ink_undo_from(HOST_ID, doc_path, block_hash);
         }
     }
 
-    /// The host's `inkClear`: the canvas's kept strokes go; viewers on it are told.
+    /// The host's `inkClear`: its kept strokes on the canvas go; viewers on it are told.
     pub fn ink_clear(self: &Arc<Self>, id: &str, conn: u64, doc_path: String, block_hash: String) {
         let mut shares = self.lock();
         if let Some(share) = shares.get_mut(id).filter(|s| s.host_conn == conn) {
-            let key = (doc_path.clone(), block_hash.clone());
-            share.sticky.remove(&key);
-            share.sticky_order.retain(|k| *k != key);
-            let m = ServerMessage::InkClear {
-                doc_path: doc_path.clone(),
-                block_hash,
-                in_reply_to: None,
-            };
-            share.to_viewers_on(Some(&doc_path), None, &m);
+            share.ink_clear_from(HOST_ID, doc_path, block_hash);
         }
     }
 
@@ -834,6 +893,14 @@ impl Relay {
                 Self::viewer_pointer(share, viewer, &msg);
                 return;
             }
+            if let Some(kind @ ("ink" | "inking" | "inkUndo" | "inkClear")) =
+                msg.get("type").and_then(Value::as_str)
+            {
+                if Self::viewer_ink(share, viewer, kind, &msg) {
+                    self.settle(id, share, Vec::new());
+                }
+                return;
+            }
             share.for_host(
                 viewer,
                 &RelayToHost::FromViewer {
@@ -872,6 +939,96 @@ impl Relay {
             .retain(|v, _| share.viewers.contains_key(v));
         share.last_at_at.insert(viewer.to_string(), now);
         Some(at)
+    }
+
+    /// A viewer's ink: a finished stroke, one in progress, an undo or a clear, accepted
+    /// only on the document the viewer said it is on, with paths and hashes of at most
+    /// `MAX_PATH_LEN` bytes and at most `MAX_INKING_POINTS` points in a frame in progress.
+    /// Shown to the other viewers on the document, and told to the host: a finished
+    /// stroke, an undo and a clear through its queue (buffered while it is away), a frame
+    /// in progress only when the host is here with room to spare. Returns whether anything
+    /// was queued for the host.
+    fn viewer_ink(share: &mut Share, viewer: &str, kind: &str, msg: &Value) -> bool {
+        let here = share
+            .viewers
+            .get(viewer)
+            .and_then(|v| v.peer.path.as_deref());
+        let on_canvas = |doc: &str, hash: &str| {
+            doc.len() <= MAX_PATH_LEN && hash.len() <= MAX_PATH_LEN && here == Some(doc)
+        };
+        match kind {
+            "ink" | "inking" => {
+                let Some(stroke) = msg
+                    .get("stroke")
+                    .and_then(|s| serde_json::from_value::<Stroke>(s.clone()).ok())
+                else {
+                    return false;
+                };
+                if !on_canvas(&stroke.doc_path, &stroke.block_hash)
+                    || stroke.id.len() > MAX_PATH_LEN
+                {
+                    return false;
+                }
+                if kind == "inking" {
+                    if stroke.points.len() > MAX_INKING_POINTS {
+                        return false;
+                    }
+                    share.inking_from(viewer, stroke.clone());
+                    if let Some(tx) = share
+                        .host
+                        .as_ref()
+                        .filter(|tx| !share.host_full && tx.capacity() >= QUEUE_FRAMES / 2)
+                    {
+                        offer_drop(
+                            tx,
+                            text(&RelayToHost::Inking {
+                                viewer: viewer.to_string(),
+                                stroke,
+                            }),
+                        );
+                    }
+                    return false;
+                }
+                share.ink_from(viewer, stroke.clone());
+                share.for_host(
+                    viewer,
+                    &RelayToHost::Ink {
+                        viewer: viewer.to_string(),
+                        stroke,
+                    },
+                );
+                true
+            }
+            _ => {
+                let (Some(doc_path), Some(block_hash)) = (
+                    msg.get("docPath").and_then(Value::as_str),
+                    msg.get("blockHash").and_then(Value::as_str),
+                ) else {
+                    return false;
+                };
+                if !on_canvas(doc_path, block_hash) {
+                    return false;
+                }
+                let (doc_path, block_hash) = (doc_path.to_string(), block_hash.to_string());
+                let to_host = if kind == "inkUndo" {
+                    share.ink_undo_from(viewer, doc_path.clone(), block_hash.clone());
+                    RelayToHost::InkUndo {
+                        viewer: viewer.to_string(),
+                        doc_path,
+                        block_hash,
+                    }
+                } else {
+                    share.ink_clear_from(viewer, doc_path.clone(), block_hash.clone());
+                    RelayToHost::InkClear {
+                        viewer: viewer.to_string(),
+                        doc_path,
+                        block_hash,
+                    }
+                };
+                share.for_host(viewer, &to_host);
+                true
+            }
+        }
     }
 
     /// A viewer's `pointer`: accepted only on the document the viewer said it is on and
@@ -1615,6 +1772,151 @@ mod tests {
             .map(|m| kind(&m))
             .collect();
         assert!(!kinds.contains(&"ink".to_string()));
+        r.shutdown();
+    }
+
+    fn ink_frame(stroke: &Stroke) -> Value {
+        json!({"type": "ink", "stroke": stroke})
+    }
+
+    #[tokio::test]
+    async fn a_viewers_stroke_reaches_the_host_and_the_viewers_on_its_document_and_is_kept() {
+        let (r, id, (ann, mut arx), (bob, mut brx), mut hrx) = placed().await;
+        r.from_viewer(&id, &ann, ink_frame(&stroke("a1", "a.mmd", "h", true)));
+        let h = payload(&hrx.try_recv().unwrap());
+        assert_eq!(h["type"], "ink");
+        assert_eq!(h["viewer"], ann);
+        assert_eq!(h["stroke"]["id"], "a1");
+        assert!(arx.try_recv().is_err(), "never back to its sender");
+        assert!(brx.try_recv().is_err(), "Bob is on another document");
+        r.from_viewer(&id, &bob, json!({"type": "at", "path": "a.mmd"}));
+        assert_eq!(kind(&brx.try_recv().unwrap()), "presence");
+        let p = payload(&brx.try_recv().unwrap());
+        assert_eq!(p["type"], "ink");
+        assert_eq!(p["peer"], ann);
+        assert_eq!(p["stroke"]["id"], "a1");
+        // Now on the same document, Bob sees Ann's next stroke as it lands.
+        r.from_viewer(&id, &ann, ink_frame(&stroke("a2", "a.mmd", "h", false)));
+        let p = payload(&brx.try_recv().unwrap());
+        assert_eq!(
+            (p["type"].as_str(), p["peer"].as_str()),
+            (Some("ink"), Some(ann.as_str()))
+        );
+        r.shutdown();
+    }
+
+    #[tokio::test]
+    async fn a_viewers_ink_off_its_own_document_is_dropped() {
+        let (r, id, (ann, mut arx), (_bob, mut brx), mut hrx) = placed().await;
+        r.from_viewer(&id, &ann, ink_frame(&stroke("x", "b.md", "h", true)));
+        r.from_viewer(
+            &id,
+            &ann,
+            json!({"type": "inking", "stroke": stroke("x", "b.md", "h", false)}),
+        );
+        r.from_viewer(&id, &ann, json!({"type": "ink", "stroke": {"id": "bad"}}));
+        assert!(hrx.try_recv().is_err());
+        assert!(arx.try_recv().is_err());
+        assert!(brx.try_recv().is_err());
+        assert!(r.lock().get(&id).unwrap().sticky.is_empty());
+        r.shutdown();
+    }
+
+    #[tokio::test]
+    async fn each_peers_undo_and_clear_touch_only_its_own_kept_strokes() {
+        let (r, id, (ann, mut arx), (bob, mut brx), mut hrx) = placed().await;
+        r.ink(&id, 1, stroke("s1", "a.mmd", "h", true));
+        r.ink(&id, 1, stroke("s2", "a.mmd", "h", true));
+        r.from_viewer(&id, &ann, ink_frame(&stroke("a1", "a.mmd", "h", true)));
+        r.from_viewer(&id, &ann, ink_frame(&stroke("a2", "a.mmd", "h", true)));
+        while arx.try_recv().is_ok() {}
+        while hrx.try_recv().is_ok() {}
+        // The host's undo takes s2; Ann's takes a2.
+        r.ink_undo(&id, 1, "a.mmd".into(), "h".into());
+        let p = payload(&arx.try_recv().unwrap());
+        assert_eq!(
+            (p["type"].as_str(), p["peer"].as_str()),
+            (Some("inkUndo"), Some(HOST_ID))
+        );
+        r.from_viewer(
+            &id,
+            &ann,
+            json!({"type": "inkUndo", "docPath": "a.mmd", "blockHash": "h"}),
+        );
+        let h = payload(&hrx.try_recv().unwrap());
+        assert_eq!(
+            (h["type"].as_str(), h["viewer"].as_str()),
+            (Some("inkUndo"), Some(ann.as_str()))
+        );
+        r.from_viewer(&id, &bob, json!({"type": "at", "path": "a.mmd"}));
+        assert_eq!(kind(&brx.try_recv().unwrap()), "presence");
+        let kept: Vec<(String, String)> = std::iter::from_fn(|| brx.try_recv().ok())
+            .map(|m| payload(&m))
+            .map(|p| {
+                (
+                    p["peer"].as_str().unwrap().into(),
+                    p["stroke"]["id"].as_str().unwrap().into(),
+                )
+            })
+            .collect();
+        assert_eq!(
+            kept,
+            [(HOST_ID.into(), "s1".into()), (ann.clone(), "a1".into())]
+        );
+        // Ann's clear leaves the host's stroke.
+        while hrx.try_recv().is_ok() {}
+        r.from_viewer(
+            &id,
+            &ann,
+            json!({"type": "inkClear", "docPath": "a.mmd", "blockHash": "h"}),
+        );
+        let p = payload(&brx.try_recv().unwrap());
+        assert_eq!(
+            (p["type"].as_str(), p["peer"].as_str()),
+            (Some("inkClear"), Some(ann.as_str()))
+        );
+        assert_eq!(kind(&hrx.try_recv().unwrap()), "inkClear");
+        forget_at(&r, &id);
+        r.from_viewer(&id, &bob, json!({"type": "at", "path": "b.md"}));
+        while brx.try_recv().is_ok() {}
+        forget_at(&r, &id);
+        r.from_viewer(&id, &bob, json!({"type": "at", "path": "a.mmd"}));
+        let kept: Vec<String> = std::iter::from_fn(|| brx.try_recv().ok())
+            .filter(|m| kind(m) == "ink")
+            .map(|m| payload(&m)["stroke"]["id"].as_str().unwrap().to_string())
+            .collect();
+        assert_eq!(kept, ["s1"]);
+        r.shutdown();
+    }
+
+    #[tokio::test]
+    async fn inking_frames_are_passed_on_and_never_kept() {
+        let (r, id, (ann, mut arx), (bob, mut brx), mut hrx) = placed().await;
+        r.inking(&id, 1, stroke("s1", "a.mmd", "h", true));
+        let p = payload(&arx.try_recv().unwrap());
+        assert_eq!(
+            (p["type"].as_str(), p["peer"].as_str()),
+            (Some("inking"), Some(HOST_ID))
+        );
+        assert!(brx.try_recv().is_err());
+        r.from_viewer(
+            &id,
+            &ann,
+            json!({"type": "inking", "stroke": stroke("a1", "a.mmd", "h", false)}),
+        );
+        let h = payload(&hrx.try_recv().unwrap());
+        assert_eq!(
+            (h["type"].as_str(), h["viewer"].as_str()),
+            (Some("inking"), Some(ann.as_str()))
+        );
+        assert!(arx.try_recv().is_err());
+        let mut big = stroke("a2", "a.mmd", "h", false);
+        big.points = vec![[0.0, 0.0]; MAX_INKING_POINTS + 1];
+        r.from_viewer(&id, &ann, json!({"type": "inking", "stroke": big}));
+        assert!(hrx.try_recv().is_err(), "an oversize frame is dropped");
+        r.from_viewer(&id, &bob, json!({"type": "at", "path": "a.mmd"}));
+        assert_eq!(kind(&brx.try_recv().unwrap()), "presence");
+        assert!(brx.try_recv().is_err(), "nothing in progress is kept");
         r.shutdown();
     }
 

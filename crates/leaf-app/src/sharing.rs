@@ -73,6 +73,7 @@ enum Cmd {
     Slide(Option<Slide>),
     Stage(Option<StageRef>),
     Ink(Stroke),
+    Inking(Stroke),
     InkUndo {
         doc_path: String,
         block_hash: String,
@@ -137,6 +138,14 @@ impl ShareHandle {
     pub fn ink(&self, stroke: Stroke) {
         if self.presence_capable() {
             let _ = self.cmds.send(Cmd::Ink(stroke));
+        }
+    }
+
+    /// A stroke the host is drawing (the points since the last frame), for viewers; silent
+    /// when the relay can't take it.
+    pub fn inking(&self, stroke: Stroke) {
+        if self.presence_capable() {
+            let _ = self.cmds.send(Cmd::Inking(stroke));
         }
     }
 
@@ -491,6 +500,11 @@ impl Link {
                             return Stop::Lost;
                         }
                     }
+                    Some(Cmd::Inking(stroke)) => {
+                        if ws.send(text(&HostToRelay::Inking { stroke })).await.is_err() {
+                            return Stop::Lost;
+                        }
+                    }
                     Some(Cmd::InkUndo { doc_path, block_hash }) => {
                         let m = HostToRelay::InkUndo { doc_path, block_hash };
                         if ws.send(text(&m)).await.is_err() {
@@ -690,6 +704,44 @@ impl Link {
                     in_reply_to: None,
                 });
             }
+            RelayToHost::Ink { viewer, stroke } => {
+                let _ = self.inbox_tx.send(ServerMessage::Ink {
+                    peer: viewer,
+                    stroke,
+                    in_reply_to: None,
+                });
+            }
+            RelayToHost::Inking { viewer, stroke } => {
+                let _ = self.inbox_tx.send(ServerMessage::Inking {
+                    peer: viewer,
+                    stroke,
+                    in_reply_to: None,
+                });
+            }
+            RelayToHost::InkUndo {
+                viewer,
+                doc_path,
+                block_hash,
+            } => {
+                let _ = self.inbox_tx.send(ServerMessage::InkUndo {
+                    peer: viewer,
+                    doc_path,
+                    block_hash,
+                    in_reply_to: None,
+                });
+            }
+            RelayToHost::InkClear {
+                viewer,
+                doc_path,
+                block_hash,
+            } => {
+                let _ = self.inbox_tx.send(ServerMessage::InkClear {
+                    peer: viewer,
+                    doc_path,
+                    block_hash,
+                    in_reply_to: None,
+                });
+            }
             RelayToHost::Shared { .. } | RelayToHost::Ping | RelayToHost::Error { .. } => {}
         }
     }
@@ -761,7 +813,9 @@ impl Link {
                         Some(Cmd::Slide(slide)) => self.slide = slide,
                         Some(Cmd::Stage(stage)) => self.stage = stage,
                         // Ink is not kept for a link that is away.
-                        Some(Cmd::Ink(_) | Cmd::InkUndo { .. } | Cmd::InkClear { .. }) => {}
+                        Some(
+                            Cmd::Ink(_) | Cmd::Inking(_) | Cmd::InkUndo { .. } | Cmd::InkClear { .. },
+                        ) => {}
                         Some(Cmd::End) | None => {
                             let _ = self.status_tx.send(LinkStatus::Ended);
                             return None;
@@ -1132,6 +1186,7 @@ mod tests {
             y: 2.0,
         }));
         quiet.ink(stroke());
+        quiet.inking(stroke());
         quiet.ink_undo("a.mmd".into(), "h".into());
         quiet.ink_clear("a.mmd".into(), "h".into());
         assert!(rx.try_recv().is_err(), "nothing is sent");
@@ -1142,6 +1197,8 @@ mod tests {
         loud.ink(stroke());
         assert!(matches!(rx.try_recv(), Ok(Cmd::Ink(s)) if s.id == "host:1"));
         assert!(rx.try_recv().is_err(), "one command per stroke");
+        loud.inking(stroke());
+        assert!(matches!(rx.try_recv(), Ok(Cmd::Inking(s)) if s.id == "host:1"));
     }
 
     #[test]

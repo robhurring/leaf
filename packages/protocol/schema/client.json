@@ -444,6 +444,23 @@
           "properties": {
             "type": {
               "type": "string",
+              "const": "inking"
+            },
+            "stroke": {
+              "$ref": "#/definitions/client/anyOf/13/properties/stroke"
+            }
+          },
+          "required": [
+            "type",
+            "stroke"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "type": {
+              "type": "string",
               "const": "inkUndo"
             },
             "docPath": {

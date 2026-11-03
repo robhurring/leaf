@@ -110,22 +110,32 @@ export const PointerFromMessage = z.object({
   pointer: PointerAt.optional(),
   ...replyEnvelope,
 });
-/** A stroke the host drew. */
+/** A stroke a peer finished. */
 export const InkFromMessage = z.object({
   type: z.literal('ink'),
+  peer: z.string(),
   stroke: Stroke,
   ...replyEnvelope,
 });
-/** The host took back its last stroke on a block. */
+/** A stroke a peer is still drawing: the points added since its last frame for this stroke id. */
+export const InkingFromMessage = z.object({
+  type: z.literal('inking'),
+  peer: z.string(),
+  stroke: Stroke,
+  ...replyEnvelope,
+});
+/** A peer took back its last stroke on a block. */
 export const InkUndoFromMessage = z.object({
   type: z.literal('inkUndo'),
+  peer: z.string(),
   docPath: z.string(),
   blockHash: z.string(),
   ...replyEnvelope,
 });
-/** The host wiped its strokes on a block. */
+/** A peer wiped its strokes on a block. */
 export const InkClearFromMessage = z.object({
   type: z.literal('inkClear'),
+  peer: z.string(),
   docPath: z.string(),
   blockHash: z.string(),
   ...replyEnvelope,
@@ -157,6 +167,7 @@ export const ServerMessage = z.discriminatedUnion('type', [
   PresenceMessage,
   PointerFromMessage,
   InkFromMessage,
+  InkingFromMessage,
   InkUndoFromMessage,
   InkClearFromMessage,
   ShareStatusMessage,
@@ -174,6 +185,7 @@ export type BlameHunksMessage = z.infer<typeof BlameHunksMessage>;
 export type PresenceMessage = z.infer<typeof PresenceMessage>;
 export type PointerFromMessage = z.infer<typeof PointerFromMessage>;
 export type InkFromMessage = z.infer<typeof InkFromMessage>;
+export type InkingFromMessage = z.infer<typeof InkingFromMessage>;
 export type InkUndoFromMessage = z.infer<typeof InkUndoFromMessage>;
 export type InkClearFromMessage = z.infer<typeof InkClearFromMessage>;
 export type ShareStatusMessage = z.infer<typeof ShareStatusMessage>;

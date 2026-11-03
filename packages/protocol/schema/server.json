@@ -686,6 +686,9 @@
               "type": "string",
               "const": "ink"
             },
+            "peer": {
+              "type": "string"
+            },
             "stroke": {
               "type": "object",
               "properties": {
@@ -753,6 +756,34 @@
           },
           "required": [
             "type",
+            "peer",
+            "stroke"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "type": {
+              "type": "string",
+              "const": "inking"
+            },
+            "peer": {
+              "type": "string"
+            },
+            "stroke": {
+              "$ref": "#/definitions/server/anyOf/9/properties/stroke"
+            },
+            "id": {
+              "$ref": "#/definitions/server/anyOf/0/properties/id"
+            },
+            "inReplyTo": {
+              "$ref": "#/definitions/server/anyOf/0/properties/inReplyTo"
+            }
+          },
+          "required": [
+            "type",
+            "peer",
             "stroke"
           ],
           "additionalProperties": false
@@ -763,6 +794,9 @@
             "type": {
               "type": "string",
               "const": "inkUndo"
+            },
+            "peer": {
+              "type": "string"
             },
             "docPath": {
               "type": "string"
@@ -779,6 +813,7 @@
           },
           "required": [
             "type",
+            "peer",
             "docPath",
             "blockHash"
           ],
@@ -791,6 +826,9 @@
               "type": "string",
               "const": "inkClear"
             },
+            "peer": {
+              "type": "string"
+            },
             "docPath": {
               "type": "string"
             },
@@ -806,6 +844,7 @@
           },
           "required": [
             "type",
+            "peer",
             "docPath",
             "blockHash"
           ],

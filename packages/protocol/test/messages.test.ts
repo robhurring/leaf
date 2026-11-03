@@ -224,7 +224,7 @@ describe('protocol', () => {
     });
   });
 
-  it('peers say where they are and what they point at; the host says its slide, canvas and ink', () => {
+  it('peers say where they are, what they point at and what they draw; the host says its slide and canvas', () => {
     for (const m of [
       { type: 'at', path: 'docs/a.md' },
       { type: 'at' },
@@ -235,6 +235,7 @@ describe('protocol', () => {
       { type: 'pointer', pointer: { docPath: 'a.mmd', blockHash: 'h', x: 10.5, y: 20 } },
       { type: 'pointer' },
       { type: 'ink', stroke: STROKE },
+      { type: 'inking', stroke: STROKE },
       { type: 'inkUndo', docPath: 'a.mmd', blockHash: 'h' },
       { type: 'inkClear', docPath: 'a.mmd', blockHash: 'h' },
     ])
@@ -242,7 +243,7 @@ describe('protocol', () => {
     expect(() => parseClientMessage({ type: 'ink' })).toThrow();
   });
 
-  it('a server relays a peer’s pointer and the host’s ink', () => {
+  it('a server relays a peer’s pointer and ink, naming the peer', () => {
     expect(
       parseServerMessage({
         type: 'pointer',
@@ -251,11 +252,16 @@ describe('protocol', () => {
       }),
     ).toMatchObject({ peer: 'v1' });
     expect(parseServerMessage({ type: 'pointer', peer: 'host' })).toMatchObject({ peer: 'host' });
-    expect(parseServerMessage({ type: 'ink', stroke: STROKE })).toMatchObject({
+    expect(parseServerMessage({ type: 'ink', peer: 'host', stroke: STROKE })).toMatchObject({
+      peer: 'host',
       stroke: { sticky: true },
     });
-    expect(parseServerMessage({ type: 'inkClear', docPath: 'a.mmd', blockHash: 'h' }).type).toBe(
-      'inkClear',
-    );
+    expect(parseServerMessage({ type: 'inking', peer: 'v1', stroke: STROKE })).toMatchObject({
+      peer: 'v1',
+    });
+    expect(
+      parseServerMessage({ type: 'inkClear', peer: 'v1', docPath: 'a.mmd', blockHash: 'h' }).type,
+    ).toBe('inkClear');
+    expect(() => parseServerMessage({ type: 'ink', stroke: STROKE })).toThrow();
   });
 });

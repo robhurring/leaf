@@ -1,5 +1,6 @@
 {
   "type": "ink",
+  "peer": "host",
   "stroke": {
     "id": "host:1",
     "docPath": "a.mmd",

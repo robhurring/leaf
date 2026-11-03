@@ -96,13 +96,17 @@ pub enum ClientMessage {
     /// A stroke the host has drawn.
     #[serde(rename_all = "camelCase")]
     Ink { stroke: Stroke },
-    /// Take back the host's last stroke on a block.
+    /// A stroke this peer is still drawing: the points added since its last frame for
+    /// this stroke id; the finished stroke follows as `ink`.
+    #[serde(rename_all = "camelCase")]
+    Inking { stroke: Stroke },
+    /// Take back this peer's last stroke on a block.
     #[serde(rename_all = "camelCase")]
     InkUndo {
         doc_path: String,
         block_hash: String,
     },
-    /// Wipe the host's strokes on a block.
+    /// Wipe this peer's strokes on a block.
     #[serde(rename_all = "camelCase")]
     InkClear {
         doc_path: String,
@@ -127,6 +131,7 @@ impl ClientMessage {
             | ClientMessage::Stage { .. }
             | ClientMessage::Pointer { .. }
             | ClientMessage::Ink { .. }
+            | ClientMessage::Inking { .. }
             | ClientMessage::InkUndo { .. }
             | ClientMessage::InkClear { .. } => None,
         }
@@ -148,6 +153,7 @@ pub const CLIENT_MESSAGE_TYPES: &[&str] = &[
     "stage",
     "pointer",
     "ink",
+    "inking",
     "inkUndo",
     "inkClear",
 ];

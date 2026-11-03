@@ -97,6 +97,11 @@ pub enum HostToRelay {
     Ink {
         stroke: Stroke,
     },
+    /// A stroke the host is still drawing: the points since its last frame for this id.
+    #[serde(rename_all = "camelCase")]
+    Inking {
+        stroke: Stroke,
+    },
     /// The host took back its last stroke on a block.
     #[serde(rename_all = "camelCase")]
     InkUndo {
@@ -177,6 +182,32 @@ pub enum RelayToHost {
         viewer: String,
         #[serde(skip_serializing_if = "Option::is_none")]
         pointer: Option<PointerAt>,
+    },
+    /// A stroke a viewer finished.
+    #[serde(rename_all = "camelCase")]
+    Ink {
+        viewer: String,
+        stroke: Stroke,
+    },
+    /// A stroke a viewer is still drawing: the points since its last frame for this id.
+    #[serde(rename_all = "camelCase")]
+    Inking {
+        viewer: String,
+        stroke: Stroke,
+    },
+    /// A viewer took back its last stroke on a block.
+    #[serde(rename_all = "camelCase")]
+    InkUndo {
+        viewer: String,
+        doc_path: String,
+        block_hash: String,
+    },
+    /// A viewer wiped its strokes on a block.
+    #[serde(rename_all = "camelCase")]
+    InkClear {
+        viewer: String,
+        doc_path: String,
+        block_hash: String,
     },
     Ping,
     /// Codes: "version", "bad-key", "unknown-share".

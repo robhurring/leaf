@@ -8,6 +8,9 @@
           "type": "string",
           "const": "inkUndo"
         },
+        "peer": {
+          "type": "string"
+        },
         "docPath": {
           "type": "string"
         },
@@ -23,6 +26,7 @@
       },
       "required": [
         "type",
+        "peer",
         "docPath",
         "blockHash"
       ],

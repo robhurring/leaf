@@ -131,24 +131,36 @@ pub enum ServerMessage {
         #[serde(skip_serializing_if = "Option::is_none")]
         in_reply_to: Option<String>,
     },
-    /// A stroke the host drew.
+    /// A stroke a peer finished.
     #[serde(rename_all = "camelCase")]
     Ink {
+        peer: String,
         stroke: Stroke,
         #[serde(skip_serializing_if = "Option::is_none")]
         in_reply_to: Option<String>,
     },
-    /// The host took back its last stroke on a block.
+    /// A stroke a peer is still drawing: the points added since its last frame for this
+    /// stroke id.
+    #[serde(rename_all = "camelCase")]
+    Inking {
+        peer: String,
+        stroke: Stroke,
+        #[serde(skip_serializing_if = "Option::is_none")]
+        in_reply_to: Option<String>,
+    },
+    /// A peer took back its last stroke on a block.
     #[serde(rename_all = "camelCase")]
     InkUndo {
+        peer: String,
         doc_path: String,
         block_hash: String,
         #[serde(skip_serializing_if = "Option::is_none")]
         in_reply_to: Option<String>,
     },
-    /// The host wiped its strokes on a block.
+    /// A peer wiped its strokes on a block.
     #[serde(rename_all = "camelCase")]
     InkClear {
+        peer: String,
         doc_path: String,
         block_hash: String,
         #[serde(skip_serializing_if = "Option::is_none")]
@@ -187,6 +199,7 @@ impl ServerMessage {
             | ServerMessage::Presence { in_reply_to, .. }
             | ServerMessage::Pointer { in_reply_to, .. }
             | ServerMessage::Ink { in_reply_to, .. }
+            | ServerMessage::Inking { in_reply_to, .. }
             | ServerMessage::InkUndo { in_reply_to, .. }
             | ServerMessage::InkClear { in_reply_to, .. }
             | ServerMessage::ShareStatus { in_reply_to, .. }
