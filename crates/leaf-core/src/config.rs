@@ -178,15 +178,15 @@ fn parse_args(argv: &[String]) -> Result<Parsed, ConfigError> {
                 p.command = Some(Command::Version);
                 return Ok(p);
             }
-            "--host" => p.flags.push(("host", value(&mut i, a)?)),
-            "--port" => p.flags.push(("port", value(&mut i, a)?)),
+            "-H" | "--host" => p.flags.push(("host", value(&mut i, a)?)),
+            "-p" | "--port" => p.flags.push(("port", value(&mut i, a)?)),
             "-l" | "--log-level" => p.flags.push(("log_level", value(&mut i, a)?)),
             "--log-format" => p.flags.push(("log_format", value(&mut i, a)?)),
             "--plantuml-url" => p.flags.push(("plantuml_url", value(&mut i, a)?)),
-            "--relay-url" => p.flags.push(("relay_url", value(&mut i, a)?)),
-            "--open" => p.flags.push(("open", "true".into())),
+            "-r" | "--relay-url" => p.flags.push(("relay_url", value(&mut i, a)?)),
+            "-o" | "--open" => p.flags.push(("open", "true".into())),
             "--no-open" => p.flags.push(("open", "false".into())),
-            "--ignore" => p.flags.push(("ignore", value(&mut i, a)?)),
+            "-i" | "--ignore" => p.flags.push(("ignore", value(&mut i, a)?)),
             "--gitignore" => p.flags.push(("gitignore", "true".into())),
             "--no-gitignore" => p.flags.push(("gitignore", "false".into())),
             "--config-dir" => p.flags.push(("config_dir", value(&mut i, a)?)),

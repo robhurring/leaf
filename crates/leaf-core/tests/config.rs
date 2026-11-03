@@ -208,3 +208,34 @@ fn relay_start_is_a_command() {
         assert_eq!(c.command, Command::Help, "{help:?}");
     }
 }
+
+#[test]
+fn common_flags_have_short_forms() {
+    let d = tmp();
+    let (c, _) = load(
+        &args(&[
+            "serve",
+            ".",
+            "-p",
+            "7001",
+            "-H",
+            "0.0.0.0",
+            "-o",
+            "-i",
+            "*.log",
+            "-r",
+            "https://short.test",
+            "-l",
+            "debug",
+        ]),
+        &env(&[]),
+        d.path(),
+    )
+    .unwrap();
+    assert_eq!(c.port, 7001);
+    assert_eq!(c.host, "0.0.0.0");
+    assert!(c.open);
+    assert_eq!(c.ignore, vec!["*.log"]);
+    assert_eq!(c.relay_url.as_deref(), Some("https://short.test"));
+    assert_eq!(c.log_level, LogLevel::Debug);
+}
