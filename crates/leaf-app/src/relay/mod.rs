@@ -9,8 +9,8 @@ pub mod share;
 pub mod words;
 
 use std::net::{IpAddr, SocketAddr};
-use std::sync::Arc;
 use std::sync::atomic::Ordering;
+use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
 use axum::Router;
@@ -23,7 +23,7 @@ use axum::routing::get;
 use leaf_protocol::relay::{HostToRelay, RELAY_PROTOCOL, RelayToHost};
 use leaf_protocol::{ErrorCode, PROTOCOL_VERSION, ServerMessage};
 use serde_json::Value;
-use tokio::sync::{mpsc, watch};
+use tokio::sync::{mpsc, oneshot, watch};
 use tokio::task::JoinHandle;
 use tokio::time::Instant;
 
@@ -41,10 +41,14 @@ pub const MAX_VIEWER_FRAME: usize = 1024 * 1024;
 /// The largest message (and frame) a host may send: room for a file at leaf's default
 /// 2 MiB inline limit, base64'd, inside its envelope.
 pub const MAX_HOST_FRAME: usize = 4 * 1024 * 1024;
-/// How long a raw fetch waits for the host's `fetched` before answering 504.
+/// How long a raw fetch waits for the host's `fetched` before answering 504, and before
+/// that for one of its share's slots before answering 503.
 pub const FETCH_HEAD_TIMEOUT: Duration = Duration::from_secs(15);
 /// How long a raw body may wait for the host's next frame before it ends with an error.
 pub const FETCH_IDLE_TIMEOUT: Duration = Duration::from_secs(30);
+/// How long a raw body's client may go without taking any of it before the fetch is cut
+/// and its slot freed. A paused video is cut too; the player asks again, by range, on play.
+pub const FETCH_STALL_TIMEOUT: Duration = Duration::from_secs(60);
 /// The host's reply headers a raw response carries; any others are dropped. The relay
 /// sets `X-Content-Type-Options` and `Content-Security-Policy` itself: these bytes are
 /// served on the relay's origin, which also runs the viewer page.
@@ -70,6 +74,8 @@ pub struct RelayOptions {
     pub first_frame_timeout: Duration,
     /// A raw body the host sends nothing for in this long ends with an error.
     pub fetch_idle_timeout: Duration,
+    /// A raw body whose client takes nothing for this long is cut off.
+    pub fetch_stall_timeout: Duration,
 }
 
 impl RelayOptions {
@@ -85,6 +91,7 @@ impl RelayOptions {
             max_viewers: share::MAX_VIEWERS,
             first_frame_timeout: FIRST_FRAME_TIMEOUT,
             fetch_idle_timeout: FETCH_IDLE_TIMEOUT,
+            fetch_stall_timeout: FETCH_STALL_TIMEOUT,
         }
     }
 }
@@ -126,6 +133,7 @@ struct RelayState {
     trust_proxy: bool,
     first_frame_timeout: Duration,
     fetch_idle_timeout: Duration,
+    fetch_stall_timeout: Duration,
 }
 
 pub async fn start(opts: RelayOptions) -> Result<RelayStarted, String> {
@@ -151,6 +159,7 @@ pub async fn start(opts: RelayOptions) -> Result<RelayStarted, String> {
         trust_proxy: opts.trust_proxy,
         first_frame_timeout: opts.first_frame_timeout,
         fetch_idle_timeout: opts.fetch_idle_timeout,
+        fetch_stall_timeout: opts.fetch_stall_timeout,
     };
     let app = Router::new()
         .route("/healthz", get(crate::http::healthz))
@@ -160,7 +169,7 @@ pub async fn start(opts: RelayOptions) -> Result<RelayStarted, String> {
         .route("/s/{id}/healthz", get(share_health))
         .route("/s/{id}/raw/{*path}", get(share_raw))
         .route("/s/{id}/{*rest}", get(share_page))
-        .fallback(crate::http::static_file)
+        .fallback(static_page)
         .with_state(state);
     let server = tokio::spawn(async move {
         let service = app.into_make_service_with_connect_info::<SocketAddr>();
@@ -203,6 +212,12 @@ pub async fn run(config: leaf_core::config::Config) -> i32 {
     let public_url = std::env::var("LEAF_RELAY_PUBLIC_URL")
         .ok()
         .filter(|s| !s.is_empty());
+    if public_url.is_none() {
+        tracing::warn!(
+            host = %config.host,
+            "set LEAF_RELAY_PUBLIC_URL to the address viewers reach this relay at; without it share links name the address it listens on"
+        );
+    }
     // As leaf's config reads booleans: anything but false/0/no/off/empty is on.
     let trust_proxy = std::env::var("LEAF_RELAY_TRUST_PROXY").is_ok_and(|v| {
         !matches!(
@@ -245,7 +260,48 @@ async fn share_page(Path(params): Path<Vec<(String, String)>>, uri: Uri) -> Resp
         .find(|(k, _)| k == "id")
         .map(|(_, v)| v.as_str())
         .unwrap_or("");
-    crate::http::static_file_at(uri, &format!("/s/{id}")).await
+    unframed(crate::http::static_file_at(uri, &format!("/s/{id}")).await)
+}
+
+/// The embedded page and its assets, outside any share.
+async fn static_page(uri: Uri) -> Response {
+    unframed(crate::http::static_file(uri).await)
+}
+
+/// Forbids other pages from framing the viewer page: it has a Run button, and a frame
+/// laid under someone else's page is how a click on it is stolen.
+fn unframed(mut response: Response) -> Response {
+    let html = response
+        .headers()
+        .get(header::CONTENT_TYPE)
+        .and_then(|v| v.to_str().ok())
+        .is_some_and(|v| v.starts_with("text/html"));
+    if html {
+        let headers = response.headers_mut();
+        headers.insert(
+            header::CONTENT_SECURITY_POLICY,
+            header::HeaderValue::from_static("frame-ancestors 'none'"),
+        );
+        headers.insert(
+            header::X_FRAME_OPTIONS,
+            header::HeaderValue::from_static("DENY"),
+        );
+    }
+    response
+}
+
+/// Whether another site's page made this request (an `<img>`, a link, a `fetch`), as the
+/// browser itself reports. Such a request is refused before the share is looked up and
+/// counts for nothing: any page could otherwise spend a visitor's misses for them and
+/// lock them out of joining.
+fn cross_site(headers: &HeaderMap) -> bool {
+    headers
+        .get("sec-fetch-site")
+        .is_some_and(|v| v.as_bytes().eq_ignore_ascii_case(b"cross-site"))
+}
+
+fn refuse_cross_site() -> Response {
+    (StatusCode::FORBIDDEN, "cross-site request").into_response()
 }
 
 /// Live or in grace: 200. Unknown ids count against the asker, as viewer joins do.
@@ -255,6 +311,9 @@ async fn share_health(
     ConnectInfo(peer): ConnectInfo<SocketAddr>,
     State(s): State<RelayState>,
 ) -> Response {
+    if cross_site(&headers) {
+        return refuse_cross_site();
+    }
     let ip = client_ip(&headers, peer, s.trust_proxy);
     if !s.relay.limits.allow(ip) {
         tracing::warn!(%ip, "share health refused: too many unknown shares");
@@ -274,6 +333,45 @@ struct FetchGuard {
     relay: Arc<Relay>,
     id: String,
     req: u32,
+    /// Dropped with the guard, which ends the fetch's stall watch.
+    _done: Option<oneshot::Sender<()>>,
+}
+
+/// A raw body between its reader and its stall watch: the chunks waiting for the client
+/// (out of the slot while the reader waits on the host), and when the client last took one.
+struct BodyState {
+    waiting: Option<mpsc::Receiver<axum::body::Bytes>>,
+    taken: Instant,
+}
+
+/// Watches a raw body whose client may stop reading. Nothing polls the body then, so the
+/// reader can't notice: when no chunk has been taken for `stall`, this drops the chunks
+/// that wait and cancels the fetch, which frees its slot. Ends when `done` is dropped.
+fn watch_for_stall(
+    relay: Arc<Relay>,
+    id: String,
+    req: u32,
+    state: Arc<Mutex<BodyState>>,
+    stall: Duration,
+    mut done: oneshot::Receiver<()>,
+) {
+    tokio::spawn(async move {
+        loop {
+            let due = state.lock().unwrap_or_else(|e| e.into_inner()).taken + stall;
+            tokio::select! {
+                _ = &mut done => return,
+                _ = tokio::time::sleep_until(due) => {}
+            }
+            let mut state = state.lock().unwrap_or_else(|e| e.into_inner());
+            if state.taken + stall <= Instant::now() {
+                tracing::warn!(share = %id, req, "raw client stopped reading; fetch cut off");
+                state.waiting = None;
+                drop(state);
+                relay.cancel_fetch(&id, req);
+                return;
+            }
+        }
+    });
 }
 
 impl Drop for FetchGuard {
@@ -290,6 +388,9 @@ async fn share_raw(
     ConnectInfo(peer): ConnectInfo<SocketAddr>,
     State(s): State<RelayState>,
 ) -> Response {
+    if cross_site(&headers) {
+        return refuse_cross_site();
+    }
     let ip = client_ip(&headers, peer, s.trust_proxy);
     if !s.relay.limits.allow(ip) {
         tracing::warn!(%ip, "raw refused: too many unknown shares");
@@ -300,7 +401,11 @@ async fn share_raw(
         .and_then(|v| v.to_str().ok())
         .map(str::to_string);
     let path_mime = leaf_core::classify::classify(std::path::Path::new(&path)).mime;
-    let started = match s.relay.start_fetch(&id, path, range) {
+    let started = match s
+        .relay
+        .start_fetch_when_free(&id, path, range, FETCH_HEAD_TIMEOUT)
+        .await
+    {
         Ok(started) => started,
         Err(share::FetchRefused::Gone) => {
             s.relay.limits.failed(ip, &id);
@@ -315,13 +420,20 @@ async fn share_raw(
                 .into_response();
         }
         Err(share::FetchRefused::Busy) => {
-            return (StatusCode::TOO_MANY_REQUESTS, "too many files at once").into_response();
+            return (
+                StatusCode::SERVICE_UNAVAILABLE,
+                [(header::RETRY_AFTER, "5")],
+                "too many files at once",
+            )
+                .into_response();
         }
     };
+    let (done_tx, done_rx) = oneshot::channel();
     let guard = FetchGuard {
         relay: s.relay.clone(),
         id,
         req: started.req,
+        _done: Some(done_tx),
     };
     let (status, head) = match tokio::time::timeout(FETCH_HEAD_TIMEOUT, started.head).await {
         Ok(Ok(head)) => head,
@@ -332,16 +444,41 @@ async fn share_raw(
         }
     };
     let (complete, paused, idle) = (started.complete, started.paused, s.fetch_idle_timeout);
-    let body = futures_util::stream::unfold(Some((started.body, guard)), move |state| {
-        let (complete, paused) = (complete.clone(), paused.clone());
+    let state = Arc::new(Mutex::new(BodyState {
+        waiting: Some(started.body),
+        taken: Instant::now(),
+    }));
+    watch_for_stall(
+        guard.relay.clone(),
+        guard.id.clone(),
+        guard.req,
+        state.clone(),
+        s.fetch_stall_timeout,
+        done_rx,
+    );
+    let body = futures_util::stream::unfold(Some(guard), move |guard| {
+        let (complete, paused, state) = (complete.clone(), paused.clone(), state.clone());
         async move {
-            let (mut rx, guard) = state?;
+            let guard = guard?;
+            let slot = || state.lock().unwrap_or_else(|e| e.into_inner());
+            // The chunks are out of the slot only while this waits on the host, which a
+            // client that has stopped reading never lets it do.
+            let Some(mut rx) = slot().waiting.take() else {
+                return Some((
+                    Err(std::io::Error::other("the client stopped reading")),
+                    None,
+                ));
+            };
             match tokio::time::timeout(idle, rx.recv()).await {
                 Ok(Some(bytes)) => {
                     if paused.load(Ordering::Acquire) && rx.len() <= share::RESUME_AT {
                         guard.relay.fetch_drained(&guard.id, guard.req);
                     }
-                    Some((Ok(bytes), Some((rx, guard))))
+                    let mut slot = slot();
+                    slot.waiting = Some(rx);
+                    slot.taken = Instant::now();
+                    drop(slot);
+                    Some((Ok(bytes), Some(guard)))
                 }
                 Ok(None) if complete.load(Ordering::Acquire) => None,
                 Ok(None) => Some((Err(std::io::Error::other("the host stopped sending")), None)),
@@ -363,27 +500,37 @@ async fn share_raw(
             response.headers_mut().insert(name.clone(), value);
         }
     }
+    // The host names the type, but these bytes are served on the relay's origin, which
+    // also runs the viewer page: only a type that runs nothing goes out as it is. A value
+    // that isn't one type is not passed on at all, and its bytes become a download.
     let host_mime = response
         .headers()
         .get(header::CONTENT_TYPE)
         .and_then(|v| v.to_str().ok())
-        .map(|v| {
-            v.split(';')
-                .next()
-                .unwrap_or("")
-                .trim()
-                .to_ascii_lowercase()
-        })
-        .unwrap_or_default();
+        .and_then(crate::http::single_type);
     let headers = response.headers_mut();
     headers.insert(
         header::X_CONTENT_TYPE_OPTIONS,
         header::HeaderValue::from_static("nosniff"),
     );
-    if crate::http::scriptable(&host_mime) || crate::http::scriptable(&path_mime) {
+    let inert = match &host_mime {
+        Some(mime) => crate::http::inert(mime) && crate::http::inert(&path_mime),
+        None => {
+            headers.insert(
+                header::CONTENT_TYPE,
+                header::HeaderValue::from_static("application/octet-stream"),
+            );
+            headers.insert(
+                header::CONTENT_DISPOSITION,
+                header::HeaderValue::from_static("attachment"),
+            );
+            false
+        }
+    };
+    if !inert {
         headers.insert(
             header::CONTENT_SECURITY_POLICY,
-            header::HeaderValue::from_static("sandbox"),
+            header::HeaderValue::from_static(crate::http::RAW_SANDBOX),
         );
     }
     response

@@ -28,4 +28,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
       ca-certificates libwebkit2gtk-4.1-0 libgtk-3-0 librsvg2-2 libayatana-appindicator3-1 libssl3 \
     && rm -rf /var/lib/apt/lists/*
 COPY --from=build /src/target/release/leaf /usr/local/bin/leaf
+# The relay needs no privileges and writes no files: it runs as a user of its own.
+RUN useradd --system --no-create-home --shell /usr/sbin/nologin leaf
+USER leaf
 CMD ["leaf", "relay", "start"]

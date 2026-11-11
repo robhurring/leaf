@@ -88,8 +88,8 @@ pub async fn open(abs: &Path, path: &str, range: Option<&str>) -> Opened {
         ("Cache-Control", "no-cache".into()),
         ("Accept-Ranges", "bytes".into()),
     ];
-    if crate::http::scriptable(&mime) {
-        headers.push(("Content-Security-Policy", "sandbox".into()));
+    if !crate::http::inert(&mime) {
+        headers.push(("Content-Security-Policy", crate::http::RAW_SANDBOX.into()));
     }
     let (status, start, end) = match range.map(|r| parse_range(r, len)) {
         Some(Some((s, e))) => {
@@ -194,6 +194,33 @@ mod tests {
             respond(&dir.path().join("gone"), "gone", None).await.status,
             404
         );
+    }
+
+    #[tokio::test]
+    async fn only_inert_types_go_unsandboxed() {
+        let dir = tempfile::tempdir().unwrap();
+        let csp = |name: &'static str| {
+            let abs = dir.path().join(name);
+            std::fs::write(&abs, b"x").unwrap();
+            async move {
+                let reply = respond(&abs, name, None).await;
+                reply
+                    .headers
+                    .iter()
+                    .find(|(k, _)| *k == "Content-Security-Policy")
+                    .map(|(_, v)| v.clone())
+            }
+        };
+        for name in ["a.png", "clip.mp4", "paper.pdf", "notes.txt"] {
+            assert_eq!(csp(name).await, None, "{name}");
+        }
+        for name in ["page.html", "pic.svg", "feed.rss", "data.xml", "blob.bin"] {
+            assert_eq!(
+                csp(name).await.as_deref(),
+                Some("sandbox; default-src 'none'"),
+                "{name}"
+            );
+        }
     }
 
     #[tokio::test]

@@ -1040,17 +1040,35 @@ async fn served_with(path: &str, headers: Vec<(String, String)>) -> HttpReply {
     reply
 }
 
+const SANDBOX: &str = "sandbox; default-src 'none'";
+
 #[tokio::test]
-async fn raw_responses_are_never_sniffed_and_script_is_sandboxed() {
+async fn raw_responses_are_never_sniffed_and_only_inert_types_go_unsandboxed() {
+    let typed = |path: &'static str, ty: &'static str| async move {
+        served_with(path, vec![("Content-Type".into(), ty.into())]).await
+    };
     // HTML the host labels plainly, with no protection of its own.
-    let reply = served_with(
-        "notes.txt",
-        vec![("Content-Type".into(), "text/html".into())],
-    )
-    .await;
+    let reply = typed("notes.txt", "text/html").await;
     assert_eq!(reply.header("x-content-type-options"), Some("nosniff"));
-    assert_eq!(reply.header("content-security-policy"), Some("sandbox"));
-    // A scriptable path is sandboxed whatever the host calls it; the host's own
+    assert_eq!(reply.header("content-security-policy"), Some(SANDBOX));
+    // XML types run script through XSLT or an XHTML namespace: every one is sandboxed.
+    for ty in [
+        "application/rss+xml",
+        "application/atom+xml",
+        "application/xslt+xml",
+        "image/svg+xml",
+        "text/xsl",
+        "application/x-made-up",
+    ] {
+        let reply = typed("a.png", ty).await;
+        assert_eq!(
+            reply.header("content-security-policy"),
+            Some(SANDBOX),
+            "{ty}"
+        );
+        assert_eq!(reply.header("content-type"), Some(ty), "{ty}");
+    }
+    // A path that isn't inert is sandboxed whatever the host calls it; the host's own
     // values for these two headers are not used.
     let reply = served_with(
         "page.svg",
@@ -1062,18 +1080,50 @@ async fn raw_responses_are_never_sniffed_and_script_is_sandboxed() {
     )
     .await;
     assert_eq!(reply.header("x-content-type-options"), Some("nosniff"));
-    assert_eq!(reply.header("content-security-policy"), Some("sandbox"));
-    // A plain image keeps no host CSP and needs none.
-    let reply = served_with(
-        "a.png",
-        vec![
-            ("Content-Type".into(), "image/png".into()),
-            ("Content-Security-Policy".into(), "script-src *".into()),
-        ],
-    )
-    .await;
-    assert_eq!(reply.header("x-content-type-options"), Some("nosniff"));
-    assert_eq!(reply.header("content-security-policy"), None);
+    assert_eq!(reply.header("content-security-policy"), Some(SANDBOX));
+    // The inert types keep no host CSP and need none.
+    for (path, ty) in [
+        ("a.png", "image/png"),
+        ("clip.mp4", "video/mp4"),
+        ("song.mp3", "audio/mpeg"),
+        ("paper.pdf", "application/pdf"),
+        ("notes.txt", "text/plain; charset=utf-8"),
+    ] {
+        let reply = served_with(
+            path,
+            vec![
+                ("Content-Type".into(), ty.into()),
+                ("Content-Security-Policy".into(), "script-src *".into()),
+            ],
+        )
+        .await;
+        assert_eq!(reply.header("x-content-type-options"), Some("nosniff"));
+        assert_eq!(reply.header("content-security-policy"), None, "{ty}");
+        assert_eq!(reply.header("content-type"), Some(ty));
+        assert_eq!(reply.header("content-disposition"), None);
+    }
+}
+
+#[tokio::test]
+async fn a_raw_content_type_that_is_not_one_type_becomes_a_download() {
+    for ty in ["text/plain, text/html", "text/html text/plain", "html", ""] {
+        let reply = served_with("a.png", vec![("Content-Type".into(), ty.into())]).await;
+        assert_eq!(
+            reply.header("content-type"),
+            Some("application/octet-stream"),
+            "{ty:?}"
+        );
+        assert_eq!(reply.header("content-disposition"), Some("attachment"));
+        assert_eq!(reply.header("content-security-policy"), Some(SANDBOX));
+        assert_eq!(reply.header("x-content-type-options"), Some("nosniff"));
+    }
+    // No type at all is no better.
+    let reply = served_with("a.png", vec![]).await;
+    assert_eq!(
+        reply.header("content-type"),
+        Some("application/octet-stream")
+    );
+    assert_eq!(reply.header("content-disposition"), Some("attachment"));
 }
 
 #[tokio::test]
@@ -1121,7 +1171,10 @@ async fn a_viewer_that_stops_reading_pauses_the_host_then_resumes_it() {
         }
     };
     assert_eq!(paused, RelayToHost::Pause { req });
-    assert!(sent >= 24, "paused after only {sent} chunks");
+    assert!(
+        sent >= relay::share::PAUSE_AT,
+        "paused after only {sent} chunks"
+    );
     // The client reads: the relay drains and lets the host go on.
     let reader = tokio::spawn(async move {
         let mut buf = vec![0u8; 1 << 16];
@@ -1140,6 +1193,188 @@ async fn a_viewer_that_stops_reading_pauses_the_host_then_resumes_it() {
     sink.send(chunk(req, b"")).await.unwrap();
     let total = tokio::time::timeout(WAIT, reader).await.unwrap().unwrap();
     assert!(total >= sent * piece.len(), "read {total} of {sent} chunks");
+    r.stop().await;
+}
+
+#[tokio::test]
+async fn a_raw_request_past_the_cap_waits_for_a_slot() {
+    let r = start_relay().await;
+    let (mut host, shared) = host_share(r.port).await;
+    let id = id_of(&shared);
+    let port = r.port;
+    let get = |i: usize| {
+        let path = format!("/s/{id}/raw/pic{i}.png");
+        tokio::spawn(async move { http_reply(port, &path, "").await })
+    };
+    let mut open = Vec::new();
+    for i in 0..relay::share::MAX_FETCHES {
+        open.push((get(i), fetch_req(&mut host).await));
+    }
+    // One more than the share runs at once: it waits, and the host hears nothing yet.
+    let ninth = get(99);
+    tokio::time::sleep(Duration::from_millis(200)).await;
+    assert!(
+        !ninth.is_finished(),
+        "the ninth waits rather than being refused"
+    );
+    // The first finishes, and the ninth takes its place.
+    let png = vec![("Content-Type".to_string(), "image/png".to_string())];
+    let (first, req) = open.remove(0);
+    host.send(text(&HostToRelay::Fetched {
+        req,
+        status: 200,
+        headers: png.clone(),
+    }))
+    .await
+    .unwrap();
+    host.send(chunk(req, b"")).await.unwrap();
+    assert_eq!(first.await.unwrap().status, 200);
+    let req = match next_host(&mut host).await {
+        RelayToHost::Fetch { req, path, .. } => {
+            assert_eq!(path, "pic99.png");
+            req
+        }
+        other => panic!("expected the ninth fetch: {other:?}"),
+    };
+    host.send(text(&HostToRelay::Fetched {
+        req,
+        status: 200,
+        headers: png,
+    }))
+    .await
+    .unwrap();
+    host.send(chunk(req, b"late")).await.unwrap();
+    host.send(chunk(req, b"")).await.unwrap();
+    let reply = ninth.await.unwrap();
+    assert_eq!((reply.status, reply.body.as_slice()), (200, &b"late"[..]));
+    r.stop().await;
+}
+
+#[tokio::test]
+async fn a_client_that_stops_reading_loses_its_fetch() {
+    let r = start_with(RelayOptions {
+        fetch_stall_timeout: Duration::from_millis(400),
+        ..options()
+    })
+    .await;
+    let (host, shared) = host_share(r.port).await;
+    let id = id_of(&shared);
+    let (mut sink, mut from_relay) = split_host(host);
+    let mut client = tokio::net::TcpStream::connect(("127.0.0.1", r.port))
+        .await
+        .unwrap();
+    client
+        .write_all(
+            format!(
+                "GET /s/{id}/raw/clip.mp4 HTTP/1.1\r\nHost: 127.0.0.1:{}\r\nConnection: close\r\n\r\n",
+                r.port
+            )
+            .as_bytes(),
+        )
+        .await
+        .unwrap();
+    let req = match next_from(&mut from_relay).await {
+        RelayToHost::Fetch { req, .. } => req,
+        other => panic!("expected fetch: {other:?}"),
+    };
+    sink.send(text(&HostToRelay::Fetched {
+        req,
+        status: 200,
+        headers: vec![("Content-Type".into(), "video/mp4".into())],
+    }))
+    .await
+    .unwrap();
+    // The client reads nothing. The host sends until it is told to pause, and obeys.
+    let piece = vec![7u8; leaf_protocol::relay::CHUNK_BYTES];
+    let mut sent = 0;
+    loop {
+        assert!(sent < 200, "no pause after {sent} chunks");
+        sink.send(chunk(req, &piece)).await.unwrap();
+        sent += 1;
+        tokio::time::sleep(Duration::from_millis(5)).await;
+        match from_relay.try_recv() {
+            Ok(RelayToHost::Ping) | Err(_) => continue,
+            Ok(m) => break assert_eq!(m, RelayToHost::Pause { req }),
+        }
+    }
+    // Nothing is taken for the stall time: the fetch is cut, and its slot is free again.
+    assert_eq!(
+        next_from(&mut from_relay).await,
+        RelayToHost::Cancel { req }
+    );
+    let port = r.port;
+    let mut gets = Vec::new();
+    for i in 0..relay::share::MAX_FETCHES {
+        let path = format!("/s/{id}/raw/pic{i}.png");
+        gets.push(tokio::spawn(
+            async move { http_reply(port, &path, "").await },
+        ));
+        assert!(matches!(
+            next_from(&mut from_relay).await,
+            RelayToHost::Fetch { .. }
+        ));
+    }
+    // The stalled client's connection is still open, and gets no clean end.
+    let mut buf = Vec::new();
+    tokio::time::timeout(WAIT, client.read_to_end(&mut buf))
+        .await
+        .unwrap()
+        .unwrap();
+    assert!(
+        !buf.ends_with(b"0\r\n\r\n"),
+        "the body must not look complete"
+    );
+    r.stop().await;
+}
+
+#[tokio::test]
+async fn cross_site_requests_are_refused_and_cost_the_visitor_nothing() {
+    let r = start_relay().await;
+    let (_host, shared) = host_share(r.port).await;
+    let id = id_of(&shared);
+    let cross = "Sec-Fetch-Site: cross-site\r\n";
+    // Another site's page walks ids in a visitor's browser, by images and by fetches.
+    for i in 0..30 {
+        for route in ["healthz", "raw/a.png"] {
+            let path = format!("/s/aaa-bbb-c{i:02}/{route}");
+            assert_eq!(http_get_with(r.port, &path, cross).await.0, 403, "{path}");
+        }
+    }
+    // A live share's files are no more open to it.
+    let live = format!("/s/{id}/raw/a.png");
+    assert_eq!(http_get_with(r.port, &live, cross).await.0, 403);
+    // The visitor has no misses: its own asks are answered as ever.
+    assert_eq!(http_get(r.port, "/s/aaa-bbb-ccc/healthz").await.0, 404);
+    let same = "Sec-Fetch-Site: same-origin\r\n";
+    assert_eq!(
+        http_get_with(r.port, &format!("/s/{id}/healthz"), same).await,
+        (200, "ok".into())
+    );
+    let mut v = viewer(r.port, &id).await;
+    hello(&mut v, Some("Ann")).await;
+    assert_eq!(next_of(&mut v, "presence").await["type"], "presence");
+    r.stop().await;
+}
+
+#[tokio::test]
+async fn the_viewer_page_cannot_be_framed() {
+    let r = start_relay().await;
+    let (_host, shared) = host_share(r.port).await;
+    let id = id_of(&shared);
+    for path in [
+        format!("/s/{id}"),
+        format!("/s/{id}/docs/guide.md"),
+        "/".to_string(),
+    ] {
+        let reply = http_reply(r.port, &path, "").await;
+        assert_eq!(reply.status, 200, "{path}");
+        assert_eq!(
+            reply.header("content-security-policy"),
+            Some("frame-ancestors 'none'"),
+            "{path}"
+        );
+        assert_eq!(reply.header("x-frame-options"), Some("DENY"), "{path}");
+    }
     r.stop().await;
 }
 

@@ -4,7 +4,8 @@
 //! through bounded queues with `try_send`, so nothing awaits while the lock is held and
 //! frames meant for the host keep their order. A socket whose queue is full is not kept
 //! waiting for: a viewer is dropped (as if it left), and a host is treated as dropped
-//! (its share goes into grace).
+//! (its share goes into grace). Only the relay's own frames can put a host there: what a
+//! viewer has forwarded is metered, and stops short of the host's last room.
 
 use std::collections::{HashMap, VecDeque};
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
@@ -18,7 +19,7 @@ use leaf_protocol::{PointerAt, ServerMessage, ShareState, Slide, StageRef, Strok
 use serde_json::Value;
 use tokio::sync::mpsc::error::TrySendError;
 use tokio::sync::mpsc::{self, Sender};
-use tokio::sync::oneshot;
+use tokio::sync::{Notify, oneshot};
 use tokio::task::JoinHandle;
 
 use super::limits::Limits;
@@ -32,14 +33,16 @@ pub const BUFFER_PER_VIEWER: usize = 64;
 pub const QUEUE_FRAMES: usize = 256;
 /// Viewers one share takes; the next is refused.
 pub const MAX_VIEWERS: usize = 100;
-/// Raw fetches one share runs at once; the next is refused.
+/// Raw fetches one share runs at once; the next waits for one of them to end.
 pub const MAX_FETCHES: usize = 8;
 /// Chunks of a fetch's body waiting for its HTTP client, at most. The host is asked to
 /// `pause` well before this; a host that keeps sending anyway is cut off here (`cancel`)
-/// rather than stalling the host link for everyone.
-pub const FETCH_CHUNKS: usize = 64;
+/// rather than stalling the host link for everyone. Between the two marks is room for
+/// what a host that obeys has already sent when `pause` reaches it: the 32 chunks of its
+/// out-queue and the one in its hand, and as many again in the sockets between.
+pub const FETCH_CHUNKS: usize = 96;
 /// Chunks waiting when the relay asks the host to `pause` a fetch.
-pub const PAUSE_AT: usize = 24;
+pub const PAUSE_AT: usize = 16;
 /// Chunks waiting, at most, when the relay lets a paused fetch `resume`.
 pub const RESUME_AT: usize = 8;
 
@@ -100,10 +103,10 @@ fn offer_drop(tx: &Sender<Message>, m: Message) {
     let _ = tx.try_send(m);
 }
 
-/// Most canvases whose sticky strokes a share keeps; the oldest canvas goes first.
+/// Most canvases the host's sticky strokes are kept on; its oldest canvas goes first.
 pub const MAX_STICKY_CANVASES: usize = 50;
-/// Most sticky strokes kept per canvas; the oldest stroke goes first.
-pub const MAX_STICKY_STROKES: usize = 200;
+/// Most sticky strokes kept on one canvas, everyone's together.
+pub const MAX_STICKY_STROKES: usize = QUEUE_FRAMES / 2;
 /// Most points one `inking` frame may carry; a sender adds a few per frame at 20 a second.
 pub const MAX_INKING_POINTS: usize = 256;
 /// Most points in a viewer's finished stroke; a longer one is dropped.
@@ -115,18 +118,48 @@ pub const MAX_VIEWER_KEPT: usize = 100;
 #[derive(Debug, Clone)]
 struct Kept {
     peer: String,
+    /// Its place among the share's kept strokes: a lower one was kept earlier.
+    seq: u64,
     stroke: Stroke,
 }
+
+/// A canvas: a document's path and a block's hash.
+type Canvas = (String, String);
 /// A viewer's pointer frames closer together than this are dropped (twenty a second).
 pub const POINTER_MIN_GAP: Duration = Duration::from_millis(50);
 /// Least time between two `inking` frames from one viewer (a sender makes one per 50 ms).
 pub const INKING_MIN_GAP: Duration = Duration::from_millis(30);
 /// Least time between two finished strokes from one viewer.
 pub const INK_MIN_GAP: Duration = Duration::from_millis(50);
-/// A viewer's `at` frames closer together than this are dropped (four a second).
+/// Least time between two announcements of where one viewer is (four a second). Its `at`
+/// is taken at once; within the gap only the telling waits, and the last place is told.
 pub const AT_MIN_GAP: Duration = Duration::from_millis(250);
-/// Longest path (or block hash) a viewer may name, in bytes.
+/// Longest path, block hash or stroke id anyone may name, in bytes.
 pub const MAX_PATH_LEN: usize = 1024;
+/// Longest name a host or viewer goes by, in characters; a longer one is cut to this.
+pub const MAX_NAME_CHARS: usize = 64;
+/// Longest stroke color, in bytes (the page sends "red", "green" or "blue").
+pub const MAX_COLOR_LEN: usize = 32;
+/// Widest stroke, in the block's units (the page draws at a few units).
+pub const MAX_STROKE_WIDTH: f64 = 64.0;
+/// Most points in a stroke of the host's, finished or in progress: four times a viewer's,
+/// and some minutes of unbroken drawing.
+pub const MAX_HOST_STROKE_POINTS: usize = 4 * MAX_STROKE_POINTS;
+/// Most sticky strokes kept on one document, everyone's together: an arriving viewer is
+/// sent them all at once, and they fit its queue with a quarter of it to spare.
+pub const MAX_DOC_KEPT: usize = QUEUE_FRAMES * 3 / 4;
+/// Most sticky strokes kept for all of a share's viewers together, here or gone: a host
+/// back on a new link is sent them all at once, and they fit in half its queue.
+pub const MAX_VIEWERS_KEPT: usize = QUEUE_FRAMES / 2;
+/// Messages a viewer may have forwarded to the host in one burst. The page's largest
+/// honest burst is Expand all, one `list` per folder of a level; a reconnect re-reads a
+/// handful of things, and typing in search sends one message a keystroke.
+pub const FORWARD_BURST: f64 = 400.0;
+/// Messages a second a viewer may have forwarded to the host, sustained.
+pub const FORWARD_PER_SEC: f64 = 40.0;
+/// Room in the host's queue that viewers' forwarded messages never take: it is left for
+/// what the relay itself must tell the host (who joined and left, presence, fetches).
+pub const HOST_RESERVE: usize = QUEUE_FRAMES / 4;
 
 /// Why a host's `share` was refused: the `RelayToHost::Error` to send before closing.
 pub struct Refused {
@@ -159,7 +192,8 @@ pub enum FetchRefused {
     Gone,
     /// The host is away; the share is in grace.
     Away,
-    /// The share already runs `MAX_FETCHES`.
+    /// The share already runs `MAX_FETCHES` (and, for a fetch that waited, still did
+    /// when the wait was over).
     Busy,
 }
 
@@ -188,6 +222,89 @@ struct Viewer {
     seq: u64,
     peer: Peer,
     tx: Sender<Message>,
+    /// When its last pointer frame, `inking` frame and finished stroke were let through.
+    last_pointer: Option<Instant>,
+    last_inking: Option<Instant>,
+    last_ink: Option<Instant>,
+    /// When everyone was last told where it is on its `at`.
+    last_at: Option<Instant>,
+    /// It has moved since, and a timer will tell everyone when `AT_MIN_GAP` is over.
+    at_pending: bool,
+    /// Messages it may have forwarded to the host now, refilled as time passes.
+    tokens: f64,
+    refilled: Instant,
+}
+
+impl Viewer {
+    fn new(seq: u64, peer: Peer, tx: Sender<Message>) -> Viewer {
+        Viewer {
+            seq,
+            peer,
+            tx,
+            last_pointer: None,
+            last_inking: None,
+            last_ink: None,
+            last_at: None,
+            at_pending: false,
+            tokens: FORWARD_BURST,
+            refilled: Instant::now(),
+        }
+    }
+
+    /// Takes one of the viewer's forwarded messages out of its allowance: `FORWARD_BURST`
+    /// at once, `FORWARD_PER_SEC` sustained. False when it has none left.
+    fn take_token(&mut self, now: Instant) -> bool {
+        let gained = now.duration_since(self.refilled).as_secs_f64() * FORWARD_PER_SEC;
+        self.tokens = (self.tokens + gained).min(FORWARD_BURST);
+        self.refilled = now;
+        if self.tokens < 1.0 {
+            return false;
+        }
+        self.tokens -= 1.0;
+        true
+    }
+}
+
+/// Whether `last` was less than `gap` before `now`; when not, `now` becomes `last`.
+fn too_soon(last: &mut Option<Instant>, now: Instant, gap: Duration) -> bool {
+    if last.is_some_and(|t| now.duration_since(t) < gap) {
+        return true;
+    }
+    *last = Some(now);
+    false
+}
+
+/// One viewer's frames for the host, kept while it is away.
+#[derive(Default)]
+struct Buffered {
+    /// `joined` and the hello of a viewer who arrived while the host was away. Never
+    /// pushed out: without them the host would not know whose the rest are.
+    intro: Vec<String>,
+    /// The rest, `BUFFER_PER_VIEWER` at most; the oldest goes first.
+    frames: VecDeque<String>,
+}
+
+/// A name as the relay keeps it: at most `MAX_NAME_CHARS` characters.
+fn clip_name(name: &str) -> String {
+    name.chars().take(MAX_NAME_CHARS).collect()
+}
+
+/// Whether a path, block hash or stroke id is short enough to keep and pass on.
+fn fits(s: &str) -> bool {
+    s.len() <= MAX_PATH_LEN
+}
+
+/// Whether a stroke is within what the relay keeps and passes on: its names within
+/// `MAX_PATH_LEN`, its color within `MAX_COLOR_LEN`, a width above zero and at most
+/// `MAX_STROKE_WIDTH`, and at most `max_points` points.
+fn stroke_ok(s: &Stroke, max_points: usize) -> bool {
+    fits(&s.id)
+        && fits(&s.doc_path)
+        && fits(&s.block_hash)
+        && s.color.len() <= MAX_COLOR_LEN
+        && s.width > 0.0
+        && s.width <= MAX_STROKE_WIDTH
+        && s.points.len() <= max_points
 }
 
 pub struct Share {
@@ -197,8 +314,9 @@ pub struct Share {
     /// The host's queue overflowed; the share goes into grace when the change settles.
     host_full: bool,
     viewers: HashMap<String, Viewer>,
-    /// Frames for the host from each viewer while it is away, replayed on resume.
-    buffered: HashMap<String, VecDeque<String>>,
+    /// Frames for the host from each viewer still here (and the relay's own, under
+    /// `HOST_ID`) while it is away, replayed on resume.
+    buffered: HashMap<String, Buffered>,
     info: ShareInfo,
     host_path: Option<String>,
     /// The host's open slide, shown to every viewer; gone with the share.
@@ -206,16 +324,11 @@ pub struct Share {
     /// The block open on the host's canvas.
     stage: Option<StageRef>,
     /// Everyone's sticky strokes by `(doc_path, block_hash)`, for viewers who arrive later.
-    sticky: HashMap<(String, String), VecDeque<Kept>>,
+    sticky: HashMap<Canvas, VecDeque<Kept>>,
     /// The canvases in `sticky`, oldest first.
-    sticky_order: VecDeque<(String, String)>,
-    /// When each viewer's last pointer frame was let through.
-    last_pointer_at: HashMap<String, Instant>,
-    /// When each viewer's last `inking` frame and last finished stroke were let through.
-    last_inking_at: HashMap<String, Instant>,
-    last_ink_at: HashMap<String, Instant>,
-    /// When each viewer's last `at` was let through.
-    last_at_at: HashMap<String, Instant>,
+    sticky_order: VecDeque<Canvas>,
+    /// The `seq` the next kept stroke gets.
+    next_kept: u64,
     grace_timer: Option<JoinHandle<()>>,
     /// Raw fetches waiting on the host, by `req`.
     fetches: HashMap<u32, Fetch>,
@@ -224,6 +337,12 @@ pub struct Share {
 
 impl Share {
     fn for_host(&mut self, viewer: &str, msg: &RelayToHost) {
+        self.queue_for_host(viewer, msg, false);
+    }
+
+    /// Sends the host `msg`, or keeps it for its return under `viewer`. An `intro` frame
+    /// (`joined`, the hello) is kept apart from the rest, which can never push it out.
+    fn queue_for_host(&mut self, viewer: &str, msg: &RelayToHost, intro: bool) {
         let mut frame = serde_json::to_string(msg).unwrap_or_default();
         if let Some(tx) = self.host.as_ref().filter(|_| !self.host_full) {
             match tx.try_send(Message::Text(frame.into())) {
@@ -240,10 +359,33 @@ impl Share {
         }
         // The host is away, or about to be: keep the frame for its return.
         let q = self.buffered.entry(viewer.to_string()).or_default();
-        if q.len() == BUFFER_PER_VIEWER {
-            q.pop_front();
+        if intro {
+            q.intro.push(frame);
+            return;
         }
-        q.push_back(frame);
+        if q.frames.len() == BUFFER_PER_VIEWER {
+            q.frames.pop_front();
+        }
+        q.frames.push_back(frame);
+    }
+
+    /// Forgets a viewer who is gone, with whatever was kept for the host from it: a host
+    /// that is here hears `left`, and one that is away learns who is still here from
+    /// `shared` when it returns. False when there was no such viewer.
+    fn remove_viewer(&mut self, viewer: &str) -> bool {
+        if self.viewers.remove(viewer).is_none() {
+            return false;
+        }
+        self.buffered.remove(viewer);
+        let left = RelayToHost::Left {
+            viewer: viewer.to_string(),
+        };
+        if let Some(tx) = self.host.as_ref().filter(|_| !self.host_full)
+            && !offer(tx, text(&left))
+        {
+            self.host_full = true;
+        }
+        true
     }
 
     /// Sends the host a fetch's `Fetch` or `Cancel`. A full queue marks the host behind;
@@ -268,71 +410,102 @@ impl Share {
         }
     }
 
-    /// Keeps a sticky stroke within the bounds. Each peer keeps at most `MAX_STICKY_STROKES`
-    /// on a canvas, its oldest there going first; a viewer keeps at most `MAX_VIEWER_KEPT`
-    /// across the share, its oldest anywhere going first. At `MAX_STICKY_CANVASES` canvases
-    /// the oldest without the host's strokes goes; a viewer never pushes the host's out, so
-    /// its stroke on a new canvas is dropped when every canvas has the host's.
+    /// Keeps a sticky stroke, within the bounds: `MAX_STICKY_STROKES` on a canvas and
+    /// `MAX_DOC_KEPT` on a document, everyone's together; `MAX_VIEWER_KEPT` for one viewer
+    /// and `MAX_VIEWERS_KEPT` for all viewers, here or gone, across the share; and
+    /// `MAX_STICKY_CANVASES` canvases with the host's strokes. Room is made by dropping the
+    /// oldest stroke that isn't the host's, and the host's own oldest only for the host: a
+    /// viewer's stroke is not kept where the host's fill the canvas or the document.
     fn keep(&mut self, peer: &str, stroke: Stroke) {
         let key = (stroke.doc_path.clone(), stroke.block_hash.clone());
-        if !self.sticky.contains_key(&key) {
-            if self.sticky_order.len() >= MAX_STICKY_CANVASES {
-                let hosts = |k: &(String, String)| {
-                    self.sticky
-                        .get(k)
-                        .is_some_and(|s| s.iter().any(|x| x.peer == HOST_ID))
-                };
-                let victim = match self.sticky_order.iter().position(|k| !hosts(k)) {
-                    Some(i) => i,
-                    None if peer == HOST_ID => 0,
-                    None => return,
-                };
-                if let Some(old) = self.sticky_order.remove(victim) {
-                    self.sticky.remove(&old);
+        let host = peer == HOST_ID;
+        let on_canvas = |k: &Canvas| *k == key;
+        let on_doc = |k: &Canvas| k.0 == key.0;
+        if host {
+            let hosts = |k: &Canvas| {
+                self.sticky
+                    .get(k)
+                    .is_some_and(|s| s.iter().any(|x| x.peer == HOST_ID))
+            };
+            if !hosts(&key)
+                && self.sticky_order.iter().filter(|k| hosts(k)).count() >= MAX_STICKY_CANVASES
+                && let Some(i) = self.sticky_order.iter().position(hosts)
+                && let Some(old) = self.sticky_order.remove(i)
+            {
+                self.sticky.remove(&old);
+            }
+        } else {
+            let full_of_hosts = |scope: &dyn Fn(&Canvas) -> bool, most: usize| {
+                self.kept_in(scope, |_| true) >= most && self.kept_in(scope, |p| p != HOST_ID) == 0
+            };
+            if full_of_hosts(&on_canvas, MAX_STICKY_STROKES) || full_of_hosts(&on_doc, MAX_DOC_KEPT)
+            {
+                return;
+            }
+            if self.kept_in(&|_| true, |p| p == peer) >= MAX_VIEWER_KEPT {
+                self.drop_oldest(&|_| true, |p| p == peer);
+            }
+            if self.kept_in(&|_| true, |p| p != HOST_ID) >= MAX_VIEWERS_KEPT {
+                self.drop_oldest(&|_| true, |p| p != HOST_ID);
+            }
+        }
+        for (scope, most) in [
+            (&on_canvas as &dyn Fn(&Canvas) -> bool, MAX_STICKY_STROKES),
+            (&on_doc, MAX_DOC_KEPT),
+        ] {
+            while self.kept_in(scope, |_| true) >= most {
+                if !self.drop_oldest(scope, |p| p != HOST_ID)
+                    && !self.drop_oldest(scope, |p| p == HOST_ID)
+                {
+                    break;
                 }
             }
+        }
+        if !self.sticky.contains_key(&key) {
             self.sticky_order.push_back(key.clone());
         }
-        let strokes = self.sticky.entry(key).or_default();
-        if strokes.iter().filter(|k| k.peer == peer).count() >= MAX_STICKY_STROKES
-            && let Some(i) = strokes.iter().position(|k| k.peer == peer)
-        {
-            strokes.remove(i);
-        }
-        strokes.push_back(Kept {
+        let seq = self.next_kept;
+        self.next_kept += 1;
+        self.sticky.entry(key).or_default().push_back(Kept {
             peer: peer.to_string(),
+            seq,
             stroke,
         });
-        if peer != HOST_ID && self.kept_by(peer) > MAX_VIEWER_KEPT {
-            self.drop_oldest_of(peer);
-        }
     }
 
-    /// How many kept strokes are `peer`'s.
-    fn kept_by(&self, peer: &str) -> usize {
+    /// How many kept strokes on the canvases in `scope` are by a peer `by` picks.
+    fn kept_in(&self, scope: &dyn Fn(&Canvas) -> bool, by: impl Fn(&str) -> bool) -> usize {
         self.sticky
-            .values()
-            .flatten()
-            .filter(|k| k.peer == peer)
+            .iter()
+            .filter(|(k, _)| scope(k))
+            .flat_map(|(_, strokes)| strokes)
+            .filter(|k| by(&k.peer))
             .count()
     }
 
-    /// Drops `peer`'s oldest kept stroke: the first of its on the oldest canvas that has one.
-    fn drop_oldest_of(&mut self, peer: &str) {
-        let keys: Vec<_> = self.sticky_order.iter().cloned().collect();
-        for key in keys {
-            if let Some(strokes) = self.sticky.get_mut(&key)
-                && let Some(i) = strokes.iter().position(|k| k.peer == peer)
-            {
-                strokes.remove(i);
-                self.prune(&key);
-                return;
-            }
+    /// Drops the oldest kept stroke on the canvases in `scope` by a peer `by` picks. False
+    /// when there is none.
+    fn drop_oldest(&mut self, scope: &dyn Fn(&Canvas) -> bool, by: impl Fn(&str) -> bool) -> bool {
+        let oldest = self
+            .sticky
+            .iter()
+            .filter(|(k, _)| scope(k))
+            .flat_map(|(key, strokes)| strokes.iter().map(move |k| (key, k)))
+            .filter(|(_, k)| by(&k.peer))
+            .min_by_key(|(_, k)| k.seq)
+            .map(|(key, k)| (key.clone(), k.seq));
+        let Some((key, seq)) = oldest else {
+            return false;
+        };
+        if let Some(strokes) = self.sticky.get_mut(&key) {
+            strokes.retain(|k| k.seq != seq);
         }
+        self.prune(&key);
+        true
     }
 
-    /// Forgets a canvas that has no kept strokes left, freeing its slot.
-    fn prune(&mut self, key: &(String, String)) {
+    /// Forgets a canvas that has no kept strokes left.
+    fn prune(&mut self, key: &Canvas) {
         if self.sticky.get(key).is_some_and(|s| s.is_empty()) {
             self.sticky.remove(key);
             self.sticky_order.retain(|k| k != key);
@@ -340,7 +513,8 @@ impl Share {
     }
 
     /// Sends the host, on a link it just opened, the viewers' kept strokes, so what it
-    /// shows matches what viewers see; its own it still has. Dropped past a full queue.
+    /// shows matches what viewers see; its own it still has. There are `MAX_VIEWERS_KEPT`
+    /// at most, which a new link's queue has room for.
     fn send_kept_to_host(&self) {
         let Some(tx) = &self.host else {
             return;
@@ -456,10 +630,13 @@ impl Share {
         self.to_viewers_on(Some(&doc_path), Some(peer), &m);
     }
 
-    /// Sends one viewer the kept strokes of every canvas on document `path`.
-    fn send_kept(&self, viewer: &str, path: &str) {
+    /// Sends one viewer the kept strokes of every canvas on document `path`: `MAX_DOC_KEPT`
+    /// at most, which its queue has room for unless it is far behind. False when one did
+    /// not fit: the viewer is to be dropped, since it would otherwise show a canvas with
+    /// strokes missing and never know.
+    fn send_kept(&self, viewer: &str, path: &str) -> bool {
         let Some(v) = self.viewers.get(viewer) else {
-            return;
+            return true;
         };
         for key in self.sticky_order.iter().filter(|(doc, _)| doc == path) {
             for kept in self.sticky.get(key).into_iter().flatten() {
@@ -468,9 +645,12 @@ impl Share {
                     stroke: kept.stroke.clone(),
                     in_reply_to: None,
                 };
-                offer_drop(&v.tx, text(&m));
+                if !offer(&v.tx, text(&m)) {
+                    return false;
+                }
             }
         }
+        true
     }
 
     fn peers(&self) -> Vec<Peer> {
@@ -576,6 +756,8 @@ pub struct Relay {
     pub limits: Limits,
     next_viewer: AtomicU64,
     next_conn: AtomicU64,
+    /// Told whenever a raw fetch ends, on any share: the fetches waiting for a slot look again.
+    fetch_freed: Notify,
 }
 
 impl Relay {
@@ -589,6 +771,7 @@ impl Relay {
             limits: Limits::default(),
             next_viewer: AtomicU64::new(1),
             next_conn: AtomicU64::new(1),
+            fetch_freed: Notify::new(),
         }
     }
 
@@ -621,14 +804,8 @@ impl Relay {
                 break;
             }
             for vid in full.drain(..) {
-                if share.viewers.remove(&vid).is_some() {
+                if share.remove_viewer(&vid) {
                     tracing::warn!(share = %id, viewer = %vid, "viewer fell behind; dropped");
-                    share.for_host(
-                        &vid,
-                        &RelayToHost::Left {
-                            viewer: vid.clone(),
-                        },
-                    );
                 }
             }
             full = share.presence();
@@ -641,6 +818,7 @@ impl Relay {
         share.host = None;
         // A returning host knows nothing of these: their clients get an error.
         share.fetches.clear();
+        self.fetch_freed.notify_waiters();
         let relay = Arc::clone(self);
         let grace = self.grace;
         let key = id.to_string();
@@ -668,10 +846,11 @@ impl Relay {
             code: "bad-key",
             message: "this share's key doesn't match; share again for a new link".into(),
         };
+        let name = clip_name(name);
         let host = Peer {
             id: HOST_ID.into(),
-            name: name.to_string(),
-            color: color_for(name),
+            color: color_for(&name),
+            name,
             path: None,
         };
         let mut shares = self.lock();
@@ -710,9 +889,18 @@ impl Relay {
                 share.info.mode = mode;
                 // The new host knows nothing of these: their clients get an error.
                 share.fetches.clear();
-                let mut queued: Vec<(String, VecDeque<String>)> = share.buffered.drain().collect();
+                self.fetch_freed.notify_waiters();
+                // What the host had open when its link went may be closed by now, and it
+                // says again only what it has: start from nothing, as a new share does.
+                let stale = share.host_path.take().is_some()
+                    | share.slide.take().is_some()
+                    | share.stage.take().is_some();
+                let mut queued: Vec<(String, Buffered)> = share.buffered.drain().collect();
                 queued.sort_by_key(|(v, _)| viewer_seq(v));
-                replay = queued.into_iter().flat_map(|(_, q)| q).collect();
+                replay = queued
+                    .into_iter()
+                    .flat_map(|(_, q)| q.intro.into_iter().chain(q.frames))
+                    .collect();
                 share.host = Some(tx);
                 share.send_kept_to_host();
                 viewers = share.peers();
@@ -720,6 +908,9 @@ impl Relay {
                     let mut full = share.status(ShareState::Live, None);
                     full.extend(share.presence());
                     tracing::info!(share = %id, viewers = share.viewers.len(), "host resumed");
+                    self.settle(&id, share, full);
+                } else if stale {
+                    let full = share.presence();
                     self.settle(&id, share, full);
                 }
             }
@@ -744,10 +935,7 @@ impl Relay {
                         stage: None,
                         sticky: HashMap::new(),
                         sticky_order: VecDeque::new(),
-                        last_pointer_at: HashMap::new(),
-                        last_inking_at: HashMap::new(),
-                        last_ink_at: HashMap::new(),
-                        last_at_at: HashMap::new(),
+                        next_kept: 0,
                         grace_timer: None,
                         fetches: HashMap::new(),
                         next_req: 1,
@@ -806,14 +994,8 @@ impl Relay {
         let delivered = offer(&v.tx, text(&msg));
         if expel {
             let _ = delivered && offer(&v.tx, Message::Close(None));
-            share.viewers.remove(viewer);
+            share.remove_viewer(viewer);
             tracing::info!(share = %id, viewer, "viewer expelled by the host");
-            share.for_host(
-                viewer,
-                &RelayToHost::Left {
-                    viewer: viewer.to_string(),
-                },
-            );
             let full = share.presence();
             self.settle(id, share, full);
         } else if !delivered {
@@ -821,8 +1003,12 @@ impl Relay {
         }
     }
 
-    /// The host's `path`: what it is reading now.
+    /// The host's `path`: what it is reading now. Like everything the host names below, a
+    /// path or hash over `MAX_PATH_LEN` bytes is ignored, message and all.
     pub fn path(self: &Arc<Self>, id: &str, conn: u64, path: Option<String>) {
+        if path.as_ref().is_some_and(|p| !fits(p)) {
+            return too_long(id, "path");
+        }
         let mut shares = self.lock();
         if let Some(share) = shares.get_mut(id).filter(|s| s.host_conn == conn) {
             share.host_path = path;
@@ -833,6 +1019,9 @@ impl Relay {
 
     /// The host's `slide`: the slide it has open, or none.
     pub fn slide(self: &Arc<Self>, id: &str, conn: u64, slide: Option<Slide>) {
+        if slide.as_ref().is_some_and(|s| !fits(&s.path)) {
+            return too_long(id, "slide");
+        }
         let mut shares = self.lock();
         if let Some(share) = shares.get_mut(id).filter(|s| s.host_conn == conn) {
             share.slide = slide;
@@ -843,6 +1032,12 @@ impl Relay {
 
     /// The host's `stage`: the block open on its canvas, or none.
     pub fn stage(self: &Arc<Self>, id: &str, conn: u64, stage: Option<StageRef>) {
+        if stage
+            .as_ref()
+            .is_some_and(|s| !fits(&s.doc_path) || !fits(&s.block_hash))
+        {
+            return too_long(id, "stage");
+        }
         let mut shares = self.lock();
         if let Some(share) = shares.get_mut(id).filter(|s| s.host_conn == conn) {
             share.stage = stage;
@@ -853,6 +1048,12 @@ impl Relay {
 
     /// The host's `pointer`: shown to the viewers on its document, or to all when it is gone.
     pub fn pointer(self: &Arc<Self>, id: &str, conn: u64, pointer: Option<PointerAt>) {
+        if pointer
+            .as_ref()
+            .is_some_and(|p| !fits(&p.doc_path) || !fits(&p.block_hash))
+        {
+            return too_long(id, "pointer");
+        }
         let mut shares = self.lock();
         if let Some(share) = shares.get_mut(id).filter(|s| s.host_conn == conn) {
             let doc = pointer.as_ref().map(|p| p.doc_path.clone());
@@ -868,8 +1069,12 @@ impl Relay {
         }
     }
 
-    /// The host's `ink`: a stroke for the viewers on its document; kept when sticky.
+    /// The host's `ink`: a stroke for the viewers on its document; kept when sticky. One
+    /// out of bounds (`stroke_ok`, with `MAX_HOST_STROKE_POINTS`) is dropped.
     pub fn ink(self: &Arc<Self>, id: &str, conn: u64, stroke: Stroke) {
+        if !stroke_ok(&stroke, MAX_HOST_STROKE_POINTS) {
+            return too_long(id, "ink");
+        }
         let mut shares = self.lock();
         if let Some(share) = shares.get_mut(id).filter(|s| s.host_conn == conn) {
             share.ink_from(HOST_ID, stroke);
@@ -878,6 +1083,9 @@ impl Relay {
 
     /// The host's `inking`: a stroke in progress, for the viewers on its document.
     pub fn inking(self: &Arc<Self>, id: &str, conn: u64, stroke: Stroke) {
+        if !stroke_ok(&stroke, MAX_HOST_STROKE_POINTS) {
+            return too_long(id, "inking");
+        }
         let mut shares = self.lock();
         if let Some(share) = shares.get_mut(id).filter(|s| s.host_conn == conn) {
             share.inking_from(HOST_ID, stroke);
@@ -894,6 +1102,9 @@ impl Relay {
         block_hash: String,
         stroke_id: Option<String>,
     ) {
+        if !fits(&doc_path) || !fits(&block_hash) || stroke_id.as_ref().is_some_and(|i| !fits(i)) {
+            return too_long(id, "inkUndo");
+        }
         let mut shares = self.lock();
         if let Some(share) = shares.get_mut(id).filter(|s| s.host_conn == conn) {
             share.ink_undo_from(HOST_ID, doc_path, block_hash, stroke_id);
@@ -902,6 +1113,9 @@ impl Relay {
 
     /// The host's `inkClear`: every kept stroke on the canvas goes; viewers on it are told.
     pub fn ink_clear(self: &Arc<Self>, id: &str, conn: u64, doc_path: String, block_hash: String) {
+        if !fits(&doc_path) || !fits(&block_hash) {
+            return too_long(id, "inkClear");
+        }
         let mut shares = self.lock();
         if let Some(share) = shares.get_mut(id).filter(|s| s.host_conn == conn) {
             share.ink_clear_from(HOST_ID, doc_path, block_hash);
@@ -916,6 +1130,7 @@ impl Relay {
         {
             tracing::info!(share = %id, "ended by the host");
             share.close_all("host");
+            self.fetch_freed.notify_waiters();
         }
     }
 
@@ -944,6 +1159,7 @@ impl Relay {
             share.grace_timer.take();
             tracing::info!(share = %id, "host did not come back; share ended");
             share.close_all("host-gone");
+            self.fetch_freed.notify_waiters();
         }
     }
 
@@ -963,63 +1179,74 @@ impl Relay {
         }
         let seq = self.next_viewer.fetch_add(1, Ordering::Relaxed);
         let vid = format!("v{seq}");
-        let name = name.unwrap_or_else(auto_name);
+        let name = name.map_or_else(auto_name, |n| clip_name(&n));
         let peer = Peer {
             id: vid.clone(),
             color: color_for(&name),
             name,
             path: None,
         };
-        share.for_host(
+        share.queue_for_host(
             &vid,
             &RelayToHost::Joined {
                 viewer: vid.clone(),
                 name: peer.name.clone(),
                 color: peer.color.clone(),
             },
+            true,
         );
-        share.for_host(
+        share.queue_for_host(
             &vid,
             &RelayToHost::FromViewer {
                 viewer: vid.clone(),
                 msg: hello,
             },
+            true,
         );
         // A fresh queue: these can't overflow.
         if share.host.is_none() {
             let _ = offer(&tx, status(ShareState::Reconnecting, None));
         }
-        share.viewers.insert(vid.clone(), Viewer { seq, peer, tx });
+        share
+            .viewers
+            .insert(vid.clone(), Viewer::new(seq, peer, tx));
         tracing::info!(share = %id, viewer = %vid, viewers = share.viewers.len(), "viewer joined");
         let full = share.presence();
         self.settle(id, share, full);
         Ok(vid)
     }
 
-    /// A viewer's message, for the host (or its buffer while the host is away).
+    /// A viewer's message, for the host (or its buffer while the host is away). Where it
+    /// is, its pointer and its ink the relay handles itself; the rest is forwarded, within
+    /// the viewer's allowance and never into the host's last `HOST_RESERVE` places. A
+    /// viewer over either is closed (its page connects again): whatever it sends, the
+    /// host's queue cannot overflow on its account.
     pub fn from_viewer(self: &Arc<Self>, id: &str, viewer: &str, msg: Value) {
         let mut shares = self.lock();
-        if let Some(share) = shares.get_mut(id)
-            && share.viewers.contains_key(viewer)
-        {
-            if msg.get("type").and_then(Value::as_str) == Some("at") {
-                if let Some(at) = Self::viewer_at(share, viewer, &msg) {
-                    let full = share.presence();
-                    share.send_kept(viewer, &at);
-                    self.settle(id, share, full);
-                }
-                return;
+        let Some(share) = shares.get_mut(id) else {
+            return;
+        };
+        if !share.viewers.contains_key(viewer) {
+            return;
+        }
+        match msg.get("type").and_then(Value::as_str) {
+            Some("at") => return self.viewer_at(id, share, viewer, &msg),
+            Some("pointer") => return Self::viewer_pointer(share, viewer, &msg),
+            Some(kind @ ("ink" | "inking" | "inkUndo" | "inkClear")) => {
+                return Self::viewer_ink(share, viewer, kind, &msg);
             }
-            if msg.get("type").and_then(Value::as_str) == Some("pointer") {
-                Self::viewer_pointer(share, viewer, &msg);
-                return;
-            }
-            if let Some(kind @ ("ink" | "inking" | "inkUndo" | "inkClear")) =
-                msg.get("type").and_then(Value::as_str)
-            {
-                Self::viewer_ink(share, viewer, kind, &msg);
-                return;
-            }
+            _ => {}
+        }
+        let now = Instant::now();
+        let within = share
+            .viewers
+            .get_mut(viewer)
+            .is_some_and(|v| v.take_token(now));
+        let room = share
+            .host
+            .as_ref()
+            .is_none_or(|tx| tx.capacity() > HOST_RESERVE);
+        if within && room {
             share.for_host(
                 viewer,
                 &RelayToHost::FromViewer {
@@ -1027,65 +1254,104 @@ impl Relay {
                     msg,
                 },
             );
-            self.settle(id, share, Vec::new());
+            return self.settle(id, share, Vec::new());
         }
+        // 1008: the viewer broke a rule. 1013: try again later.
+        let (code, reason) = if within {
+            (1013, "the host is busy")
+        } else {
+            (1008, "too many messages")
+        };
+        tracing::warn!(share = %id, viewer, reason, "viewer closed");
+        if let Some(v) = share.viewers.get(viewer) {
+            let _ = offer(
+                &v.tx,
+                Message::Close(Some(CloseFrame {
+                    code,
+                    reason: reason.into(),
+                })),
+            );
+        }
+        share.remove_viewer(viewer);
+        let full = share.presence();
+        self.settle(id, share, full);
     }
 
-    /// A viewer's `at`: where it is reading, told to everyone, never to the host as a
-    /// message. Stores and returns the new path; `None` (nothing to tell) for a path
-    /// outside the share or too long, the path it is already on, or a frame within
-    /// `AT_MIN_GAP` of the last one let through.
-    fn viewer_at(share: &mut Share, viewer: &str, msg: &Value) -> Option<String> {
-        let at = msg
+    /// A viewer's `at`: where it is reading, never forwarded to the host as a message.
+    /// Nothing happens for a path outside the share or too long, or the one it is already
+    /// on. Otherwise the path is stored at once, so its pointer and ink there count from
+    /// now, and it is sent the document's kept strokes. Everyone is told at once too,
+    /// unless they were told of this viewer within `AT_MIN_GAP`: then a timer tells them
+    /// when the gap is over, wherever the viewer is by then.
+    fn viewer_at(self: &Arc<Self>, id: &str, share: &mut Share, viewer: &str, msg: &Value) {
+        let Some(at) = msg
             .get("path")
             .and_then(Value::as_str)
-            .and_then(clean_share_path)?;
-        let v = share.viewers.get_mut(viewer)?;
+            .and_then(clean_share_path)
+        else {
+            return;
+        };
+        let Some(v) = share.viewers.get_mut(viewer) else {
+            return;
+        };
         if v.peer.path.as_deref() == Some(at.as_str()) {
-            return None;
-        }
-        let now = Instant::now();
-        if share
-            .last_at_at
-            .get(viewer)
-            .is_some_and(|t| now.duration_since(*t) < AT_MIN_GAP)
-        {
-            return None;
+            return;
         }
         v.peer.path = Some(at.clone());
-        share
-            .last_at_at
-            .retain(|v, _| share.viewers.contains_key(v));
-        share.last_at_at.insert(viewer.to_string(), now);
-        Some(at)
+        let now = Instant::now();
+        let mut full = Vec::new();
+        match v.last_at.filter(|t| now.duration_since(*t) < AT_MIN_GAP) {
+            None => {
+                v.last_at = Some(now);
+                full = share.presence();
+            }
+            Some(_) if v.at_pending => {}
+            Some(last) => {
+                v.at_pending = true;
+                let relay = Arc::clone(self);
+                let (id, viewer) = (id.to_string(), viewer.to_string());
+                tokio::spawn(async move {
+                    tokio::time::sleep_until((last + AT_MIN_GAP).into()).await;
+                    relay.announce_at(&id, &viewer);
+                });
+            }
+        }
+        if !share.send_kept(viewer, &at) {
+            full.push(viewer.to_string());
+        }
+        self.settle(id, share, full);
+    }
+
+    /// `AT_MIN_GAP` after a viewer's last announced `at`: everyone is told where it is now.
+    fn announce_at(self: &Arc<Self>, id: &str, viewer: &str) {
+        let mut shares = self.lock();
+        let Some(share) = shares.get_mut(id) else {
+            return;
+        };
+        let Some(v) = share.viewers.get_mut(viewer).filter(|v| v.at_pending) else {
+            return;
+        };
+        v.at_pending = false;
+        v.last_at = Some(Instant::now());
+        let full = share.presence();
+        self.settle(id, share, full);
     }
 
     /// A viewer's ink: a finished stroke, one in progress, an undo or a clear, accepted
     /// only on the document the viewer said it is on, with paths, hashes and ids of at most
-    /// `MAX_PATH_LEN` bytes, at most `MAX_INKING_POINTS` points in a frame in progress and
-    /// `MAX_STROKE_POINTS` in a finished stroke, and no closer together than `INKING_MIN_GAP`
-    /// and `INK_MIN_GAP`. Shown to the other viewers on the document, and to the host only
+    /// `MAX_PATH_LEN` bytes, a stroke within bounds (`stroke_ok`) with at most
+    /// `MAX_INKING_POINTS` points in a frame in progress and `MAX_STROKE_POINTS` in a
+    /// finished one, and no closer together than `INKING_MIN_GAP` and `INK_MIN_GAP`. Shown to the other viewers on the document, and to the host only
     /// while it is here with room to spare: ink never buffers for an away host and never
     /// marks it behind (a host that comes back gets the kept strokes instead).
     fn viewer_ink(share: &mut Share, viewer: &str, kind: &str, msg: &Value) {
-        let here = share
-            .viewers
-            .get(viewer)
-            .and_then(|v| v.peer.path.as_deref());
-        let on_canvas = |doc: &str, hash: &str| {
-            doc.len() <= MAX_PATH_LEN && hash.len() <= MAX_PATH_LEN && here == Some(doc)
+        let Some(v) = share.viewers.get_mut(viewer) else {
+            return;
         };
+        let here = v.peer.path.clone();
+        let on_canvas =
+            |doc: &str, hash: &str| fits(doc) && fits(hash) && here.as_deref() == Some(doc);
         let now = Instant::now();
-        let too_soon = |last: &mut HashMap<String, Instant>, gap: Duration| {
-            if last
-                .get(viewer)
-                .is_some_and(|t| now.duration_since(*t) < gap)
-            {
-                return true;
-            }
-            last.insert(viewer.to_string(), now);
-            false
-        };
         match kind {
             "ink" | "inking" => {
                 let Some(stroke) = msg
@@ -1094,14 +1360,12 @@ impl Relay {
                 else {
                     return;
                 };
-                if !on_canvas(&stroke.doc_path, &stroke.block_hash)
-                    || stroke.id.len() > MAX_PATH_LEN
-                {
+                if !on_canvas(&stroke.doc_path, &stroke.block_hash) {
                     return;
                 }
                 if kind == "inking" {
-                    if stroke.points.len() > MAX_INKING_POINTS
-                        || too_soon(&mut share.last_inking_at, INKING_MIN_GAP)
+                    if !stroke_ok(&stroke, MAX_INKING_POINTS)
+                        || too_soon(&mut v.last_inking, now, INKING_MIN_GAP)
                     {
                         return;
                     }
@@ -1112,8 +1376,8 @@ impl Relay {
                     });
                     return;
                 }
-                if stroke.points.len() > MAX_STROKE_POINTS
-                    || too_soon(&mut share.last_ink_at, INK_MIN_GAP)
+                if !stroke_ok(&stroke, MAX_STROKE_POINTS)
+                    || too_soon(&mut v.last_ink, now, INK_MIN_GAP)
                 {
                     return;
                 }
@@ -1134,8 +1398,7 @@ impl Relay {
                     .get("strokeId")
                     .and_then(Value::as_str)
                     .map(str::to_string);
-                if !on_canvas(doc_path, block_hash)
-                    || stroke_id.as_ref().is_some_and(|i| i.len() > MAX_PATH_LEN)
+                if !on_canvas(doc_path, block_hash) || stroke_id.as_ref().is_some_and(|i| !fits(i))
                 {
                     return;
                 }
@@ -1178,32 +1441,18 @@ impl Relay {
                 Err(_) => return,
             },
         };
-        if let Some(p) = &pointer {
-            let here = share
-                .viewers
-                .get(viewer)
-                .and_then(|v| v.peer.path.as_deref());
-            if p.doc_path.len() > MAX_PATH_LEN
-                || p.block_hash.len() > MAX_PATH_LEN
-                || here != Some(p.doc_path.as_str())
-            {
-                return;
-            }
-        }
-        // A gone pointer always goes through, or it would linger on the others' screens.
-        if pointer.is_some() {
-            let now = Instant::now();
-            if share
-                .last_pointer_at
-                .get(viewer)
-                .is_some_and(|t| now.duration_since(*t) < POINTER_MIN_GAP)
-            {
-                return;
-            }
-            share
-                .last_pointer_at
-                .retain(|v, _| share.viewers.contains_key(v));
-            share.last_pointer_at.insert(viewer.to_string(), now);
+        let Some(v) = share.viewers.get_mut(viewer) else {
+            return;
+        };
+        // Only a pointer that is somewhere is checked and thinned: a gone one always goes
+        // through, or it would linger on the others' screens.
+        if let Some(p) = &pointer
+            && (!fits(&p.doc_path)
+                || !fits(&p.block_hash)
+                || v.peer.path.as_deref() != Some(p.doc_path.as_str())
+                || too_soon(&mut v.last_pointer, Instant::now(), POINTER_MIN_GAP))
+        {
+            return;
         }
         let doc = pointer.as_ref().map(|p| p.doc_path.clone());
         share.to_viewers_on(
@@ -1225,26 +1474,43 @@ impl Relay {
     pub fn viewer_left(self: &Arc<Self>, id: &str, viewer: &str) {
         let mut shares = self.lock();
         if let Some(share) = shares.get_mut(id)
-            && share.viewers.contains_key(viewer)
+            && share.remove_viewer(viewer)
         {
-            share.viewers.remove(viewer);
-            share.last_pointer_at.remove(viewer);
-            share.last_inking_at.remove(viewer);
-            share.last_ink_at.remove(viewer);
-            share.last_at_at.remove(viewer);
-            share.for_host(
-                viewer,
-                &RelayToHost::Left {
-                    viewer: viewer.to_string(),
-                },
-            );
             tracing::info!(share = %id, viewer, viewers = share.viewers.len(), "viewer left");
             let full = share.presence();
             self.settle(id, share, full);
         }
     }
 
-    /// A viewer's `GET /s/{id}/raw/{path}`: asks the host for the bytes.
+    /// A viewer's `GET /s/{id}/raw/{path}`: asks the host for the bytes, waiting up to
+    /// `wait` for one of the share's `MAX_FETCHES` slots. A page with many pictures asks
+    /// for more than that at once, and an `<img>` refused is never asked for again.
+    pub async fn start_fetch_when_free(
+        self: &Arc<Self>,
+        id: &str,
+        path: String,
+        range: Option<String>,
+        wait: Duration,
+    ) -> Result<Started, FetchRefused> {
+        let deadline = tokio::time::Instant::now() + wait;
+        loop {
+            // Listening before the look, so a slot freed between the two is not missed.
+            let freed = self.fetch_freed.notified();
+            tokio::pin!(freed);
+            freed.as_mut().enable();
+            match self.start_fetch(id, path.clone(), range.clone()) {
+                Err(FetchRefused::Busy) => {}
+                other => return other,
+            }
+            if tokio::time::timeout_at(deadline, freed).await.is_err() {
+                tracing::warn!(share = %id, %path, "raw fetch gave up waiting for a slot");
+                return Err(FetchRefused::Busy);
+            }
+        }
+    }
+
+    /// Asks the host for a file's bytes now, or refuses: `Busy` when the share already
+    /// runs `MAX_FETCHES`.
     pub fn start_fetch(
         self: &Arc<Self>,
         id: &str,
@@ -1257,7 +1523,7 @@ impl Relay {
             return Err(FetchRefused::Away);
         }
         if share.fetches.len() >= MAX_FETCHES {
-            tracing::warn!(share = %id, "raw fetch refused: too many at once");
+            tracing::debug!(share = %id, "raw fetch has no slot yet");
             return Err(FetchRefused::Busy);
         }
         let req = loop {
@@ -1318,6 +1584,7 @@ impl Relay {
         if bytes.is_empty() {
             fetch.complete.store(true, Ordering::Release);
             share.fetches.remove(&req);
+            self.fetch_freed.notify_waiters();
             return;
         }
         // Pause before this chunk goes in, so the reader that takes it sees the flag.
@@ -1336,6 +1603,7 @@ impl Relay {
                     tracing::warn!(share = %id, req, "raw client fell behind; fetch cut off");
                 }
                 share.fetches.remove(&req);
+                self.fetch_freed.notify_waiters();
                 share.fetch_message(&RelayToHost::Cancel { req });
                 self.settle(id, share, Vec::new());
             }
@@ -1365,6 +1633,7 @@ impl Relay {
             && share.fetches.remove(&req).is_some()
         {
             tracing::debug!(share = %id, req, "raw fetch cancelled");
+            self.fetch_freed.notify_waiters();
             share.fetch_message(&RelayToHost::Cancel { req });
             self.settle(id, share, Vec::new());
         }
@@ -1378,6 +1647,11 @@ impl Relay {
             }
         }
     }
+}
+
+/// Notes a host message dropped for a path, hash, id or stroke out of bounds.
+fn too_long(id: &str, kind: &str) {
+    tracing::debug!(share = %id, kind, "host message out of bounds; ignored");
 }
 
 /// The close frame for a share id that isn't here.
@@ -1561,17 +1835,19 @@ mod tests {
         (r, id, (ann, arx), (bob, brx), hrx)
     }
 
-    /// Forgets when each viewer last moved, so the next `at` isn't thinned.
+    /// Forgets when each viewer was last announced, so its next `at` is told at once.
     fn forget_at(r: &Relay, id: &str) {
-        r.lock().get_mut(id).unwrap().last_at_at.clear();
+        for v in r.lock().get_mut(id).unwrap().viewers.values_mut() {
+            v.last_at = None;
+        }
     }
 
     /// Lets the next finished stroke and `inking` frame from every viewer through at once.
     fn forget_ink(r: &Relay, id: &str) {
-        let mut shares = r.lock();
-        let share = shares.get_mut(id).unwrap();
-        share.last_ink_at.clear();
-        share.last_inking_at.clear();
+        for v in r.lock().get_mut(id).unwrap().viewers.values_mut() {
+            v.last_ink = None;
+            v.last_inking = None;
+        }
     }
 
     #[tokio::test]
@@ -1662,12 +1938,17 @@ mod tests {
         assert_eq!(kind(&hrx.try_recv().unwrap()), "joined");
         r.from_viewer(&id, &ann, json!({"type": "at", "path": "a.mmd"}));
         let frame = json!({"type": "pointer", "pointer": {"docPath": "a.mmd", "blockHash": "h", "x": 1.0, "y": 2.0}});
-        let before = r.lock().get(&id).unwrap().buffered[&ann].len();
+        let held = |r: &Relay| {
+            let shares = r.lock();
+            let q = &shares.get(&id).unwrap().buffered[&ann];
+            q.intro.len() + q.frames.len()
+        };
+        let before = held(&r);
         for _ in 0..3 {
             r.from_viewer(&id, &ann, frame.clone());
             std::thread::sleep(POINTER_MIN_GAP);
         }
-        assert_eq!(r.lock().get(&id).unwrap().buffered[&ann].len(), before);
+        assert_eq!(held(&r), before);
         let (htx, _hrx) = mpsc::channel(QUEUE_FRAMES);
         let resume = Resume {
             id: id.clone(),
@@ -1701,16 +1982,16 @@ mod tests {
             let share = shares.get_mut(&id).unwrap();
             share.viewers.insert(
                 "v9".into(),
-                Viewer {
-                    seq: 9,
-                    peer: Peer {
+                Viewer::new(
+                    9,
+                    Peer {
                         id: "v9".into(),
                         name: "Ann".into(),
                         color: color_for("Ann"),
                         path: Some("a.mmd".into()),
                     },
-                    tx: vtx,
-                },
+                    vtx,
+                ),
             );
             "v9"
         };
@@ -1763,17 +2044,34 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn ats_faster_than_four_a_second_are_thinned() {
-        let (r, id, _ann, (bob, mut brx), _hrx) = placed().await;
+    async fn an_at_is_stored_at_once_and_only_its_announcement_is_thinned() {
+        let (r, id, _ann, (bob, mut brx), mut hrx) = placed().await;
         r.from_viewer(&id, &bob, json!({"type": "at", "path": "c.md"}));
         assert_eq!(kind(&brx.try_recv().unwrap()), "presence");
+        r.ink(&id, 1, stroke("s1", "d.md", "h", true));
+        r.from_viewer(&id, &bob, json!({"type": "at", "path": "e.md"}));
         r.from_viewer(&id, &bob, json!({"type": "at", "path": "d.md"}));
-        assert!(brx.try_recv().is_err(), "too soon: dropped");
-        assert_eq!(path_of(&r, &id, &bob).as_deref(), Some("c.md"));
-        tokio::time::sleep(AT_MIN_GAP).await;
-        r.from_viewer(&id, &bob, json!({"type": "at", "path": "d.md"}));
-        assert_eq!(kind(&brx.try_recv().unwrap()), "presence");
+        // Too soon to announce, but the relay knows where Bob is: he gets the document's
+        // kept strokes, and his pointer there counts.
         assert_eq!(path_of(&r, &id, &bob).as_deref(), Some("d.md"));
+        let p = payload(&brx.try_recv().unwrap());
+        assert_eq!(
+            (p["type"].as_str(), p["stroke"]["id"].as_str()),
+            (Some("ink"), Some("s1"))
+        );
+        assert!(brx.try_recv().is_err(), "no presence yet");
+        while hrx.try_recv().is_ok() {}
+        r.from_viewer(&id, &bob, pointer_frame("d.md", "h"));
+        assert_eq!(kind(&hrx.try_recv().unwrap()), "pointer");
+        // The last position is always announced, once, when the gap is over.
+        tokio::time::sleep(AT_MIN_GAP + Duration::from_millis(100)).await;
+        let p = payload(&brx.try_recv().unwrap());
+        assert_eq!(p["type"], "presence");
+        assert_eq!(p["viewers"][1]["path"], "d.md");
+        assert!(brx.try_recv().is_err(), "announced once");
+        let p = payload(&hrx.try_recv().unwrap());
+        assert_eq!(p["type"], "presence");
+        assert_eq!(p["viewers"][1]["path"], "d.md");
         r.shutdown();
     }
 
@@ -1854,6 +2152,7 @@ mod tests {
             .map(|m| payload(&m)["stroke"]["id"].as_str().unwrap().to_string())
             .collect();
         assert_eq!(ids.len(), MAX_STICKY_STROKES);
+        const { assert!(MAX_STICKY_STROKES < MAX_DOC_KEPT && MAX_DOC_KEPT < QUEUE_FRAMES) };
         assert!(!ids.contains(&"s0".to_string()));
         assert!(ids.contains(&"s1".to_string()));
 
@@ -2118,7 +2417,8 @@ mod tests {
         );
         assert!(kept.contains(&"a1".to_string()));
 
-        // Canvases: the host fills every slot; a viewer's stroke on a new canvas is not kept.
+        // Canvases: the host fills its slots, and a viewer drawing on many new canvases
+        // pushes none of them out.
         for i in 1..MAX_STICKY_CANVASES {
             r.ink(
                 &id,
@@ -2126,18 +2426,401 @@ mod tests {
                 stroke(&format!("c{i}"), "a.mmd", &format!("h{i}"), true),
             );
         }
-        forget_ink(&r, &id);
-        r.from_viewer(&id, &ann, ink_frame(&stroke("fake", "a.mmd", "fake", true)));
+        for i in 0..MAX_STICKY_CANVASES + 10 {
+            forget_ink(&r, &id);
+            let s = stroke(&format!("f{i}"), "a.mmd", &format!("fake{i}"), true);
+            r.from_viewer(&id, &ann, ink_frame(&s));
+        }
         let shares = r.lock();
         let share = shares.get(&id).unwrap();
-        assert_eq!(share.sticky_order.len(), MAX_STICKY_CANVASES);
-        assert!(!share.sticky.contains_key(&("a.mmd".into(), "fake".into())));
-        assert!(
-            share.sticky.contains_key(&("a.mmd".into(), "h".into())),
-            "the host's first canvas stays"
-        );
+        let hosts = |hash: &str| {
+            share
+                .sticky
+                .get(&("a.mmd".to_string(), hash.to_string()))
+                .is_some_and(|s| s.iter().any(|k| k.peer == HOST_ID))
+        };
+        assert!(hosts("h"), "the host's first canvas stays");
+        assert!((1..MAX_STICKY_CANVASES).all(|i| hosts(&format!("h{i}"))));
         drop(shares);
         r.shutdown();
+    }
+
+    fn kept_counts(r: &Relay, id: &str) -> (usize, usize) {
+        let shares = r.lock();
+        let all = shares.get(id).unwrap().sticky.values().flatten();
+        let hosts = all.clone().filter(|k| k.peer == HOST_ID).count();
+        (hosts, all.count() - hosts)
+    }
+
+    #[tokio::test]
+    async fn viewers_who_come_and_go_leave_a_bounded_number_of_kept_strokes() {
+        let (r, id, _ann, _bob, _hrx) = placed().await;
+        r.ink(&id, 1, stroke("s1", "a.mmd", "h", true));
+        for n in 0..4 {
+            let (tx, _rx) = mpsc::channel(QUEUE_FRAMES);
+            let cy = r
+                .join(&id, Some("Cy".into()), json!({"type": "hello"}), tx)
+                .unwrap();
+            r.from_viewer(&id, &cy, json!({"type": "at", "path": "a.mmd"}));
+            for i in 0..MAX_VIEWER_KEPT {
+                forget_ink(&r, &id);
+                let s = stroke(
+                    &format!("{cy}:{i}"),
+                    "a.mmd",
+                    &format!("c{n}-{}", i % 7),
+                    true,
+                );
+                r.from_viewer(&id, &cy, ink_frame(&s));
+            }
+            r.viewer_left(&id, &cy);
+        }
+        let (hosts, viewers) = kept_counts(&r, &id);
+        assert_eq!(hosts, 1, "the host's stroke stays");
+        assert_eq!(viewers, MAX_VIEWERS_KEPT, "the oldest of the viewers' went");
+        // A host back on a new link is sent every one of them.
+        let (htx, mut hrx2) = mpsc::channel(QUEUE_FRAMES);
+        let resume = Resume {
+            id: id.clone(),
+            host_key: hostkey::host_key(b"s", &id),
+        };
+        r.share(2, htx, "Rob", ShareMode::ReadOnly, Some(resume))
+            .ok()
+            .unwrap();
+        let inks = std::iter::from_fn(|| hrx2.try_recv().ok())
+            .filter(|m| kind(m) == "ink")
+            .count();
+        assert_eq!(inks, MAX_VIEWERS_KEPT);
+        r.shutdown();
+    }
+
+    #[tokio::test]
+    async fn a_documents_kept_strokes_all_reach_an_arriving_viewer() {
+        let (r, id, _ann, (bob, mut brx), _hrx) = placed().await;
+        // Three canvases on one document, each within its own bound: more than a queue.
+        for i in 0..300 {
+            let s = stroke(&format!("s{i}"), "a.mmd", &format!("h{}", i % 3), true);
+            r.ink(&id, 1, s);
+        }
+        const { assert!(300 > QUEUE_FRAMES) };
+        r.from_viewer(&id, &bob, json!({"type": "at", "path": "a.mmd"}));
+        let ids: Vec<String> = std::iter::from_fn(|| brx.try_recv().ok())
+            .filter(|m| kind(m) == "ink")
+            .map(|m| payload(&m)["stroke"]["id"].as_str().unwrap().to_string())
+            .collect();
+        assert_eq!(ids.len(), MAX_DOC_KEPT, "the document's whole kept set");
+        assert_eq!(ids.last().map(String::as_str), Some("s299"));
+        assert!(!ids.contains(&"s0".to_string()), "the oldest went");
+        assert_eq!(kept_counts(&r, &id).0, MAX_DOC_KEPT);
+        assert!(r.lock().get(&id).unwrap().viewers.contains_key(&bob));
+        r.shutdown();
+    }
+
+    #[tokio::test]
+    async fn a_viewer_never_pushes_the_hosts_strokes_off_a_full_canvas_or_document() {
+        let (r, id, (ann, _arx), _bob, _hrx) = placed().await;
+        for i in 0..MAX_STICKY_STROKES {
+            r.ink(&id, 1, stroke(&format!("s{i}"), "a.mmd", "h", true));
+        }
+        r.from_viewer(&id, &ann, ink_frame(&stroke("a1", "a.mmd", "h", true)));
+        assert_eq!(kept_counts(&r, &id), (MAX_STICKY_STROKES, 0));
+        // Another canvas of the document has room, until the document is full.
+        forget_ink(&r, &id);
+        r.from_viewer(&id, &ann, ink_frame(&stroke("a2", "a.mmd", "h2", true)));
+        assert_eq!(kept_counts(&r, &id), (MAX_STICKY_STROKES, 1));
+        for i in 0..MAX_DOC_KEPT - MAX_STICKY_STROKES {
+            r.ink(&id, 1, stroke(&format!("t{i}"), "a.mmd", "h3", true));
+        }
+        assert_eq!(
+            kept_counts(&r, &id),
+            (MAX_DOC_KEPT, 0),
+            "the host's strokes push a viewer's out, not its own"
+        );
+        forget_ink(&r, &id);
+        r.from_viewer(&id, &ann, ink_frame(&stroke("a3", "a.mmd", "h2", true)));
+        assert_eq!(kept_counts(&r, &id), (MAX_DOC_KEPT, 0));
+        r.shutdown();
+    }
+
+    /// The host of `id` comes back on a new link as connection `conn`.
+    fn resumed(r: &Arc<Relay>, id: &str, conn: u64) -> (Accepted, mpsc::Receiver<Message>) {
+        let (htx, hrx) = mpsc::channel(QUEUE_FRAMES);
+        let resume = Resume {
+            id: id.to_string(),
+            host_key: hostkey::host_key(b"s", id),
+        };
+        let a = r
+            .share(conn, htx, "Rob", ShareMode::ReadOnly, Some(resume))
+            .ok()
+            .unwrap();
+        (a, hrx)
+    }
+
+    fn read_frame(i: usize) -> Value {
+        json!({"type": "read", "path": format!("f{i}.md"), "id": format!("r{i}")})
+    }
+
+    #[tokio::test]
+    async fn names_are_cut_to_their_limit() {
+        let r = relay();
+        let long = "é".repeat(MAX_NAME_CHARS * 3);
+        let (htx, mut hrx) = mpsc::channel(QUEUE_FRAMES);
+        let id = r
+            .share(1, htx, &long, ShareMode::ReadOnly, None)
+            .ok()
+            .unwrap()
+            .id;
+        let (tx, mut rx) = mpsc::channel(QUEUE_FRAMES);
+        r.join(&id, Some(long.clone()), json!({"type": "hello"}), tx)
+            .unwrap();
+        let joined = payload(&hrx.try_recv().unwrap());
+        assert_eq!(
+            joined["name"].as_str().unwrap().chars().count(),
+            MAX_NAME_CHARS
+        );
+        let p = payload(&rx.try_recv().unwrap());
+        assert_eq!(
+            p["host"]["name"].as_str().unwrap().chars().count(),
+            MAX_NAME_CHARS
+        );
+        assert_eq!(
+            p["viewers"][0]["name"].as_str().unwrap().chars().count(),
+            MAX_NAME_CHARS
+        );
+        r.shutdown();
+    }
+
+    #[tokio::test]
+    async fn the_hosts_over_long_paths_and_hashes_are_ignored() {
+        let (r, id, (_ann, mut arx), _bob, _hrx) = placed().await;
+        let long = "a".repeat(MAX_PATH_LEN + 1);
+        r.path(&id, 1, Some(long.clone()));
+        r.slide(
+            &id,
+            1,
+            Some(Slide {
+                path: long.clone(),
+                index: 1,
+            }),
+        );
+        for (doc, hash) in [(long.as_str(), "h"), ("a.mmd", long.as_str())] {
+            r.stage(
+                &id,
+                1,
+                Some(StageRef {
+                    doc_path: doc.into(),
+                    block_hash: hash.into(),
+                }),
+            );
+            r.pointer(&id, 1, Some(at(doc, hash)));
+            r.ink_undo(&id, 1, doc.into(), hash.into(), None);
+            r.ink_clear(&id, 1, doc.into(), hash.into());
+        }
+        r.ink_undo(&id, 1, "a.mmd".into(), "h".into(), Some(long.clone()));
+        assert!(arx.try_recv().is_err(), "nothing was told to anyone");
+        let shares = r.lock();
+        let share = shares.get(&id).unwrap();
+        assert!(share.host_path.is_none() && share.slide.is_none() && share.stage.is_none());
+        drop(shares);
+        r.shutdown();
+    }
+
+    #[tokio::test]
+    async fn a_stroke_out_of_bounds_is_dropped_whoever_drew_it() {
+        let (r, id, (ann, mut arx), _bob, mut hrx) = placed().await;
+        let bad = |change: fn(&mut Stroke)| {
+            let mut s = stroke("bad", "a.mmd", "h", true);
+            change(&mut s);
+            s
+        };
+        let strokes = [
+            bad(|s| s.color = "r".repeat(MAX_COLOR_LEN + 1)),
+            bad(|s| s.width = 0.0),
+            bad(|s| s.width = -2.0),
+            bad(|s| s.width = MAX_STROKE_WIDTH * 2.0),
+            bad(|s| s.id = "i".repeat(MAX_PATH_LEN + 1)),
+            bad(|s| s.doc_path = "d".repeat(MAX_PATH_LEN + 1)),
+            bad(|s| s.points = vec![[0.0, 0.0]; MAX_HOST_STROKE_POINTS + 1]),
+        ];
+        for s in &strokes {
+            r.ink(&id, 1, s.clone());
+            r.inking(&id, 1, s.clone());
+            // The same from Bob, as if he were on whatever document the stroke names.
+            let mut shares = r.lock();
+            let share = shares.get_mut(&id).unwrap();
+            share.viewers.get_mut("v2").unwrap().peer.path = Some(s.doc_path.clone());
+            drop(shares);
+            forget_ink(&r, &id);
+            r.from_viewer(&id, "v2", ink_frame(s));
+            r.from_viewer(&id, "v2", json!({"type": "inking", "stroke": s}));
+        }
+        assert!(arx.try_recv().is_err(), "none was shown");
+        assert!(hrx.try_recv().is_err());
+        assert_eq!(kept_counts(&r, &id), (0, 0), "none was kept");
+        // The host's stroke may be longer than a viewer's.
+        let mut long = stroke("long", "a.mmd", "h", true);
+        long.points = vec![[0.0, 0.0]; MAX_HOST_STROKE_POINTS];
+        r.ink(&id, 1, long);
+        assert_eq!(kind(&arx.try_recv().unwrap()), "ink");
+        let _ = ann;
+        r.shutdown();
+    }
+
+    #[tokio::test]
+    async fn a_viewer_who_leaves_while_the_host_is_away_leaves_nothing_for_it() {
+        let (r, id, (ann, _arx), _bob, _hrx) = crowd().await;
+        r.host_dropped(&id, 1);
+        let (tx, _crx) = mpsc::channel(QUEUE_FRAMES);
+        let cy = r
+            .join(&id, Some("Cy".into()), json!({"type": "hello"}), tx)
+            .unwrap();
+        for who in [&ann, &cy] {
+            r.from_viewer(&id, who, read_frame(1));
+            r.viewer_left(&id, who);
+        }
+        assert!(
+            r.lock()
+                .get(&id)
+                .unwrap()
+                .buffered
+                .keys()
+                .all(|k| k == HOST_ID)
+        );
+        let (a, _hrx) = resumed(&r, &id, 2);
+        for frame in &a.replay {
+            let v: Value = serde_json::from_str(frame).unwrap();
+            assert_eq!(v["type"], "presence", "{frame}");
+        }
+        r.shutdown();
+    }
+
+    #[tokio::test]
+    async fn a_flood_while_the_host_is_away_never_pushes_out_who_the_viewer_is() {
+        let (r, id, _ann, _bob, _hrx) = crowd().await;
+        r.host_dropped(&id, 1);
+        let (tx, _crx) = mpsc::channel(QUEUE_FRAMES);
+        let cy = r
+            .join(&id, Some("Cy".into()), json!({"type": "hello"}), tx)
+            .unwrap();
+        for i in 0..BUFFER_PER_VIEWER * 2 {
+            r.from_viewer(&id, &cy, read_frame(i));
+        }
+        let (a, _hrx) = resumed(&r, &id, 2);
+        let mine: Vec<Value> = a
+            .replay
+            .iter()
+            .map(|f| serde_json::from_str::<Value>(f).unwrap())
+            .filter(|v| v["viewer"] == cy.as_str())
+            .collect();
+        assert_eq!(mine[0]["type"], "joined");
+        assert_eq!(mine[1]["msg"]["type"], "hello");
+        assert_eq!(mine.len(), BUFFER_PER_VIEWER + 2);
+        let last = format!("f{}.md", BUFFER_PER_VIEWER * 2 - 1);
+        assert_eq!(mine.last().unwrap()["msg"]["path"], last.as_str());
+        r.shutdown();
+    }
+
+    #[tokio::test]
+    async fn a_viewer_flooding_the_host_is_closed_and_the_host_is_never_marked_behind() {
+        let (r, id, (ann, mut arx), (bob, _brx), mut hrx) = crowd().await;
+        // An honest burst goes through whole.
+        for i in 0..100 {
+            r.from_viewer(&id, &bob, read_frame(i));
+        }
+        let got = std::iter::from_fn(|| hrx.try_recv().ok()).count();
+        assert_eq!(got, 100);
+        // A flood, with the host reading nothing meanwhile.
+        for i in 0..QUEUE_FRAMES * 8 {
+            r.from_viewer(&id, &ann, read_frame(i));
+        }
+        let shares = r.lock();
+        let share = shares.get(&id).unwrap();
+        assert!(
+            share.host.is_some() && !share.host_full,
+            "the host is still here"
+        );
+        assert!(share.grace_timer.is_none());
+        assert!(!share.viewers.contains_key(&ann), "the flooder is gone");
+        assert!(share.viewers.contains_key(&bob));
+        drop(shares);
+        let kinds: Vec<String> = std::iter::from_fn(|| arx.try_recv().ok())
+            .map(|m| kind(&m))
+            .collect();
+        assert_eq!(kinds.last().map(String::as_str), Some("close"));
+        let host: Vec<Value> = std::iter::from_fn(|| hrx.try_recv().ok())
+            .map(|m| payload(&m))
+            .collect();
+        assert!(host.len() < QUEUE_FRAMES, "the host's queue never filled");
+        assert!(
+            host.iter()
+                .any(|m| m["type"] == "left" && m["viewer"] == ann.as_str())
+        );
+        r.shutdown();
+    }
+
+    #[tokio::test]
+    async fn a_viewers_message_is_not_forwarded_into_the_hosts_last_room() {
+        let (r, id, (ann, mut arx), (bob, _brx), _hrx) = crowd().await;
+        let tx = r.lock().get(&id).unwrap().host.clone().unwrap();
+        while tx.capacity() > HOST_RESERVE {
+            tx.try_send(Message::Text("x".into())).unwrap();
+        }
+        r.from_viewer(&id, &ann, read_frame(1));
+        let shares = r.lock();
+        let share = shares.get(&id).unwrap();
+        assert!(share.host.is_some() && !share.host_full);
+        assert!(
+            !share.viewers.contains_key(&ann),
+            "closed rather than queued"
+        );
+        assert!(share.viewers.contains_key(&bob));
+        drop(shares);
+        // `left` and presence took two of the reserved places; the read took none.
+        assert_eq!(tx.capacity(), HOST_RESERVE - 2);
+        let kinds: Vec<String> = std::iter::from_fn(|| arx.try_recv().ok())
+            .map(|m| kind(&m))
+            .collect();
+        assert_eq!(kinds, ["close"]);
+        r.shutdown();
+    }
+
+    #[tokio::test]
+    async fn a_resumed_host_starts_without_its_old_slide_canvas_and_path() {
+        for replaced in [false, true] {
+            let (r, id, (_ann, mut arx), _bob, _hrx) = placed().await;
+            r.path(&id, 1, Some("deck.md".into()));
+            r.slide(
+                &id,
+                1,
+                Some(Slide {
+                    path: "deck.md".into(),
+                    index: 4,
+                }),
+            );
+            r.stage(
+                &id,
+                1,
+                Some(StageRef {
+                    doc_path: "a.mmd".into(),
+                    block_hash: "h".into(),
+                }),
+            );
+            // The link drops (or is replaced while the relay still thinks it is up), and
+            // the host closes its deck and canvas before it is back.
+            if !replaced {
+                r.host_dropped(&id, 1);
+            }
+            while arx.try_recv().is_ok() {}
+            let (_a, _hrx2) = resumed(&r, &id, 2);
+            let last = std::iter::from_fn(|| arx.try_recv().ok())
+                .filter(|m| kind(m) == "presence")
+                .last()
+                .map(|m| payload(&m))
+                .expect("viewers are told");
+            assert!(last["slide"].is_null(), "{last}");
+            assert!(last["stage"].is_null(), "{last}");
+            assert!(last.get("hostPath").is_none_or(Value::is_null), "{last}");
+            r.shutdown();
+        }
     }
 
     #[tokio::test]
@@ -2160,7 +2843,7 @@ mod tests {
         let share = shares.get(&id).unwrap();
         assert!(!share.host_full && share.host.is_some());
         assert!(
-            share.buffered.values().all(|q| q.is_empty()),
+            share.buffered.values().all(|q| q.frames.is_empty()),
             "ink is never buffered"
         );
         drop(shares);
@@ -2392,6 +3075,85 @@ mod tests {
             r.start_fetch(&id, "a.png".into(), None).err(),
             Some(FetchRefused::Away)
         );
+        r.shutdown();
+    }
+
+    #[tokio::test]
+    async fn a_fetch_past_the_cap_waits_for_a_slot() {
+        let r = relay();
+        let (htx, mut hrx) = mpsc::channel(QUEUE_FRAMES);
+        let id = r
+            .share(1, htx, "Rob", ShareMode::ReadOnly, None)
+            .ok()
+            .unwrap()
+            .id;
+        let open: Vec<Started> = (0..MAX_FETCHES)
+            .map(|_| r.start_fetch(&id, "a.png".into(), None).ok().unwrap())
+            .collect();
+        // No slot comes free: the wait ends, and only then is it refused.
+        let short = Duration::from_millis(50);
+        assert_eq!(
+            r.start_fetch_when_free(&id, "b.png".into(), None, short)
+                .await
+                .err(),
+            Some(FetchRefused::Busy)
+        );
+        // One does: the waiting fetch takes it.
+        let waiting = {
+            let (r, id) = (r.clone(), id.clone());
+            tokio::spawn(async move {
+                r.start_fetch_when_free(&id, "c.png".into(), None, Duration::from_secs(5))
+                    .await
+            })
+        };
+        tokio::time::sleep(short).await;
+        assert!(!waiting.is_finished());
+        r.fetch_bytes(&id, 1, open[0].req, Bytes::new());
+        let started = waiting.await.unwrap().ok().unwrap();
+        let asked: Vec<Value> = std::iter::from_fn(|| hrx.try_recv().ok())
+            .map(|m| payload(&m))
+            .collect();
+        assert_eq!(asked.len(), MAX_FETCHES + 1);
+        assert_eq!(asked.last().unwrap()["path"], "c.png");
+        assert_eq!(asked.last().unwrap()["req"], started.req);
+        // A share that ends tells its waiting fetches so at once.
+        let waiting = {
+            let (r, id) = (r.clone(), id.clone());
+            tokio::spawn(async move {
+                r.start_fetch_when_free(&id, "d.png".into(), None, Duration::from_secs(5))
+                    .await
+            })
+        };
+        tokio::time::sleep(short).await;
+        r.end(&id, 1);
+        assert_eq!(waiting.await.unwrap().err(), Some(FetchRefused::Gone));
+        r.shutdown();
+    }
+
+    #[tokio::test]
+    async fn a_host_that_obeys_pause_is_never_cut_off() {
+        let r = relay();
+        let (htx, mut hrx) = mpsc::channel(QUEUE_FRAMES);
+        let id = r
+            .share(1, htx, "Rob", ShareMode::ReadOnly, None)
+            .ok()
+            .unwrap()
+            .id;
+        let f = r.start_fetch(&id, "v.mp4".into(), None).ok().unwrap();
+        for _ in 0..PAUSE_AT {
+            r.fetch_bytes(&id, 1, f.req, Bytes::from_static(b"x"));
+        }
+        // What the host had sent before `pause` reached it: its whole out-queue (32
+        // chunks, `OUT_QUEUE` in sharing.rs), the chunk in its hand, and as much again
+        // sitting in the sockets on the way.
+        for _ in 0..2 * (32 + 1) {
+            r.fetch_bytes(&id, 1, f.req, Bytes::from_static(b"x"));
+        }
+        let host: Vec<String> = std::iter::from_fn(|| hrx.try_recv().ok())
+            .map(|m| kind(&m))
+            .collect();
+        assert_eq!(host, ["fetch", "pause"], "paused, not cancelled");
+        assert_eq!(f.body.len(), PAUSE_AT + 66);
         r.shutdown();
     }
 

@@ -170,14 +170,14 @@ LEAF_RELAY_PUBLIC_URL=http://localhost:4321 leaf relay start   # listens on $POR
 Then `LEAF_RELAY_URL=http://localhost:4321 leaf open docs/` to share through it. As a container:
 
 ```sh
-docker build -t leaf-relay . && docker run --rm -e PORT=8080 -p 8080:8080 leaf-relay
+docker build -t leaf-relay . && docker run --rm -e PORT=8080 -e LEAF_RELAY_PUBLIC_URL=http://localhost:8080 -p 8080:8080 leaf-relay
 ```
 
 | Variable                 | Default | What it does                                                                                  |
 | ------------------------ | ------- | --------------------------------------------------------------------------------------------- |
 | `PORT`                   | `4321`  | the port the relay listens on, on all interfaces                                              |
 | `LEAF_RELAY_SECRET`      | random  | signs host tokens; set it so hosts keep their links across restarts (the relay warns without) |
-| `LEAF_RELAY_PUBLIC_URL`  | unset   | the relay's own address, the base of the links it hands out                                   |
+| `LEAF_RELAY_PUBLIC_URL`  | unset   | the relay's own address, the base of the links it hands out (the relay warns without)         |
 | `LEAF_RELAY_GRACE`       | `60`    | seconds a session survives its host disconnecting                                             |
 | `LEAF_RELAY_TRUST_PROXY` | unset   | truthy behind a proxy (Heroku's router): the rate limit uses the real client address          |
 
