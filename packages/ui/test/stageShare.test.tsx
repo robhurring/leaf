@@ -63,9 +63,12 @@ beforeEach(() => {
   useAnnotations.setState({ strokes: [], drafts: {} });
   useStage.setState({ open: null, tool: 'hand', color: 'blue', brush: 'large', sticky: false });
 });
-afterEach(() => {
+afterEach(async () => {
   vi.useRealTimers();
   cleanup();
+  // A deck's listen may still be answering; let it settle while the app's stubs are here,
+  // or its unlisten runs against a window that has none (seen on Linux CI).
+  await new Promise((r) => setTimeout(r));
   delete w.__LEAF_TAB__;
   delete w.__TAURI_INTERNALS__;
   delete w.__TAURI_EVENT_PLUGIN_INTERNALS__;
