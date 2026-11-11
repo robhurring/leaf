@@ -73,7 +73,7 @@ const schema = {
     div: [...(defaultSchema.attributes?.div ?? []), 'className', 'dataAlert'],
     p: [...(defaultSchema.attributes?.p ?? []), 'className'],
     code: [...(defaultSchema.attributes?.code ?? []), 'className'],
-    table: [...(defaultSchema.attributes?.table ?? []), 'dataFilter'],
+    table: [...(defaultSchema.attributes?.table ?? []), 'dataFilter', 'dataSort'],
   },
 };
 

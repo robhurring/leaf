@@ -210,4 +210,47 @@ describe('filterable tables', () => {
     expect(rows.map((tr) => tr.hidden)).toEqual([true, false]);
     expect(view.container.textContent).toContain('1 of 2 rows');
   });
+
+  it("<!--table:sort--> makes the headers sort the rows and keeps the cells' markdown", async () => {
+    const { render, fireEvent } = await import('@testing-library/react');
+    const table =
+      '| n | item |\n| --- | --- |\n| 10 | [b](https://x/b) |\n| 9 | **a** |\n| 100 | c |\n';
+    const r = await renderMarkdown(`<!--table:filter sort-->\n\n${table}`, base);
+    const view = render(r.element);
+    const heads = [...view.container.querySelectorAll('thead th')] as HTMLElement[];
+    expect(heads.map((th) => th.className)).toEqual(['leaf-sortable', 'leaf-sortable']);
+    expect(view.container.querySelector('[aria-label="Filter rows"]')).not.toBeNull();
+    const firstCol = () =>
+      [...view.container.querySelectorAll('tbody tr')].map((tr) => tr.children[0]?.textContent);
+    fireEvent.click(heads[0]!);
+    expect(firstCol()).toEqual(['9', '10', '100']);
+    expect(heads[0]!.getAttribute('aria-sort')).toBe('ascending');
+    fireEvent.click(heads[0]!);
+    expect(firstCol()).toEqual(['100', '10', '9']);
+    fireEvent.click(heads[0]!);
+    expect(firstCol()).toEqual(['10', '9', '100']);
+    expect(view.container.querySelector('tbody a')?.getAttribute('href')).toBe('https://x/b');
+    expect(view.container.querySelector('tbody strong')?.textContent).toBe('a');
+  });
+
+  it('a row a live edit adds is sorted and counted with the rest', async () => {
+    const { render, fireEvent } = await import('@testing-library/react');
+    const head = '<!--table:filter sort-->\n\n| n |\n| --- |\n';
+    const view = render((await renderMarkdown(`${head}| 3 |\n| 1 |\n`, base)).element);
+    const col = () =>
+      [...view.container.querySelectorAll('tbody tr')].map((tr) => tr.textContent?.trim());
+    fireEvent.click(view.container.querySelector('thead th')!);
+    expect(col()).toEqual(['1', '3']);
+    view.rerender((await renderMarkdown(`${head}| 3 |\n| 1 |\n| 2 |\n`, base)).element);
+    expect(col()).toEqual(['1', '2', '3']);
+    expect(view.container.textContent).toContain('3 rows');
+  });
+
+  it('<!--table:sort--> alone has no filter bar', async () => {
+    const html = renderToStaticMarkup(
+      (await renderMarkdown(`<!--table:sort-->\n${TABLE}`, base)).element,
+    );
+    expect(html).not.toContain('Filter rows');
+    expect(html).toContain('class="leaf-table-filter"');
+  });
 });
