@@ -102,7 +102,11 @@ export function StageCanvas({
       });
   };
   const clear = () => {
-    useAnnotations.getState().clear(open.docPath, open.blockHash);
+    // The host's Clear wipes the canvas for everyone, and the relay doesn't send it back
+    // to the host: take the others' ink off this page here.
+    if (role === 'host')
+      useAnnotations.getState().clearRemote(open.docPath, open.blockHash, 'host');
+    else useAnnotations.getState().clear(open.docPath, open.blockHash);
     if (role) tell({ type: 'inkClear', docPath: open.docPath, blockHash: open.blockHash });
   };
   const undoRef = useRef(undo);

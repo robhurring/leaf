@@ -23,6 +23,7 @@ import type { DocumentSource, SourceStatus } from '../source/DocumentSource.js';
 import type { Heading } from '../render/headings.js';
 import { NAME_KEY } from '../share/path.js';
 import { liveRole } from '../share/live.js';
+import { refusalOf } from '../share/refusal.js';
 import { usePointers } from '../share/pointers.js';
 import { useAnnotations } from './annotations.js';
 
@@ -51,6 +52,8 @@ export type DocumentsState = {
   share: ShareInfo | null;
   presence: PresenceMessage | null;
   shareStatus: ShareState | null;
+  /** Why it ended: the relay's reason (`host`, `host-gone`, `forbidden-path`), `unknown`
+   *  for a share the relay doesn't have, or `full` / `outdated` when it refused the join. */
   shareReason: string | null;
 
   /** Asks for `path`'s blame; it's asked again whenever the file changes. */
@@ -251,6 +254,10 @@ export const useDocuments = create<DocumentsState>((set, get) => {
         set({ shareStatus: msg.state, shareReason: msg.reason ?? null });
         return;
       case 'error': {
+        // The relay turned this page away (full, or another protocol): the share is over
+        // for it, and the reason picks the notice.
+        const refusal = refusalOf(msg);
+        if (refusal) set({ shareStatus: 'ended', shareReason: refusal });
         if (msg.path) {
           pendingReads.delete(msg.path);
           set((s) => {

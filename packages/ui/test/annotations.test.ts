@@ -1,7 +1,9 @@
-import { describe, it, expect, beforeEach } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import {
   INK_GONE_MS,
   MAX_DRAFT_POINTS,
+  MAX_HOST_STICKY,
+  MAX_VIEWER_STICKY,
   strokesFor,
   useAnnotations,
   type Stroke,
@@ -81,6 +83,91 @@ describe('invisible ink timing', () => {
     const s = `${INK_GONE_MS / 1000}s`;
     expect(css).toMatch(new RegExp(`\\.leaf-ink-fade \\{\\s*animation: leaf-ink-fade ${s} `));
     expect(css).toMatch(new RegExp(`animation-delay: ${s};`));
+  });
+});
+
+describe('remote ink with no canvas open', () => {
+  afterEach(() => vi.useRealTimers());
+
+  it('a fading stroke from a peer expires though nothing is drawing it', () => {
+    vi.useFakeTimers();
+    const a = useAnnotations.getState();
+    a.addRemote({ ...stroke({ id: 'f1' }), peer: 'v1' });
+    a.addRemote({ ...stroke({ id: 's1', sticky: true }), peer: 'v1' });
+    vi.advanceTimersByTime(INK_GONE_MS + 1000);
+    expect(useAnnotations.getState().strokes.map((k) => k.id)).toEqual(['s1']);
+    // Nothing left to sweep: the timer is let go.
+    expect(vi.getTimerCount()).toBe(0);
+    // And it starts again for the next one.
+    a.addRemote({ ...stroke({ id: 'f2' }), peer: 'v1' });
+    vi.advanceTimersByTime(INK_GONE_MS + 1000);
+    expect(useAnnotations.getState().strokes.map((k) => k.id)).toEqual(['s1']);
+  });
+
+  it('the sweep outlasts the drafts while a fading stroke is left', () => {
+    vi.useFakeTimers();
+    const a = useAnnotations.getState();
+    a.draft('v1', stroke({ id: 'd1' }));
+    vi.advanceTimersByTime(2500);
+    // The draft finishes as a fading stroke just before it would have gone stale.
+    a.addRemote({ ...stroke({ id: 'd1' }), peer: 'v1' });
+    vi.advanceTimersByTime(1000);
+    expect(useAnnotations.getState().strokes).toHaveLength(1);
+    vi.advanceTimersByTime(INK_GONE_MS);
+    expect(useAnnotations.getState().strokes).toHaveLength(0);
+    expect(vi.getTimerCount()).toBe(0);
+  });
+});
+
+describe('how much of a peer’s kept ink a page holds', () => {
+  const ids = (peer: string, blockHash = 'h1') =>
+    useAnnotations
+      .getState()
+      .strokes.filter((k) => k.peer === peer && k.blockHash === blockHash)
+      .map((k) => k.id);
+  const fill = (peer: string, n: number, over: Partial<Stroke> = {}) => {
+    for (let i = 0; i < n; i++)
+      useAnnotations.getState().addRemote({
+        ...stroke({ id: `${peer}-${over.blockHash ?? 'h1'}-${i}`, sticky: true, ...over }),
+        peer,
+      });
+  };
+
+  it('a viewer’s sticky strokes on a canvas stop at 100, the oldest going first', () => {
+    expect(MAX_VIEWER_STICKY).toBe(100);
+    fill('v1', 103);
+    expect(ids('v1')).toHaveLength(100);
+    expect(ids('v1')[0]).toBe('v1-h1-3');
+    expect(ids('v1').at(-1)).toBe('v1-h1-102');
+  });
+
+  it('the host’s stop at 200', () => {
+    expect(MAX_HOST_STICKY).toBe(200);
+    fill('host', 202);
+    expect(ids('host')).toHaveLength(200);
+    expect(ids('host')[0]).toBe('host-h1-2');
+  });
+
+  it('each peer and each canvas is counted apart, and this page’s own are not counted', () => {
+    fill('v1', 100);
+    fill('v2', 100);
+    fill('v1', 100, { blockHash: 'h2' });
+    for (let i = 0; i < 150; i++)
+      useAnnotations.getState().add(stroke({ id: `own-${i}`, sticky: true }));
+    fill('v1', 1, { id: 'one-more' });
+    expect(ids('v1')).toHaveLength(100);
+    expect(ids('v1')[0]).toBe('v1-h1-1');
+    expect(ids('v2')).toHaveLength(100);
+    expect(ids('v1', 'h2')).toHaveLength(100);
+    expect(useAnnotations.getState().strokes.filter((k) => !k.peer)).toHaveLength(150);
+  });
+
+  it('fading strokes are not counted and push nothing out', () => {
+    fill('v1', 100);
+    for (let i = 0; i < 5; i++)
+      useAnnotations.getState().addRemote({ ...stroke({ id: `fade-${i}` }), peer: 'v1' });
+    expect(ids('v1')).toHaveLength(105);
+    expect(ids('v1')[0]).toBe('v1-h1-0');
   });
 });
 

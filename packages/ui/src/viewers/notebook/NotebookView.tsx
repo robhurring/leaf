@@ -67,6 +67,8 @@ function HtmlOutput({ html, gateKey }: { html: string; gateKey: string }) {
   );
 }
 
+// An HTML output's gate key ends in the whole of its HTML, not a short hash of it, which a
+// host could make match an output the viewer already ran.
 function OutputView({ out, docPath, gateKey }: { out: Output; docPath: string; gateKey: string }) {
   switch (out.kind) {
     case 'stream':
@@ -76,7 +78,7 @@ function OutputView({ out, docPath, gateKey }: { out: Output; docPath: string; g
     case 'image':
       return <img className="leaf-nb-image" src={out.src} alt="Output" />;
     case 'html':
-      return <HtmlOutput html={out.html} gateKey={`${gateKey}:${contentHash(out.html)}`} />;
+      return <HtmlOutput html={out.html} gateKey={`${gateKey}:${out.html}`} />;
     case 'markdown':
       return <Markdown source={out.text} docPath={docPath} />;
     case 'error':

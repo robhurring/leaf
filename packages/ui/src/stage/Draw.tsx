@@ -105,6 +105,7 @@ export function Draw({ docPath, blockHash, current }: Props) {
   const { color, brush } = useStage();
 
   // Drop faded ink, and abandoned strokes in progress, on a timer while any is present.
+  // (The store sweeps other peers' on its own; this covers the page's own fading ink.)
   const hasInk = mine.some((s) => !s.sticky) || theirs.length > 0;
   useEffect(() => {
     if (!hasInk) return;

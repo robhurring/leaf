@@ -113,7 +113,9 @@ export function Reader(props: ReaderProps) {
   const tabbed = inTab();
   // Viewing a relay's share in a browser; once it ends, only the notice is left.
   const viewing = !tabbed && !!docs.share;
-  const ended = viewing && docs.shareStatus === 'ended';
+  // A share can also be over before it began (unknown, full, another protocol): no welcome
+  // came, so the page knows no share, only that it ended.
+  const ended = !tabbed && docs.shareStatus === 'ended';
   const theme = props.theme ?? ui.theme;
   const appearance = props.appearance ?? ui.appearance;
   const resolved = useResolvedAppearance(appearance);
@@ -482,7 +484,7 @@ export function Reader(props: ReaderProps) {
   );
 
   const shareBanner = (end: boolean) =>
-    viewing && (
+    (viewing || end) && (
       <Suspense fallback={null}>
         <ShareBanner path={path} base={base} onOpen={navigate} ended={end} />
       </Suspense>

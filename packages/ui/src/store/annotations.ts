@@ -22,6 +22,10 @@ export const INK_GONE_MS = 3000;
 export const INK_DRAFT_STALE_MS = 3000;
 /** Most points a stroke in progress grows to here; later frames for it are ignored. */
 export const MAX_DRAFT_POINTS = 4096;
+/** Most sticky strokes kept here per canvas for the host, and for each viewer: what the
+ *  relay keeps. Past it the peer's oldest on that canvas goes. */
+export const MAX_HOST_STICKY = 200;
+export const MAX_VIEWER_STICKY = 100;
 
 /** Another peer's stroke still being drawn: the points so far, and when the last frame came. */
 export type Draft = Stroke & { peer: string; at: number };
@@ -51,8 +55,30 @@ function dropLast(strokes: Stroke[], docPath: string, blockHash: string, peer?: 
   return last < 0 ? { strokes } : { strokes: strokes.filter((_, i) => i !== last) };
 }
 
-// Sweeps abandoned drafts while there are any, even with no canvas open to do it.
+/** With `stroke` added, and `peer`'s oldest sticky strokes on its canvas dropped to keep
+ *  within what the relay keeps for that peer. */
+function addCapped(strokes: Stroke[], stroke: Stroke & { peer: string }) {
+  const next = [...strokes, stroke];
+  if (!stroke.sticky) return next;
+  const counted = (k: Stroke) => k.sticky && on(k, stroke.docPath, stroke.blockHash, stroke.peer);
+  let over =
+    next.filter(counted).length - (stroke.peer === 'host' ? MAX_HOST_STICKY : MAX_VIEWER_STICKY);
+  return over > 0 ? next.filter((k) => !(counted(k) && over-- > 0)) : next;
+}
+
+// Sweeps abandoned drafts and other peers' faded strokes while there are any, even with
+// no canvas open to do it.
 let sweeper: ReturnType<typeof setInterval> | null = null;
+function sweep(get: () => State) {
+  sweeper ??= setInterval(() => {
+    get().expire(Date.now());
+    const { drafts, strokes } = get();
+    if (sweeper && !Object.keys(drafts).length && !strokes.some((k) => k.peer && !k.sticky)) {
+      clearInterval(sweeper);
+      sweeper = null;
+    }
+  }, 1000);
+}
 
 type State = {
   strokes: Stroke[];
@@ -117,15 +143,17 @@ export const useAnnotations = create<State>((set, get) => ({
     set({ strokes: strokes.filter((_, i) => i !== last) });
     return strokes[last];
   },
-  addRemote: (stroke) =>
+  addRemote: (stroke) => {
     set((s) => {
       const drafts = { ...s.drafts };
       delete drafts[draftKey(stroke.peer, stroke.id)];
       return s.strokes.some((k) => k.id === stroke.id)
         ? { drafts }
         : // Fading runs on this page's clock, not the drawer's.
-          { drafts, strokes: [...s.strokes, { ...stroke, createdAt: Date.now() }] };
-    }),
+          { drafts, strokes: addCapped(s.strokes, { ...stroke, createdAt: Date.now() }) };
+    });
+    if (!stroke.sticky) sweep(get);
+  },
   draft: (peer, stroke) => {
     set((s) => {
       if (s.strokes.some((k) => k.id === stroke.id && k.peer === peer)) return s;
@@ -135,13 +163,7 @@ export const useAnnotations = create<State>((set, get) => ({
       const points = before ? [...before.points, ...stroke.points] : stroke.points;
       return { drafts: { ...s.drafts, [key]: { ...stroke, points, peer, at: Date.now() } } };
     });
-    sweeper ??= setInterval(() => {
-      get().expire(Date.now());
-      if (sweeper && !Object.keys(get().drafts).length) {
-        clearInterval(sweeper);
-        sweeper = null;
-      }
-    }, 1000);
+    sweep(get);
   },
   dropDraftsExcept: (peers) =>
     set((s) => {

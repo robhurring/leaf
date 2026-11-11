@@ -2,8 +2,9 @@
 // while disconnected, and reconnects with backoff. Every couple of seconds (and on
 // check(), at each navigation) it asks the server's /healthz: a socket can look open
 // long after the server went away, and a server that is back should not wait out
-// the backoff. A share that is over (ended, full, or on another protocol) stops it:
-// asking again would only be refused again.
+// the backoff. A share that is over (ended, unknown to the relay, full, or on another
+// protocol) stops it: asking again would only be refused again. A pointer or a stroke
+// in progress is worth nothing late, so those are dropped, not queued, while it is down.
 import {
   PROTOCOL_VERSION,
   parseServerMessage,
@@ -11,6 +12,7 @@ import {
   type ServerMessage,
 } from '@leaf/protocol';
 import { Listeners, type DocumentSource, type SourceStatus } from './DocumentSource.js';
+import { refusalOf } from '../share/refusal.js';
 
 export type WsSourceOptions = {
   WebSocketImpl?: typeof WebSocket;
@@ -31,12 +33,14 @@ const PROBE_TIMEOUT_MS = 1500;
  *  ended, or a relay refusing the join (full, or a protocol mismatch). */
 function isFinal(msg: ServerMessage): boolean {
   if (msg.type === 'shareStatus') return msg.state === 'ended';
-  return (
-    msg.type === 'error' &&
-    !msg.path &&
-    /^this share (is full|runs leaf protocol)/.test(msg.message ?? '')
-  );
+  return refusalOf(msg) !== null;
 }
+
+/** The close code a relay gives a socket asking for a share it doesn't have (ended, or
+ *  never there). */
+export const CLOSE_UNKNOWN_SHARE = 4404;
+/** Messages that say where something is right now; late, they say nothing. */
+const MOMENTARY = new Set<ClientMessage['type']>(['pointer', 'inking']);
 
 export class WsSource implements DocumentSource {
   private socket: WebSocket | null = null;
@@ -138,14 +142,20 @@ export class WsSource implements DocumentSource {
         console.warn('leaf: dropped unreadable message', e);
         return;
       }
-      if (this.messages.size === 0) this.backlog.push(parsed);
-      else this.messages.emit(parsed);
+      this.deliver(parsed);
       if (isFinal(parsed)) this.close();
     });
-    socket.addEventListener('close', () => {
+    socket.addEventListener('close', (ev) => {
       // A socket already let go of (drop, reconnectNow) is not the live one.
       if (this.closed || this.socket !== socket) return;
       this.socket = null;
+      if ((ev as CloseEvent).code === CLOSE_UNKNOWN_SHARE) {
+        // The relay has no such share and never will again under this id. It closes
+        // without a message, so say it for it: the page shows that the share is over.
+        this.deliver({ type: 'shareStatus', state: 'ended', reason: 'unknown' });
+        this.close();
+        return;
+      }
       this.scheduleReconnect();
     });
     socket.addEventListener('error', () => {
@@ -153,9 +163,14 @@ export class WsSource implements DocumentSource {
     });
   }
 
+  private deliver(msg: ServerMessage) {
+    if (this.messages.size === 0) this.backlog.push(msg);
+    else this.messages.emit(msg);
+  }
+
   send(msg: ClientMessage): void {
     if (this.socket && this.socket.readyState === 1) this.socket.send(JSON.stringify(msg));
-    else this.queue.push(msg);
+    else if (!MOMENTARY.has(msg.type)) this.queue.push(msg);
   }
 
   onMessage(handler: (msg: ServerMessage) => void): () => void {

@@ -11,9 +11,14 @@ export const shareBase = (pathname: string) => {
   return id ? `/s/${id}` : '';
 };
 
+const LOOPBACK = new Set(['localhost', '127.0.0.1', '[::1]']);
+
+/** The socket this page reads through. `?ws=` points it elsewhere, for development only:
+ *  on loopback or in a dev build. Anywhere else a link could use it to show another
+ *  server's documents under this origin, as the page's own and so free to run code. */
 export function wsUrl(loc: Location): string {
   const override = new URLSearchParams(loc.search).get('ws');
-  if (override) return override;
+  if (override && (import.meta.env.DEV || LOOPBACK.has(loc.hostname))) return override;
   return `${loc.protocol === 'https:' ? 'wss' : 'ws'}://${loc.host}${shareBase(loc.pathname)}/ws`;
 }
 

@@ -79,6 +79,31 @@ describe('WsSource', () => {
     ]);
   });
 
+  it('pointer and inking frames sent while the socket is down are dropped, not queued', () => {
+    const src = make();
+    const stroke = {
+      id: 'k',
+      docPath: 'a.md',
+      blockHash: 'h',
+      points: [[0, 0]] as [number, number][],
+      color: 'red' as const,
+      width: 4,
+      sticky: false,
+      createdAt: 1,
+    };
+    src.send({ type: 'pointer', pointer: { docPath: 'a.md', blockHash: 'h', x: 1, y: 2 } });
+    src.send({ type: 'inking', stroke });
+    src.send({ type: 'pointer' });
+    src.send({ type: 'ink', stroke });
+    const s = FakeWebSocket.instances[0]!;
+    s.open();
+    expect(s.sent.map((x) => JSON.parse(x).type)).toEqual(['hello', 'ink']);
+    // Once open they go straight out.
+    src.send({ type: 'pointer' });
+    src.send({ type: 'inking', stroke });
+    expect(s.sent.map((x) => JSON.parse(x).type)).toEqual(['hello', 'ink', 'pointer', 'inking']);
+  });
+
   it('reconnects with backoff and re-hellos', () => {
     const src = make();
     const statuses: SourceStatus[] = [];
@@ -236,6 +261,35 @@ describe('WsSource', () => {
       expect(FakeWebSocket.instances).toHaveLength(1);
       expect(fetchImpl.mock.calls.length).toBe(probes);
       expect(src.status).toBe('closed');
+    });
+
+    it('a share the relay does not know (close code 4404): told once, never asked again', async () => {
+      const { src, fetchImpl } = probed(() => true);
+      const got: unknown[] = [];
+      src.onMessage((m) => got.push(m));
+      const s = FakeWebSocket.instances[0]!;
+      s.open();
+      s.readyState = 3;
+      s.dispatchEvent(Object.assign(new Event('close'), { code: 4404, reason: 'unknown share' }));
+      expect(got).toEqual([{ type: 'shareStatus', state: 'ended', reason: 'unknown' }]);
+      expect(src.status).toBe('closed');
+      const probes = fetchImpl.mock.calls.length;
+      await vi.advanceTimersByTimeAsync(30_000);
+      src.check();
+      await vi.advanceTimersByTimeAsync(0);
+      expect(FakeWebSocket.instances).toHaveLength(1);
+      expect(fetchImpl.mock.calls.length).toBe(probes);
+    });
+
+    it('any other close code reconnects as before', () => {
+      const src = make();
+      const s = FakeWebSocket.instances[0]!;
+      s.open();
+      s.readyState = 3;
+      s.dispatchEvent(Object.assign(new Event('close'), { code: 1006 }));
+      vi.advanceTimersByTime(10);
+      expect(FakeWebSocket.instances).toHaveLength(2);
+      src.close();
     });
 
     it('an error about a path is not fatal', async () => {

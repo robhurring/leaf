@@ -1,9 +1,10 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { act, render, screen, fireEvent, waitFor, within } from '@testing-library/react';
-import type { PresenceMessage, ShareInfo } from '@leaf/protocol';
+import type { PresenceMessage, ServerMessage, ShareInfo } from '@leaf/protocol';
 import { Reader } from '../src/components/Reader.js';
 import { useDocuments } from '../src/store/documents.js';
 import { WsSource } from '../src/source/WsSource.js';
+import { createSource } from '../src/source/createSource.js';
 import { savedShareName } from '../src/share/path.js';
 import { contentHash } from '../src/viewers/hash.js';
 import { scripted, README, GUIDE } from './helpers/scripted.js';
@@ -181,6 +182,54 @@ describe('viewing a share', () => {
     const s = await open();
     act(() => s.emit({ type: 'shareStatus', state: 'ended', reason }));
     expect(await screen.findByText(text)).toBeTruthy();
+  });
+
+  // The relay refuses the join before any welcome, so the page knows no share yet.
+  const refused = (first: ServerMessage) =>
+    createSource({
+      handle(msg, emit) {
+        if (msg.type === 'hello') emit(first);
+      },
+    });
+  it.each<[string, ServerMessage, string, string]>([
+    [
+      'a share the relay does not know',
+      { type: 'shareStatus', state: 'ended', reason: 'unknown' },
+      'This share has ended or does not exist',
+      ID,
+    ],
+    [
+      'a full share',
+      { type: 'error', code: 'bad_request', message: 'this share is full' },
+      'This share is full',
+      'Reload the page to try again.',
+    ],
+    [
+      'a relay on another protocol',
+      { type: 'error', code: 'bad_request', message: 'this share runs leaf protocol 2; reload' },
+      'This page is out of date',
+      'Reload the page to update it.',
+    ],
+  ])('%s says so in the document’s place', async (_, first, title, detail) => {
+    render(<Reader source={refused(first)} base={BASE} />);
+    const notice = (await screen.findByText(title)).closest('[role="status"]')!;
+    expect(notice.textContent).toContain(detail);
+    expect(document.querySelector('.leaf-loading')).toBeNull();
+    expect(screen.queryByRole('region', { name: 'Share' })).toBeNull();
+  });
+
+  it('a share that fills up or moves on while this page was reading says so too', async () => {
+    const s = await open();
+    act(() => s.emit({ type: 'error', code: 'bad_request', message: 'this share is full' }));
+    expect(await screen.findByText('This share is full')).toBeTruthy();
+    expect(screen.queryByRole('heading', { name: 'Title' })).toBeNull();
+  });
+
+  it('an error that is not a refusal changes nothing', async () => {
+    const s = await open();
+    act(() => s.emit({ type: 'error', code: 'bad_request', message: 'unknown message' }));
+    expect(screen.getByRole('heading', { name: 'Title', level: 1 })).toBeTruthy();
+    expect(useDocuments.getState().shareStatus).toBe('live');
   });
 
   it('no_share_no_banner', async () => {

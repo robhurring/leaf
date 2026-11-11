@@ -1,8 +1,9 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
-import { act, cleanup, render, screen, fireEvent } from '@testing-library/react';
+import { act, cleanup, render, screen, fireEvent, waitFor } from '@testing-library/react';
 import type { ShareInfo } from '@leaf/protocol';
 import { Reader } from '../src/components/Reader.js';
 import { useDocuments } from '../src/store/documents.js';
+import { contentHash } from '../src/viewers/hash.js';
 import { scripted } from './helpers/scripted.js';
 
 vi.mock('../src/viewers/live/libs.js', () => ({
@@ -62,6 +63,12 @@ async function open(doc: string, share?: ShareInfo, name = 'README.md') {
   );
   render(<Reader source={s.source} base={share ? BASE : ''} />);
   await screen.findByRole('heading', { name: 'Doc', level: 1 });
+  return s;
+}
+/** The host saves `doc` over the open file: the mounted reader hears it and reads again. */
+function save(s: ReturnType<typeof scripted>, name: string, doc: string) {
+  s.files[name] = doc;
+  act(() => s.emit({ type: 'changed', path: name, change: 'modified' }));
 }
 const frames = () => document.querySelectorAll('iframe');
 const run = () => screen.findByRole('button', { name: 'Run' });
@@ -109,6 +116,77 @@ describe('code in a shared document', () => {
     expect(await screen.findByTitle('Output')).toBeTruthy();
     cleanup();
     await open(DOC(fence(nb('<b>new</b>'))), SHARE, 'edit.md');
+    await run();
+    expect(frames().length).toBe(0);
+  });
+});
+
+describe('approval follows the block’s content while the document stays open', () => {
+  it('a live pane whose code the host changes asks again', async () => {
+    const s = await open(LIVE, SHARE, 'live-edit.md');
+    fireEvent.click(await run());
+    expect(await screen.findByTitle('canvas animation')).toBeTruthy();
+    save(s, 'live-edit.md', DOC('```canvas\nonFrame(() => { /* swapped */ });\n```'));
+    await run();
+    expect(frames().length).toBe(0);
+    // The code approved before still runs when it comes back.
+    save(s, 'live-edit.md', LIVE);
+    expect(await screen.findByTitle('canvas animation')).toBeTruthy();
+    expect(document.querySelector('.leaf-run-gate')).toBeNull();
+  });
+
+  it('a notebook HTML output the host changes asks again', async () => {
+    const s = await open(NOTEBOOK, SHARE, 'nb-edit.md');
+    fireEvent.click(await run());
+    expect(await screen.findByTitle('Output')).toBeTruthy();
+    save(s, 'nb-edit.md', DOC(fence(nb('<b>swapped</b>'))));
+    await run();
+    expect(frames().length).toBe(0);
+  });
+
+  it('a share allowed for the session still runs changed code', async () => {
+    const share = { ...SHARE, id: 'allow-live', webUrl: 'https://relay.test/s/allow-live' };
+    const s = await open(NOTEBOOK, share, 'allow-live.md');
+    fireEvent.click(await screen.findByRole('button', { name: 'Allow for this session' }));
+    expect(await screen.findByTitle('Output')).toBeTruthy();
+    save(s, 'allow-live.md', DOC(fence(nb('<b>swapped again</b>'))));
+    await screen.findByTitle('Output');
+    await waitFor(() =>
+      expect(frames()[0]!.getAttribute('srcdoc')).toContain('<b>swapped again</b>'),
+    );
+    expect(screen.queryByRole('button', { name: 'Run' })).toBeNull();
+  });
+});
+
+describe('approval is for the exact code, not its short hash', () => {
+  // Pairs a host can find in seconds: the 32-bit content hash is the same for both.
+  const CODE_A = 'onFrame(() => {}); // 479599';
+  const CODE_B = 'onFrame(() => {}); // 662382';
+  const HTML_A = '<b>66109</b>';
+  const HTML_B = '<b>111106</b>';
+
+  it('a live pane whose new code hashes like the approved code still asks', async () => {
+    expect(contentHash(CODE_B)).toBe(contentHash(CODE_A));
+    const canvas = (code: string) => DOC('```canvas\n' + code + '\n```');
+    await open(canvas(CODE_A), SHARE, 'collide.md');
+    fireEvent.click(await run());
+    expect(await screen.findByTitle('canvas animation')).toBeTruthy();
+    cleanup();
+    await open(canvas(CODE_B), SHARE, 'collide.md');
+    await run();
+    expect(frames().length).toBe(0);
+  });
+
+  it('a notebook output that hashes like the approved one, in a notebook that does too, still asks', async () => {
+    const a = nb(HTML_A, 'n31667');
+    const b = nb(HTML_B, 'n31698');
+    expect(contentHash(HTML_B)).toBe(contentHash(HTML_A));
+    expect(contentHash(b)).toBe(contentHash(a));
+    await open(DOC(fence(a)), SHARE, 'collide-nb.md');
+    fireEvent.click(await run());
+    expect(await screen.findByTitle('Output')).toBeTruthy();
+    cleanup();
+    await open(DOC(fence(b)), SHARE, 'collide-nb.md');
     await run();
     expect(frames().length).toBe(0);
   });

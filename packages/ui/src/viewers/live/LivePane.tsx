@@ -61,7 +61,9 @@ export function LivePane(props: ViewerProps & { fill?: boolean }) {
   // In a share the frame doesn't exist until the viewer runs this block's code (or allows
   // the share), so nothing can be late yet. The gate says when it has run (which
   // re-renders the pane).
-  const gateKey = `${docPath}:${hash}`;
+  // Approval is for this exact code: the key holds all of it, not the short hash, which a
+  // host could make match code the viewer already ran.
+  const gateKey = `${docPath}:${kind}:${code}`;
   const [, setRunTick] = useState(0);
   const onRun = useCallback(() => setRunTick((n) => n + 1), []);
   const waiting = shared && !hasRun(gateKey) && !shareAllowed(shareId);

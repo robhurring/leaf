@@ -274,6 +274,35 @@ describe('pointers and ink on a shared canvas', () => {
     expect(ofType(s, 'pointer').at(-1)).toEqual({ type: 'pointer' });
   });
 
+  it('the host’s Clear wipes every peer’s ink on its own page too', async () => {
+    asHost();
+    const s = await openFile('a.mmd');
+    fireEvent.click(screen.getByRole('button', { name: 'Pencil' }));
+    drawOne();
+    act(() => s.emit({ type: 'ink', peer: 'v1', stroke: hostStroke({ id: 'a1' }) }));
+    act(() => s.emit({ type: 'ink', peer: 'v2', stroke: hostStroke({ id: 'b1' }) }));
+    act(() => s.emit({ type: 'inking', peer: 'v1', stroke: hostStroke({ id: 'd1' }) }));
+    // Ink on another canvas is not this Clear's to take.
+    act(() =>
+      s.emit({ type: 'ink', peer: 'v1', stroke: hostStroke({ id: 'o1', blockHash: 'other' }) }),
+    );
+    expect(inks()).toHaveLength(3);
+    expect(liveInks()).toHaveLength(1);
+    fireEvent.click(screen.getByRole('button', { name: 'Clear drawings' }));
+    expect(inks()).toHaveLength(0);
+    expect(liveInks()).toHaveLength(0);
+    expect(useAnnotations.getState().strokes.map((k) => k.id)).toEqual(['o1']);
+  });
+
+  it('a viewer’s Clear leaves the others’ ink on its page', async () => {
+    const s = await openFile('a.mmd', SHARE);
+    fireEvent.click(screen.getByRole('button', { name: 'Pencil' }));
+    drawOne();
+    act(() => s.emit({ type: 'ink', peer: 'host', stroke: hostStroke({ id: 'k1' }) }));
+    fireEvent.click(screen.getByRole('button', { name: 'Clear drawings' }));
+    expect(useAnnotations.getState().strokes.map((k) => k.id)).toEqual(['k1']);
+  });
+
   it('a whole-file deck is not a canvas, so the host announces no stage for it', async () => {
     asHost();
     history.replaceState(null, '', '/deck.md');
