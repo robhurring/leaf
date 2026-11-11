@@ -1,17 +1,16 @@
-// Markdown tables. One marked with <!--table:filter--> gets a filter bar that hides the rows whose
-// text doesn't match; <!--table:sort--> makes the column headers sort the rows; both may be given.
-// Cells keep their markdown (bold, code, links): the rows are reordered and hidden in place.
+// Markdown tables. A click on a column header sorts the rows by it: ascending, descending, then
+// back to the order they were written in. The right edge of a header drags to set the column's
+// width. One marked with <!--table:filter--> also gets a filter bar that hides the rows whose text
+// doesn't match. Cells keep their markdown (bold, code, links): the rows are reordered and hidden
+// in place.
 import { useEffect, useRef, useState, type ComponentProps } from 'react';
 import { compareCells } from '../cells.js';
+import { useColumnResize } from '../columnResize.js';
 
-type Props = ComponentProps<'table'> & { 'data-filter'?: string; 'data-sort'?: string };
+type Props = ComponentProps<'table'> & { 'data-filter'?: string };
 type Sort = { col: number; dir: 'asc' | 'desc' } | null;
 
-function InteractiveTable({
-  filter,
-  sort: sortable,
-  ...props
-}: ComponentProps<'table'> & { filter: boolean; sort: boolean }) {
+export function Table({ 'data-filter': filter, ...props }: Props) {
   const ref = useRef<HTMLTableElement>(null);
   // Each row's place in the markdown, noted when the row is first seen, so clearing the sort
   // restores that order and a row a live edit adds is filtered and sorted with the rest.
@@ -20,6 +19,7 @@ function InteractiveTable({
   const [sort, setSort] = useState<Sort>(null);
   const [count, setCount] = useState<{ shown: number; all: number } | null>(null);
   const { children } = props;
+  useColumnResize(ref, children);
 
   const rows = () => {
     const { of } = order.current;
@@ -42,7 +42,6 @@ function InteractiveTable({
   }, [q, children]);
 
   useEffect(() => {
-    if (!sortable) return;
     const all = rows();
     const body = all[0]?.parentElement;
     if (!body) return;
@@ -53,10 +52,9 @@ function InteractiveTable({
         ? [...all].sort((a, b) => compareCells(cell(a, sort.col), cell(b, sort.col)) * by)
         : all;
     for (const tr of ordered) body.appendChild(tr);
-  }, [sort, sortable, children]);
+  }, [sort, children]);
 
   useEffect(() => {
-    if (!sortable) return;
     const heads = [
       ...(ref.current?.querySelectorAll<HTMLTableCellElement>(':scope > thead th') ?? []),
     ];
@@ -83,10 +81,10 @@ function InteractiveTable({
       return () => th.removeEventListener('click', onClick);
     });
     return () => offs.forEach((off) => off());
-  }, [sort, sortable, children]);
+  }, [sort, children]);
 
   return (
-    <div className="leaf-table-filter">
+    <div className="leaf-table">
       {filter && (
         <div className="leaf-datatable-bar">
           <label className="leaf-filter">
@@ -120,15 +118,9 @@ function InteractiveTable({
           )}
         </div>
       )}
-      <table ref={ref} {...props} />
+      <div className="leaf-table-scroll">
+        <table ref={ref} {...props} />
+      </div>
     </div>
-  );
-}
-
-export function Table({ 'data-filter': filter, 'data-sort': sort, ...props }: Props) {
-  return filter || sort ? (
-    <InteractiveTable filter={!!filter} sort={!!sort} {...props} />
-  ) : (
-    <table {...props} />
   );
 }

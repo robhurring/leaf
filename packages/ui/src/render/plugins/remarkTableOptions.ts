@@ -1,6 +1,6 @@
-// `<!--table:filter-->`, `<!--table:sort-->` or `<!--table:filter sort-->` on the line before a markdown
-// table gives it a filter bar, sortable column headers, or both. The comment itself renders as nothing,
-// as it would on GitHub.
+// `<!--table:filter-->` on the line before a markdown table gives it a filter bar. The comment itself
+// renders as nothing, as it would on GitHub. Every table sorts by its headers now, so `sort` is still
+// read (`<!--table:sort-->`, `<!--table:filter sort-->`) and changes nothing.
 import type { Root, RootContent, Table } from 'mdast';
 import { visit } from 'unist-util-visit';
 
@@ -24,7 +24,6 @@ export function remarkTableOptions() {
           hProperties: {
             ...table.data?.hProperties,
             ...(words.has('filter') ? { dataFilter: 'true' } : {}),
-            ...(words.has('sort') ? { dataSort: 'true' } : {}),
           },
         };
         children.splice(i, 1);

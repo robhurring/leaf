@@ -211,15 +211,15 @@ describe('filterable tables', () => {
     expect(view.container.textContent).toContain('1 of 2 rows');
   });
 
-  it("<!--table:sort--> makes the headers sort the rows and keeps the cells' markdown", async () => {
+  it("every table's headers sort its rows and keep the cells' markdown", async () => {
     const { render, fireEvent } = await import('@testing-library/react');
     const table =
       '| n | item |\n| --- | --- |\n| 10 | [b](https://x/b) |\n| 9 | **a** |\n| 100 | c |\n';
-    const r = await renderMarkdown(`<!--table:filter sort-->\n\n${table}`, base);
+    const r = await renderMarkdown(table, base);
     const view = render(r.element);
     const heads = [...view.container.querySelectorAll('thead th')] as HTMLElement[];
     expect(heads.map((th) => th.className)).toEqual(['leaf-sortable', 'leaf-sortable']);
-    expect(view.container.querySelector('[aria-label="Filter rows"]')).not.toBeNull();
+    expect(view.container.querySelector('[aria-label="Filter rows"]')).toBeNull();
     const firstCol = () =>
       [...view.container.querySelectorAll('tbody tr')].map((tr) => tr.children[0]?.textContent);
     fireEvent.click(heads[0]!);
@@ -246,11 +246,103 @@ describe('filterable tables', () => {
     expect(view.container.textContent).toContain('3 rows');
   });
 
-  it('<!--table:sort--> alone has no filter bar', async () => {
+  it('<!--table:sort--> still renders as nothing and adds no filter bar', async () => {
     const html = renderToStaticMarkup(
       (await renderMarkdown(`<!--table:sort-->\n${TABLE}`, base)).element,
     );
     expect(html).not.toContain('Filter rows');
-    expect(html).toContain('class="leaf-table-filter"');
+    expect(html).not.toContain('table:sort');
+    expect(html).toContain('class="leaf-table"');
+  });
+});
+
+describe('column widths', () => {
+  const TABLE = '| n | item |\n| --- | --- |\n| 2 | b |\n| 1 | a |\n';
+  // jsdom lays nothing out: give each header cell and the table a size to start from.
+  const sized = (el: Element, width: number) =>
+    (el.getBoundingClientRect = () => ({ width }) as DOMRect);
+  const drag = (grip: Element, from: number, to: number) => {
+    grip.dispatchEvent(new MouseEvent('pointerdown', { bubbles: true, button: 0, clientX: from }));
+    window.dispatchEvent(new MouseEvent('pointermove', { clientX: to }));
+    window.dispatchEvent(new MouseEvent('pointerup', { clientX: to }));
+  };
+  const mount = async () => {
+    const { render, fireEvent } = await import('@testing-library/react');
+    const view = render((await renderMarkdown(TABLE, base)).element);
+    const table = view.container.querySelector('table')!;
+    const heads = [...table.querySelectorAll('thead th')] as HTMLElement[];
+    sized(table, 302);
+    sized(heads[0]!, 100);
+    sized(heads[1]!, 200);
+    const grips = heads.map((th) => th.querySelector('.leaf-col-grip')!);
+    return { view, table, heads, grips, fireEvent };
+  };
+
+  it('dragging a header edge widens that column and the table, and leaves the others', async () => {
+    const { table, heads, grips } = await mount();
+    drag(grips[0]!, 100, 160);
+    expect(heads.map((th) => th.style.width)).toEqual(['160px', '200px']);
+    expect(table.style.width).toBe('362px');
+    expect(table.dataset.sized).toBe('');
+    drag(grips[0]!, 160, -500);
+    expect(heads[0]!.style.width).toBe('60px');
+    expect(table.style.width).toBe('262px');
+  });
+
+  it("a drag that ends near the page's edge lands on it", async () => {
+    const { table, heads, grips } = await mount();
+    Object.defineProperty(table.parentElement!, 'clientWidth', { value: 400 });
+    drag(grips[1]!, 300, 392);
+    expect(table.style.width).toBe('400px');
+    expect(heads[1]!.style.width).toBe('298px');
+    drag(grips[1]!, 392, 450);
+    expect(table.style.width).toBe('458px');
+  });
+
+  it('a click or a drag on the edge does not sort', async () => {
+    const { view, heads, grips, fireEvent } = await mount();
+    drag(grips[0]!, 100, 160);
+    fireEvent.click(grips[0]!);
+    expect(heads[0]!.getAttribute('aria-sort')).toBe('none');
+    expect(view.container.querySelector('tbody td')?.textContent).toBe('2');
+  });
+
+  it('a click on the edge puts that column back, and the table lays itself out again', async () => {
+    const { table, heads, grips, fireEvent } = await mount();
+    drag(grips[0]!, 100, 160);
+    drag(grips[1]!, 300, 350);
+    // The click that ends a drag is swallowed; a click a moment later is a click.
+    await new Promise((r) => setTimeout(r));
+    fireEvent.click(grips[0]!);
+    expect(heads.map((th) => th.style.width)).toEqual(['100px', '250px']);
+    expect(heads[0]!.getAttribute('aria-sort')).toBe('none');
+    fireEvent.click(grips[1]!);
+    expect(heads.map((th) => th.style.width)).toEqual(['', '']);
+    expect(table.style.width).toBe('');
+    expect(table.dataset.sized).toBeUndefined();
+  });
+
+  it('a double-click fits the column to what it holds', async () => {
+    const { table, heads, grips, fireEvent } = await mount();
+    drag(grips[0]!, 100, 160);
+    // What the column measures with the table laid out freely.
+    sized(heads[0]!, 130);
+    fireEvent.doubleClick(grips[0]!);
+    expect(heads.map((th) => th.style.width)).toEqual(['130px', '200px']);
+    expect(table.style.width).toBe('332px');
+    expect(table.dataset.sized).toBe('');
+  });
+
+  it('widths survive a live edit to the rows and start over when the columns change', async () => {
+    const { view, table, heads, grips } = await mount();
+    drag(grips[1]!, 300, 340);
+    view.rerender((await renderMarkdown(`${TABLE}| 3 | c |\n`, base)).element);
+    expect(heads[1]!.style.width).toBe('240px');
+    view.rerender(
+      (await renderMarkdown('| n | item | more |\n| --- | --- | --- |\n| 2 | b | x |\n', base))
+        .element,
+    );
+    expect(table.dataset.sized).toBeUndefined();
+    expect(table.querySelectorAll('.leaf-col-grip')).toHaveLength(3);
   });
 });

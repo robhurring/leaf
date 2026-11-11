@@ -1,8 +1,9 @@
-// A sortable, filterable table. Used by the csv viewer now and by interactive
-// markdown tables later. Cells may hold markdown links or bare URLs; they render as links.
-import { useMemo, useState } from 'react';
+// A sortable, filterable table with columns that drag wider or narrower, for the csv viewer.
+// Cells may hold markdown links or bare URLs; they render as links.
+import { useMemo, useRef, useState } from 'react';
 import { Search } from '../icons/index.js';
 import { cellParts, cellText, compareCells } from '../render/cells.js';
+import { useColumnResize } from '../render/columnResize.js';
 
 export type DataTableProps = { header: string[]; rows: string[][]; caption?: string };
 type Sort = { col: number; dir: 'asc' | 'desc' } | null;
@@ -28,6 +29,8 @@ function Cell({ value }: { value: string }) {
 export function DataTable({ header, rows, caption }: DataTableProps) {
   const [sort, setSort] = useState<Sort>(null);
   const [q, setQ] = useState('');
+  const ref = useRef<HTMLTableElement>(null);
+  useColumnResize(ref, header);
 
   const visible = useMemo(() => {
     const needle = q.trim().toLowerCase();
@@ -67,40 +70,42 @@ export function DataTable({ header, rows, caption }: DataTableProps) {
             : `${visible.length} of ${rows.length} rows`}
         </span>
       </div>
-      <table>
-        {caption && <caption>{caption}</caption>}
-        <thead>
-          <tr>
-            {header.map((h, i) => (
-              <th
-                key={i}
-                role="columnheader"
-                aria-sort={
-                  sort?.col === i ? (sort.dir === 'asc' ? 'ascending' : 'descending') : 'none'
-                }
-                onClick={() => cycle(i)}
-                className="leaf-sortable"
-              >
-                {h}
-                <span className="leaf-sort-mark" aria-hidden="true">
-                  {sort?.col === i ? (sort.dir === 'asc' ? '▲' : '▼') : ''}
-                </span>
-              </th>
-            ))}
-          </tr>
-        </thead>
-        <tbody>
-          {visible.map((r, ri) => (
-            <tr key={ri}>
-              {header.map((_, ci) => (
-                <td key={ci}>
-                  <Cell value={r[ci] ?? ''} />
-                </td>
+      <div className="leaf-table-scroll">
+        <table ref={ref}>
+          {caption && <caption>{caption}</caption>}
+          <thead>
+            <tr>
+              {header.map((h, i) => (
+                <th
+                  key={i}
+                  role="columnheader"
+                  aria-sort={
+                    sort?.col === i ? (sort.dir === 'asc' ? 'ascending' : 'descending') : 'none'
+                  }
+                  onClick={() => cycle(i)}
+                  className="leaf-sortable"
+                >
+                  {h}
+                  <span className="leaf-sort-mark" aria-hidden="true">
+                    {sort?.col === i ? (sort.dir === 'asc' ? '▲' : '▼') : ''}
+                  </span>
+                </th>
               ))}
             </tr>
-          ))}
-        </tbody>
-      </table>
+          </thead>
+          <tbody>
+            {visible.map((r, ri) => (
+              <tr key={ri}>
+                {header.map((_, ci) => (
+                  <td key={ci}>
+                    <Cell value={r[ci] ?? ''} />
+                  </td>
+                ))}
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
     </div>
   );
 }

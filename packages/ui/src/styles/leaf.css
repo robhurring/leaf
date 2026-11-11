@@ -1855,21 +1855,95 @@ html[data-resizing] .leaf-resizer::after {
 }
 .leaf-sortable {
   cursor: pointer;
+  user-select: none;
 }
 .leaf-sortable:hover {
   color: var(--leaf-accent);
 }
+/* The mark sits at the right of the cell, in room kept for it whether or not the column is sorted,
+   so a sort never moves the text; hovering an unsorted column shows faintly what a click will do.
+   The room is !important because each theme sets its own cell padding with a heavier selector. */
 .leaf-sortable {
-  position: relative;
-  padding-right: 24px;
+  padding-right: 26px !important;
 }
 .leaf-sort-mark {
   position: absolute;
-  right: 8px;
+  right: 9px;
   top: 50%;
   transform: translateY(-50%);
   font-size: 9px;
+  line-height: 1;
   color: var(--leaf-accent);
+}
+.leaf-sortable:hover .leaf-sort-mark:empty::before {
+  content: '▲';
+  opacity: 0.35;
+}
+/* A table and what stands above it; the table scrolls sideways once it is wider than the page. */
+.leaf-table {
+  margin: 0 0 1em;
+}
+.leaf-table-scroll {
+  overflow-x: auto;
+}
+.leaf-doc .leaf-table-scroll > table {
+  margin: 0;
+}
+/* The right edge of a header cell drags to set its column's width (render/columnResize.ts). */
+.leaf-doc thead th,
+.leaf-datatable thead th {
+  position: relative;
+}
+.leaf-col-grip {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  right: -4px;
+  width: 9px;
+  z-index: 1;
+  cursor: col-resize;
+  touch-action: none;
+}
+th:last-child > .leaf-col-grip {
+  right: 0;
+  width: 6px;
+}
+.leaf-col-grip::after {
+  content: '';
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 50%;
+  width: 2px;
+  transform: translateX(-50%);
+  background: var(--leaf-accent);
+  opacity: 0;
+  transition: opacity 0.12s;
+}
+th:last-child > .leaf-col-grip::after {
+  left: auto;
+  right: 0;
+  transform: none;
+}
+.leaf-col-grip:hover::after,
+.leaf-col-grip[data-active]::after {
+  opacity: 1;
+}
+/* Once a column has been dragged every column holds the width it was given, and long text wraps. */
+.leaf-doc table[data-sized],
+.leaf-datatable table[data-sized] {
+  table-layout: fixed;
+  box-sizing: border-box;
+}
+table[data-sized] th,
+table[data-sized] td {
+  box-sizing: border-box;
+  overflow-wrap: anywhere;
+}
+.leaf-col-resizing,
+.leaf-col-resizing * {
+  cursor: col-resize !important;
+  user-select: none !important;
 }
 
 /* property values */
@@ -2358,13 +2432,6 @@ html[data-connection='lost'] .leaf-math-pending {
 }
 .leaf-frame[data-viewer='csv']:not([data-full]) .leaf-datatable tbody tr:nth-child(even) td {
   background: var(--leaf-doc-table-stripe);
-}
-/* A markdown table marked <!--table:filter-->: the same filter bar above it. */
-.leaf-table-filter {
-  margin: 1em 0;
-}
-.leaf-table-filter > table {
-  margin: 0;
 }
 .leaf-frame[data-viewer='csv'] .leaf-datatable-bar {
   margin-bottom: 8px;
