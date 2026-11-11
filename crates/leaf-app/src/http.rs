@@ -73,12 +73,34 @@ pub async fn healthz() -> &'static str {
     "ok"
 }
 
-/// Types that could run script if served same-origin get a sandbox.
-pub(crate) fn scriptable(mime: &str) -> bool {
-    matches!(
-        mime,
-        "text/html" | "application/xhtml+xml" | "image/svg+xml" | "text/xml" | "application/xml"
-    )
+/// What a raw response carries unless its type is [`inert`]: the bytes open as a document
+/// with no origin, no script and nothing loaded. An SVG still draws in an `<img>`, where a
+/// response's policy doesn't apply.
+pub(crate) const RAW_SANDBOX: &str = "sandbox; default-src 'none'";
+
+/// Whether file bytes of this type can be served on the page's own origin as they are:
+/// types a browser shows or plays without running anything from them. Every other type
+/// (HTML, SVG, any XML, whatever is new tomorrow) gets [`RAW_SANDBOX`].
+pub(crate) fn inert(mime: &str) -> bool {
+    match mime.split_once('/') {
+        Some(("image", sub)) => !sub.starts_with("svg"),
+        Some(("audio" | "video", _)) => true,
+        _ => matches!(mime, "application/pdf" | "text/plain"),
+    }
+}
+
+/// The type a `Content-Type` value names, lowercased and without its parameters; `None`
+/// unless it is exactly one `type/subtype`. Browsers disagree about what a list of types
+/// or a bare word means, so such a value is never passed on.
+pub(crate) fn single_type(value: &str) -> Option<String> {
+    let token = |t: &str| {
+        !t.is_empty()
+            && t.bytes()
+                .all(|b| b.is_ascii_alphanumeric() || b"!#$%&'*+-.^_`|~".contains(&b))
+    };
+    let essence = value.split(';').next().unwrap_or("").trim();
+    let (ty, sub) = essence.split_once('/')?;
+    (token(ty) && token(sub)).then(|| essence.to_ascii_lowercase())
 }
 
 fn plain(status: StatusCode, text: &'static str) -> Response {
@@ -116,10 +138,10 @@ pub async fn raw(State(state): State<AppState>, Path(path): Path<String>) -> Res
         HeaderValue::from_static("nosniff"),
     );
     headers.insert(header::CACHE_CONTROL, HeaderValue::from_static("no-cache"));
-    if scriptable(&mime) {
+    if !inert(&mime) {
         headers.insert(
             header::CONTENT_SECURITY_POLICY,
-            HeaderValue::from_static("sandbox"),
+            HeaderValue::from_static(RAW_SANDBOX),
         );
     }
     (
@@ -132,7 +154,18 @@ pub async fn raw(State(state): State<AppState>, Path(path): Path<String>) -> Res
 
 /// The embedded UI: a real file when one exists, else index.html (the router owns the URL).
 pub async fn static_file(uri: Uri) -> Response {
-    let path = uri.path().trim_start_matches('/');
+    embedded(uri.path())
+}
+
+/// The embedded UI under a path prefix (the relay's `/s/<id>`): the prefix is stripped
+/// before the lookup, so `/s/<id>/assets/x.js` is the asset and anything else is index.html.
+pub async fn static_file_at(uri: Uri, strip: &str) -> Response {
+    let path = uri.path();
+    embedded(path.strip_prefix(strip).unwrap_or(path))
+}
+
+fn embedded(path: &str) -> Response {
+    let path = path.trim_start_matches('/');
     let decoded = percent_decode(path);
     let safe = decoded.trim_start_matches("../");
     let (name, cache) = match Assets::get(safe) {
@@ -189,5 +222,60 @@ fn hex(b: Option<u8>) -> Option<u8> {
         c @ b'a'..=b'f' => Some(c - b'a' + 10),
         c @ b'A'..=b'F' => Some(c - b'A' + 10),
         _ => None,
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn only_types_that_run_nothing_are_inert() {
+        for m in [
+            "image/png",
+            "image/x-icon",
+            "audio/mpeg",
+            "video/mp4",
+            "application/pdf",
+            "text/plain",
+        ] {
+            assert!(inert(m), "{m}");
+        }
+        for m in [
+            "text/html",
+            "image/svg+xml",
+            "application/xml",
+            "application/rss+xml",
+            "application/xslt+xml",
+            "text/xsl",
+            "text/markdown",
+            "application/octet-stream",
+            "",
+        ] {
+            assert!(!inert(m), "{m}");
+        }
+    }
+
+    #[test]
+    fn a_content_type_is_one_type_or_nothing() {
+        assert_eq!(single_type("Text/HTML").as_deref(), Some("text/html"));
+        assert_eq!(
+            single_type(" text/plain ; charset=utf-8").as_deref(),
+            Some("text/plain")
+        );
+        assert_eq!(
+            single_type("image/svg+xml").as_deref(),
+            Some("image/svg+xml")
+        );
+        for bad in [
+            "text/plain, text/html",
+            "text/html text/plain",
+            "html",
+            "",
+            "/",
+            "a/",
+        ] {
+            assert_eq!(single_type(bad), None, "{bad:?}");
+        }
     }
 }

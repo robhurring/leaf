@@ -1,7 +1,9 @@
 import type {
   BlameHunk,
   Capabilities,
+  Config,
   ClientMessage,
+  ShareInfo,
   GitInfo,
   RootInfo,
   ServerMessage,
@@ -12,10 +14,14 @@ type Binary = { base64: string; mime: string };
 type Opts = {
   root?: RootInfo;
   capabilities?: Capabilities;
+  /** The welcome's config (relayUrl, …). */
+  config?: Config;
   /** Last-commit info per path, as a file in a git repository has. */
   git?: Record<string, GitInfo>;
   /** Blame per path; paths without it answer with no hunks. */
   blame?: Record<string, BlameHunk[]>;
+  /** The welcome's share, as a relay sends to a viewer. */
+  share?: ShareInfo;
 };
 
 /** A DocumentSource over an in-memory file map, recording everything the UI sends. */
@@ -37,9 +43,10 @@ export function scripted(
             type: 'welcome',
             protocol: 1,
             root,
-            config: {},
+            config: opts.config ?? {},
             capabilities,
             participant: { id: 'local', name: 'You' },
+            ...(opts.share ? { share: opts.share } : {}),
           });
         case 'list': {
           const dir = msg.path ?? '';

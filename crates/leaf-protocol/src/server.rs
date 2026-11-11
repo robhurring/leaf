@@ -2,7 +2,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::{
     BlameHunk, Capabilities, Change, Config, Encoding, Entry, ErrorCode, GitInfo, Participant,
-    Preferences, RootInfo,
+    Peer, PointerAt, Preferences, RootInfo, ShareInfo, Slide, StageRef, Stroke,
 };
 
 /// One line containing a text query: 1-based line number and the line's text.
@@ -12,6 +12,15 @@ pub struct TextHit {
     pub path: String,
     pub line: u32,
     pub text: String,
+}
+
+/// Where a shared session stands, from the host's side.
+#[derive(Serialize, Deserialize, Clone, Copy, Debug, PartialEq, Eq)]
+#[serde(rename_all = "lowercase")]
+pub enum ShareState {
+    Live,
+    Reconnecting,
+    Ended,
 }
 
 /// What a server sends: replies carry `inReplyTo`; pushes (`changed`) do not.
@@ -28,6 +37,9 @@ pub enum ServerMessage {
         /// Present when the server stores preferences; the client then sends its changes back.
         #[serde(skip_serializing_if = "Option::is_none")]
         preferences: Option<Preferences>,
+        /// Present when this session is shared.
+        #[serde(skip_serializing_if = "Option::is_none")]
+        share: Option<ShareInfo>,
         #[serde(skip_serializing_if = "Option::is_none")]
         in_reply_to: Option<String>,
     },
@@ -92,6 +104,78 @@ pub enum ServerMessage {
         #[serde(skip_serializing_if = "Option::is_none")]
         in_reply_to: Option<String>,
     },
+    /// Who is in a shared session and what the host is reading.
+    #[serde(rename_all = "camelCase")]
+    Presence {
+        host: Peer,
+        #[serde(skip_serializing_if = "Option::is_none")]
+        host_path: Option<String>,
+        viewers: Vec<Peer>,
+        /// The receiving viewer's own id.
+        you: String,
+        /// The slide the host is on.
+        #[serde(skip_serializing_if = "Option::is_none")]
+        slide: Option<Slide>,
+        /// The block the host has open full size.
+        #[serde(skip_serializing_if = "Option::is_none")]
+        stage: Option<StageRef>,
+        #[serde(skip_serializing_if = "Option::is_none")]
+        in_reply_to: Option<String>,
+    },
+    /// Where a peer's pointer is; absent: it left.
+    #[serde(rename_all = "camelCase")]
+    Pointer {
+        peer: String,
+        #[serde(skip_serializing_if = "Option::is_none")]
+        pointer: Option<PointerAt>,
+        #[serde(skip_serializing_if = "Option::is_none")]
+        in_reply_to: Option<String>,
+    },
+    /// A stroke a peer finished.
+    #[serde(rename_all = "camelCase")]
+    Ink {
+        peer: String,
+        stroke: Stroke,
+        #[serde(skip_serializing_if = "Option::is_none")]
+        in_reply_to: Option<String>,
+    },
+    /// A stroke a peer is still drawing: the points added since its last frame for this
+    /// stroke id.
+    #[serde(rename_all = "camelCase")]
+    Inking {
+        peer: String,
+        stroke: Stroke,
+        #[serde(skip_serializing_if = "Option::is_none")]
+        in_reply_to: Option<String>,
+    },
+    /// A peer took back one of its strokes on a block: the one named, or its latest.
+    #[serde(rename_all = "camelCase")]
+    InkUndo {
+        peer: String,
+        doc_path: String,
+        block_hash: String,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        stroke_id: Option<String>,
+        #[serde(skip_serializing_if = "Option::is_none")]
+        in_reply_to: Option<String>,
+    },
+    /// A peer wiped its strokes on a block; from the host, everyone's.
+    #[serde(rename_all = "camelCase")]
+    InkClear {
+        peer: String,
+        doc_path: String,
+        block_hash: String,
+        #[serde(skip_serializing_if = "Option::is_none")]
+        in_reply_to: Option<String>,
+    },
+    #[serde(rename_all = "camelCase")]
+    ShareStatus {
+        state: ShareState,
+        #[serde(skip_serializing_if = "Option::is_none")]
+        reason: Option<String>,
+        #[serde(skip_serializing_if = "Option::is_none")]
+        in_reply_to: Option<String>,
+    },
     #[serde(rename_all = "camelCase")]
     Error {
         code: ErrorCode,
@@ -114,6 +198,13 @@ impl ServerMessage {
             | ServerMessage::Matches { in_reply_to, .. }
             | ServerMessage::TextMatches { in_reply_to, .. }
             | ServerMessage::BlameHunks { in_reply_to, .. }
+            | ServerMessage::Presence { in_reply_to, .. }
+            | ServerMessage::Pointer { in_reply_to, .. }
+            | ServerMessage::Ink { in_reply_to, .. }
+            | ServerMessage::Inking { in_reply_to, .. }
+            | ServerMessage::InkUndo { in_reply_to, .. }
+            | ServerMessage::InkClear { in_reply_to, .. }
+            | ServerMessage::ShareStatus { in_reply_to, .. }
             | ServerMessage::Error { in_reply_to, .. } => in_reply_to,
         };
         *slot = id.map(str::to_string);

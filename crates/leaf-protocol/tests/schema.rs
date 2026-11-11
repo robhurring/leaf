@@ -25,6 +25,14 @@ fn every_client_fixture_round_trips_and_validates() {
         "searchText",
         "preferences",
         "blame",
+        "at",
+        "slide",
+        "stage",
+        "pointer",
+        "ink",
+        "inking",
+        "inkUndo",
+        "inkClear",
     ] {
         let v = fixture(name);
         assert!(
@@ -51,6 +59,13 @@ fn every_server_fixture_round_trips_and_validates() {
         "matches",
         "textMatches",
         "blameHunks",
+        "presence",
+        "pointerFrom",
+        "inkFrom",
+        "inkingFrom",
+        "inkUndoFrom",
+        "inkClearFrom",
+        "shareStatus",
         "error",
     ] {
         let v = fixture(name);

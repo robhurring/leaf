@@ -25,6 +25,7 @@ async fn engine() -> (Arc<Engine>, tempfile::TempDir) {
         topic_url: None,
         max_entries: 10,
         raw_base: None,
+        relay_url: None,
     };
     (Engine::new(source, prefs, config), d)
 }
@@ -32,6 +33,7 @@ async fn engine() -> (Arc<Engine>, tempfile::TempDir) {
 fn hello(id: &str) -> ClientMessage {
     ClientMessage::Hello {
         protocol: 1,
+        name: None,
         id: Some(id.into()),
     }
 }
@@ -50,6 +52,7 @@ async fn hello_then_welcome_with_config_capabilities_and_preferences() {
             capabilities,
             participant,
             preferences,
+            share: _,
             in_reply_to,
         } => {
             assert_eq!(*protocol, 1);
@@ -334,6 +337,7 @@ async fn hello_with_another_protocol_version_is_refused() {
             s,
             ClientMessage::Hello {
                 protocol: 2,
+                name: None,
                 id: Some("h".into()),
             },
         )
@@ -392,4 +396,42 @@ async fn blame_replies_in_kind_and_empty_when_the_source_has_none() {
         ServerMessage::BlameHunks { path, hunks, repo_url: None, in_reply_to: Some(id) }
             if path == "README.md" && hunks.is_empty() && id == "b"
     ));
+}
+
+#[tokio::test]
+async fn welcome_carries_the_relay_url() {
+    let d = tempfile::tempdir().unwrap();
+    let prefs = Arc::new(PreferencesStore::new(d.path().join("p.json")));
+    let e = Engine::new(
+        Arc::new(FakeSource::new(&[("README.md", "# hi")])),
+        prefs,
+        EngineConfig {
+            max_entries: 10,
+            relay_url: Some("https://r.test".into()),
+            ..Default::default()
+        },
+    );
+    let out = e.handle(e.connect(), hello("1")).await;
+    match &out[0] {
+        ServerMessage::Welcome { config, .. } => {
+            assert_eq!(config.relay_url.as_deref(), Some("https://r.test"))
+        }
+        other => panic!("{other:?}"),
+    }
+}
+
+#[tokio::test]
+async fn presence_messages_are_accepted_and_answered_with_nothing() {
+    let (e, _d) = engine().await;
+    let s = e.connect();
+    e.handle(s, hello("h")).await;
+    for raw in [
+        r#"{"type":"at","path":"a.md"}"#,
+        r#"{"type":"slide"}"#,
+        r#"{"type":"pointer"}"#,
+        r#"{"type":"inkClear","docPath":"a.md","blockHash":"h"}"#,
+    ] {
+        let msg: ClientMessage = serde_json::from_str(raw).unwrap();
+        assert!(e.handle(s, msg).await.is_empty(), "{raw}");
+    }
 }

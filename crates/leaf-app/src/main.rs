@@ -3,6 +3,7 @@
 //! stays in the foreground with the logs; so does an explicit -l on the command line.
 mod app;
 mod tabbed;
+mod tabbed_share;
 
 use std::collections::HashMap;
 use std::sync::Arc;
@@ -259,6 +260,7 @@ async fn main() {
             if text.starts_with("unknown flag")
                 || text.contains("needs a value")
                 || text.starts_with("unexpected argument")
+                || text.starts_with("relay takes")
             {
                 eprintln!("leaf: {text}\n\n{HELP_TEXT}");
             } else {
@@ -282,6 +284,7 @@ async fn main() {
             eprintln!("leaf share is not yet available");
             2
         }
+        Route::Relay => leaf_app::relay::run(config).await,
         Route::Serve => run_server(config, sources).await,
         Route::AppForeground => {
             leaf_app::log::init(config.log_level, config.log_format);

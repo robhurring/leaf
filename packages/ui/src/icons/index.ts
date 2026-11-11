@@ -40,3 +40,4 @@ export { StepFrame } from './StepFrame.js';
 export { Slides } from './Slides.js';
 export { Undo } from './Undo.js';
 export { Fade } from './Fade.js';
+export { Share } from './Share.js';

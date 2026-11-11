@@ -1,6 +1,7 @@
 // The row of tabs under the title row: square cells, the active one on the document's
 // color with an accent line. Each tab is named by its path, shortened to fit.
 import { useRef } from 'react';
+import { Share } from '../icons/index.js';
 import { iconFor } from '../components/fileIcon.js';
 import { shortenPath } from '../components/shortenPath.js';
 import type { Bridge, TabInfo } from './bridge.js';
@@ -47,6 +48,11 @@ export function TabRow({ bridge, tabs, dropAt, fits = labelFits }: Props) {
             >
               <Icon size={14} className="leaf-tab-icon" />
               <span className="leaf-tab-label">{shortenPath(t.label, fits)}</span>
+              {t.shared && (
+                <span className="leaf-shared-mark" role="img" aria-label="Shared" title="Shared">
+                  <Share size={14} />
+                </span>
+              )}
               <button
                 type="button"
                 className="leaf-tab-close"

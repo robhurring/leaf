@@ -42,6 +42,7 @@ async fn windows_are_sessions_sharing_an_engine_per_folder() {
             "w1",
             ClientMessage::Hello {
                 protocol: 1,
+                name: None,
                 id: Some("h".into()),
             },
         )
@@ -65,6 +66,7 @@ async fn windows_are_sessions_sharing_an_engine_per_folder() {
             "w2",
             ClientMessage::Hello {
                 protocol: 1,
+                name: None,
                 id: None,
             },
         )
@@ -161,6 +163,7 @@ async fn a_single_file_window_shows_that_file_not_its_folder() {
             "f",
             ClientMessage::Hello {
                 protocol: 1,
+                name: None,
                 id: None,
             },
         )
@@ -235,4 +238,25 @@ async fn a_link_finds_the_window_already_showing_it() {
         windows.find_for(&r.join("docs/guide.md")),
         Some(("folder".to_string(), r.clone()))
     );
+}
+
+#[tokio::test]
+async fn engine_of_and_root_info_name_the_window_s_folder() {
+    let root = tempfile::tempdir().unwrap();
+    let r = root.path().canonicalize().unwrap();
+    std::fs::write(r.join("README.md"), "# hi\n").unwrap();
+    let cfg = tempfile::tempdir().unwrap();
+    let windows = Windows::new(config_for(cfg.path()), Arc::new(|_: &str, _| {}));
+    windows.open("w1", &r).unwrap();
+    windows.open("w2", &r).unwrap();
+    assert!(windows.engine_of("nope").is_none());
+    assert!(windows.root_info("nope").is_none());
+    let (a, b) = (
+        windows.engine_of("w1").unwrap(),
+        windows.engine_of("w2").unwrap(),
+    );
+    assert!(Arc::ptr_eq(&a, &b), "tabs on a folder share its engine");
+    let info = windows.root_info("w1").unwrap();
+    assert_eq!(info.name, r.file_name().unwrap().to_string_lossy());
+    assert_eq!(windows.relay_url(), None);
 }

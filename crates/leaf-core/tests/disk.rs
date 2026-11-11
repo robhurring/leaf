@@ -372,3 +372,56 @@ async fn blame_groups_lines_by_commit_and_marks_uncommitted_ones() {
     );
     assert!(s.blame("../escape.md").await.is_err());
 }
+
+#[tokio::test]
+async fn ignored_files_stay_hidden_whatever_the_case() {
+    let f = fixture();
+    std::fs::write(f.root.join("probe.md"), "x").unwrap();
+    if !f.root.join("PROBE.md").exists() {
+        return; // a case-sensitive volume: other names are other files
+    }
+    let s = src(&f.root);
+    for path in ["BUILD/notes.md", "Build/Notes.md", "NODE_MODULES/x.js"] {
+        assert_eq!(
+            code(s.read(path).await.unwrap_err()),
+            ErrorCode::NotFound,
+            "read {path}"
+        );
+        assert_eq!(
+            code(s.locate(path).await.unwrap_err()),
+            ErrorCode::NotFound,
+            "locate {path}"
+        );
+        assert!(s.hides(path), "hides {path}");
+    }
+    assert_eq!(
+        code(s.list("BUILD").await.unwrap_err()),
+        ErrorCode::NotFound
+    );
+    assert!(s.hides("Node_Modules"));
+    assert!(
+        !s.hides("readme.MD"),
+        "a visible file stays visible in any case"
+    );
+    assert_eq!(s.read("readme.MD").await.unwrap().kind, "markdown");
+}
+
+#[tokio::test]
+async fn a_link_to_an_ignored_file_is_ignored() {
+    let f = fixture();
+    std::os::unix::fs::symlink(f.root.join("build/notes.md"), f.root.join("docs/notes.md"))
+        .unwrap();
+    let s = src(&f.root);
+    assert_eq!(
+        code(s.read("docs/notes.md").await.unwrap_err()),
+        ErrorCode::NotFound
+    );
+    let names: Vec<String> = s
+        .list("docs")
+        .await
+        .unwrap()
+        .into_iter()
+        .map(|e| e.name)
+        .collect();
+    assert!(!names.contains(&"notes.md".to_string()), "{names:?}");
+}

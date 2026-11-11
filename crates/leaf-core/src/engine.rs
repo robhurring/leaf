@@ -26,6 +26,8 @@ pub struct EngineConfig {
     pub mention_url: Option<String>,
     pub topic_url: Option<String>,
     pub max_entries: usize,
+    /// The relay that Share uses (sent in the welcome); none: no Share button.
+    pub relay_url: Option<String>,
     /// Where file bytes are served instead of the source's `/raw/` (the app's own URLs).
     pub raw_base: Option<String>,
 }
@@ -244,6 +246,7 @@ impl Engine {
                         mention_url: self.config.mention_url.clone(),
                         topic_url: self.config.topic_url.clone(),
                         max_entries: Some(self.config.max_entries as u64),
+                        relay_url: self.config.relay_url.clone(),
                     },
                     capabilities: {
                         let mut c = self.source.capabilities();
@@ -259,6 +262,7 @@ impl Engine {
                         color: None,
                     },
                     preferences: Some(self.prefs.load().await),
+                    share: None,
                     in_reply_to: None,
                 }]
             }
@@ -336,6 +340,15 @@ impl Engine {
                 }
                 Err(e) => vec![error_message(e)],
             },
+            // Presence is the relay's and the page's business; the engine has nothing to say.
+            ClientMessage::At { .. }
+            | ClientMessage::Slide { .. }
+            | ClientMessage::Stage { .. }
+            | ClientMessage::Pointer { .. }
+            | ClientMessage::Ink { .. }
+            | ClientMessage::Inking { .. }
+            | ClientMessage::InkUndo { .. }
+            | ClientMessage::InkClear { .. } => Vec::new(),
         };
         for m in &reply {
             tracing::debug!(client = session.0, msg = ?m, "send");

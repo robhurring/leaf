@@ -1,0 +1,43 @@
+{
+  "$ref": "#/definitions/pointer",
+  "definitions": {
+    "pointer": {
+      "type": "object",
+      "properties": {
+        "type": {
+          "type": "string",
+          "const": "pointer"
+        },
+        "pointer": {
+          "type": "object",
+          "properties": {
+            "docPath": {
+              "type": "string"
+            },
+            "blockHash": {
+              "type": "string"
+            },
+            "x": {
+              "type": "number"
+            },
+            "y": {
+              "type": "number"
+            }
+          },
+          "required": [
+            "docPath",
+            "blockHash",
+            "x",
+            "y"
+          ],
+          "additionalProperties": false
+        }
+      },
+      "required": [
+        "type"
+      ],
+      "additionalProperties": false
+    }
+  },
+  "$schema": "http://json-schema.org/draft-07/schema#"
+}

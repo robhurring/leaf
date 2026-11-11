@@ -9,7 +9,7 @@ use std::sync::{Arc, Mutex};
 use leaf_core::config::Config;
 use leaf_core::engine::{Engine, SessionId};
 use leaf_core::watch::Watcher;
-use leaf_protocol::{ClientMessage, ServerMessage};
+use leaf_protocol::{ClientMessage, RootInfo, ServerMessage};
 
 use crate::serve::{Built, build_engine};
 
@@ -212,6 +212,23 @@ impl Windows {
     /// What window `label` opened: a folder, or a file.
     pub fn opened(&self, label: &str) -> Option<PathBuf> {
         self.lock().windows.get(label).map(|(p, _)| p.clone())
+    }
+
+    /// The engine window `label` reads through (tabs on a folder share one).
+    pub fn engine_of(&self, label: &str) -> Option<Arc<Engine>> {
+        let inner = self.lock();
+        let (folder, _) = inner.windows.get(label)?;
+        inner.folders.get(folder).map(|f| f.engine.clone())
+    }
+
+    /// The root window `label` shows, as viewers of a share would see it.
+    pub fn root_info(&self, label: &str) -> Option<RootInfo> {
+        self.engine_of(label).map(|e| e.source().root())
+    }
+
+    /// The relay the app is set to share through, if any.
+    pub fn relay_url(&self) -> Option<String> {
+        self.config.relay_url.clone()
     }
 
     pub fn window_count(&self) -> usize {

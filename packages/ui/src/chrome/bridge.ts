@@ -2,6 +2,7 @@
 // commands its buttons send. The one place the chrome touches Tauri.
 import { invoke } from '@tauri-apps/api/core';
 import { listen } from '@tauri-apps/api/event';
+import type { Peer } from '@leaf/protocol';
 import type { TopBarProps } from '../components/TopBar.js';
 
 export type TabInfo = {
@@ -14,6 +15,8 @@ export type TabInfo = {
   /** The root's file name, for its icon. */
   name: string;
   active: boolean;
+  /** The tab is being shared. */
+  shared: boolean;
 };
 
 /** What the active tab's reader shows in the title row. */
@@ -35,6 +38,16 @@ export type TabState = Pick<
 /** The window a dragged tab is over, and where in its row it would land. */
 export type Hover = { window: string; index: number } | null;
 
+/** What a tab shares: idle when it isn't; `resumable` is a share its closed tab left. */
+export type TabShare = {
+  id: string;
+  webUrl: string;
+  appUrl: string;
+  status: 'idle' | 'live' | 'reconnecting' | 'ended';
+  viewers: Peer[];
+  resumable?: string;
+};
+
 export type Bridge = {
   windowLabel(): string;
   tabs(): Promise<TabInfo[]>;
@@ -51,9 +64,17 @@ export type Bridge = {
   dragEnd(id: string, x: number, y: number): void;
   /** The app's own Appearance menu (Light, Dark, System, Settings…) under the button. */
   appearanceMenu(): void;
+  /** The active tab's share; null when this leaf has no relay, so there is no Share button. */
+  activeShare(): Promise<TabShare | null>;
+  /** The Share button: starts a share, or the app's own menu over a live or resumable one. */
+  shareButton(): void;
   onTabs(fn: () => void): () => void;
   onHover(fn: (h: Hover) => void): () => void;
   onTabState(fn: (s: TabState) => void): () => void;
+  /** A tab of this window's share changed (started, viewers, status, ended). */
+  onShare(fn: (e: { tab: string; share: TabShare }) => void): () => void;
+  /** A link from the Share menu went to the clipboard. */
+  onCopied(fn: () => void): () => void;
 };
 
 const fire = (cmd: string, args?: Record<string, unknown>) =>
@@ -82,7 +103,11 @@ export const tauriBridge: Bridge = {
   dragMove: (id, label, x, y, first) => fire('leaf_drag_move', { tab: id, label, x, y, first }),
   dragEnd: (id, x, y) => fire('leaf_drag_end', { tab: id, x, y }),
   appearanceMenu: () => fire('leaf_appearance_menu'),
+  activeShare: () => invoke<TabShare | null>('leaf_active_share'),
+  shareButton: () => fire('leaf_share_button'),
   onTabs: (fn) => on('leaf://tabs', fn),
   onHover: (fn) => on<Hover>('leaf://hover', fn),
   onTabState: (fn) => on<TabState>(`leaf://tab-state/${tauriBridge.windowLabel()}`, fn),
+  onShare: (fn) => on(`leaf://share/${tauriBridge.windowLabel()}`, fn),
+  onCopied: (fn) => on(`leaf://share-copied/${tauriBridge.windowLabel()}`, () => fn()),
 };

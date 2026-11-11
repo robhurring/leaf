@@ -1,6 +1,6 @@
 use serde::{Deserialize, Serialize};
 
-use crate::Preferences;
+use crate::{PointerAt, Preferences, Slide, StageRef, Stroke};
 
 /// What a client sends. `id` lets the server mark its reply with `inReplyTo`.
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq)]
@@ -9,6 +9,9 @@ pub enum ClientMessage {
     #[serde(rename_all = "camelCase")]
     Hello {
         protocol: u8,
+        /// Who is asking, when the client knows (a viewer of a shared session).
+        #[serde(skip_serializing_if = "Option::is_none")]
+        name: Option<String>,
         #[serde(skip_serializing_if = "Option::is_none")]
         id: Option<String>,
     },
@@ -66,6 +69,51 @@ pub enum ClientMessage {
         #[serde(skip_serializing_if = "Option::is_none")]
         id: Option<String>,
     },
+    /// Where a peer is reading; absent: nowhere.
+    #[serde(rename_all = "camelCase")]
+    At {
+        #[serde(skip_serializing_if = "Option::is_none")]
+        path: Option<String>,
+    },
+    /// The slide the host is on; absent: none.
+    #[serde(rename_all = "camelCase")]
+    Slide {
+        #[serde(skip_serializing_if = "Option::is_none")]
+        slide: Option<Slide>,
+    },
+    /// The block the host has open full size; absent: none.
+    #[serde(rename_all = "camelCase")]
+    Stage {
+        #[serde(skip_serializing_if = "Option::is_none")]
+        stage: Option<StageRef>,
+    },
+    /// Where a peer's pointer is on the open block; absent: it left.
+    #[serde(rename_all = "camelCase")]
+    Pointer {
+        #[serde(skip_serializing_if = "Option::is_none")]
+        pointer: Option<PointerAt>,
+    },
+    /// A stroke the host has drawn.
+    #[serde(rename_all = "camelCase")]
+    Ink { stroke: Stroke },
+    /// A stroke this peer is still drawing: the points added since its last frame for
+    /// this stroke id; the finished stroke follows as `ink`.
+    #[serde(rename_all = "camelCase")]
+    Inking { stroke: Stroke },
+    /// Take back one of this peer's strokes on a block: the one named, or its latest.
+    #[serde(rename_all = "camelCase")]
+    InkUndo {
+        doc_path: String,
+        block_hash: String,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        stroke_id: Option<String>,
+    },
+    /// Wipe this peer's strokes on a block; from the host, everyone's.
+    #[serde(rename_all = "camelCase")]
+    InkClear {
+        doc_path: String,
+        block_hash: String,
+    },
 }
 
 impl ClientMessage {
@@ -80,6 +128,14 @@ impl ClientMessage {
             | ClientMessage::SearchText { id, .. }
             | ClientMessage::Preferences { id, .. }
             | ClientMessage::Blame { id, .. } => id.as_deref(),
+            ClientMessage::At { .. }
+            | ClientMessage::Slide { .. }
+            | ClientMessage::Stage { .. }
+            | ClientMessage::Pointer { .. }
+            | ClientMessage::Ink { .. }
+            | ClientMessage::Inking { .. }
+            | ClientMessage::InkUndo { .. }
+            | ClientMessage::InkClear { .. } => None,
         }
     }
 }
@@ -94,6 +150,14 @@ pub const CLIENT_MESSAGE_TYPES: &[&str] = &[
     "searchText",
     "preferences",
     "blame",
+    "at",
+    "slide",
+    "stage",
+    "pointer",
+    "ink",
+    "inking",
+    "inkUndo",
+    "inkClear",
 ];
 
 pub fn is_known_client_type(t: &str) -> bool {

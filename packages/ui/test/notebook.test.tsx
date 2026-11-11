@@ -141,3 +141,64 @@ describe('notebooks', () => {
     expect(screen.getByText('6', { selector: 'pre' })).toBeTruthy();
   });
 });
+
+describe('an HTML output whose frame answers at once', () => {
+  // Like a live pane: the notebook loads lazily, so React attaches passive effects a
+  // task after the output's frame is on the page, and a frame can report its height
+  // inside that gap. The output must already be listening.
+  it('takes the height its frame reports even before React has run its effects', async () => {
+    const { default: NotebookView } = await import('../src/viewers/notebook/NotebookView.js');
+    const { createRoot } = await import('react-dom/client');
+    const g = globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean };
+    const wasAct = g.IS_REACT_ACT_ENVIRONMENT;
+    g.IS_REACT_ACT_ENVIRONMENT = false;
+    const host = document.body.appendChild(document.createElement('div'));
+    const root = createRoot(host);
+    try {
+      // The frame answers in the microtask after it is put on the page: after React's
+      // commit, before any later task.
+      const answered = new Promise<void>((resolve) => {
+        const watch = new MutationObserver(() => {
+          const f = host.querySelector('iframe.leaf-nb-html') as HTMLIFrameElement | null;
+          if (!f) return;
+          watch.disconnect();
+          window.dispatchEvent(
+            new MessageEvent('message', {
+              data: { leaf: 'nb-html', h: 300 },
+              source: f.contentWindow as Window,
+            }),
+          );
+          resolve();
+        });
+        watch.observe(host, { childList: true, subtree: true });
+      });
+      root.render(
+        <NotebookView
+          file={{
+            type: 'file',
+            path: 'doc.md#ipynb',
+            kind: 'text',
+            lang: 'ipynb',
+            mime: 'text/plain',
+            encoding: 'utf8',
+            url: '',
+            size: 1,
+            mtime: 1,
+          }}
+          content={TEXT}
+          docPath="doc.md"
+          config={{}}
+        />,
+      );
+      await answered;
+      await new Promise((r) => setTimeout(r, 20));
+      expect(host.querySelector<HTMLIFrameElement>('iframe.leaf-nb-html')!.style.height).toBe(
+        '302px',
+      );
+    } finally {
+      root.unmount();
+      host.remove();
+      g.IS_REACT_ACT_ENVIRONMENT = wasAct;
+    }
+  });
+});

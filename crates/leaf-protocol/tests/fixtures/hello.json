@@ -1,5 +1,6 @@
 {
   "type": "hello",
   "protocol": 1,
-  "id": "h"
+  "id": "h",
+  "name": "Rob"
 }

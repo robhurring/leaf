@@ -9,10 +9,15 @@ import {
   FileKind,
   GitInfo,
   Participant,
+  PointerAt,
   Preferences,
   RootInfo,
+  Slide,
+  StageRef,
+  Stroke,
   replyEnvelope,
 } from './common.js';
+import { Peer, ShareInfo } from './relay.js';
 
 export const WelcomeMessage = z.object({
   type: z.literal('welcome'),
@@ -23,6 +28,8 @@ export const WelcomeMessage = z.object({
   participant: Participant,
   /** Present when the server stores preferences; the client then sends its changes back. */
   preferences: Preferences.optional(),
+  /** Present when this session is shared. */
+  share: ShareInfo.optional(),
   ...replyEnvelope,
 });
 export const TreeMessage = z.object({
@@ -82,6 +89,66 @@ export const BlameHunksMessage = z.object({
   repoUrl: z.string().optional(),
   ...replyEnvelope,
 });
+/** Who is in a shared session and what the host is reading. */
+export const PresenceMessage = z.object({
+  type: z.literal('presence'),
+  host: Peer,
+  hostPath: z.string().optional(),
+  viewers: z.array(Peer),
+  /** The receiving viewer's own id. */
+  you: z.string(),
+  /** The slide the host is on. */
+  slide: Slide.optional(),
+  /** The block the host has open full size. */
+  stage: StageRef.optional(),
+  ...replyEnvelope,
+});
+/** Where a peer's pointer is; absent: it left. */
+export const PointerFromMessage = z.object({
+  type: z.literal('pointer'),
+  peer: z.string(),
+  pointer: PointerAt.optional(),
+  ...replyEnvelope,
+});
+/** A stroke a peer finished. */
+export const InkFromMessage = z.object({
+  type: z.literal('ink'),
+  peer: z.string(),
+  stroke: Stroke,
+  ...replyEnvelope,
+});
+/** A stroke a peer is still drawing: the points added since its last frame for this stroke id. */
+export const InkingFromMessage = z.object({
+  type: z.literal('inking'),
+  peer: z.string(),
+  stroke: Stroke,
+  ...replyEnvelope,
+});
+/** A peer took back one of its strokes on a block: the one named, or its latest. */
+export const InkUndoFromMessage = z.object({
+  type: z.literal('inkUndo'),
+  peer: z.string(),
+  docPath: z.string(),
+  blockHash: z.string(),
+  strokeId: z.string().optional(),
+  ...replyEnvelope,
+});
+/** A peer wiped its strokes on a block; from the host, everyone's. */
+export const InkClearFromMessage = z.object({
+  type: z.literal('inkClear'),
+  peer: z.string(),
+  docPath: z.string(),
+  blockHash: z.string(),
+  ...replyEnvelope,
+});
+export const ShareState = z.enum(['live', 'reconnecting', 'ended']);
+export type ShareState = z.infer<typeof ShareState>;
+export const ShareStatusMessage = z.object({
+  type: z.literal('shareStatus'),
+  state: ShareState,
+  reason: z.string().optional(),
+  ...replyEnvelope,
+});
 export const ErrorMessage = z.object({
   type: z.literal('error'),
   code: ErrorCode,
@@ -98,6 +165,13 @@ export const ServerMessage = z.discriminatedUnion('type', [
   MatchesMessage,
   TextMatchesMessage,
   BlameHunksMessage,
+  PresenceMessage,
+  PointerFromMessage,
+  InkFromMessage,
+  InkingFromMessage,
+  InkUndoFromMessage,
+  InkClearFromMessage,
+  ShareStatusMessage,
   ErrorMessage,
 ]);
 
@@ -109,6 +183,13 @@ export type MatchesMessage = z.infer<typeof MatchesMessage>;
 export type TextHit = z.infer<typeof TextHit>;
 export type TextMatchesMessage = z.infer<typeof TextMatchesMessage>;
 export type BlameHunksMessage = z.infer<typeof BlameHunksMessage>;
+export type PresenceMessage = z.infer<typeof PresenceMessage>;
+export type PointerFromMessage = z.infer<typeof PointerFromMessage>;
+export type InkFromMessage = z.infer<typeof InkFromMessage>;
+export type InkingFromMessage = z.infer<typeof InkingFromMessage>;
+export type InkUndoFromMessage = z.infer<typeof InkUndoFromMessage>;
+export type InkClearFromMessage = z.infer<typeof InkClearFromMessage>;
+export type ShareStatusMessage = z.infer<typeof ShareStatusMessage>;
 export type ErrorMessage = z.infer<typeof ErrorMessage>;
 export type ServerMessage = z.infer<typeof ServerMessage>;
 export type ServerMessageType = ServerMessage['type'];

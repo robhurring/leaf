@@ -6,21 +6,19 @@ import './styles/leaf.css';
 import { Reader } from './components/Reader.js';
 import { WsSource } from './source/WsSource.js';
 import { useNotice } from './store/notice.js';
+import { savedShareName, shareBase, wsUrl } from './share/path.js';
 import { TauriSource, inTauri, openExternalLinks, tauriWindowLabel } from './source/TauriSource.js';
-
-export function wsUrl(loc: Location = location): string {
-  const override = new URLSearchParams(loc.search).get('ws');
-  if (override) return override;
-  return `${loc.protocol === 'https:' ? 'wss' : 'ws'}://${loc.host}/ws`;
-}
 
 // A link of a kind not allowed in Settings says so at the foot of the window.
 if (inTauri()) openExternalLinks(document, (scheme) => useNotice.getState().linkRefused(scheme));
 // The app sets the window's label before the UI runs.
-const source = inTauri() ? new TauriSource(tauriWindowLabel()) : new WsSource(wsUrl());
+// A share's page (/s/<id>/…) reads through the relay, under the share's path.
+const source = inTauri()
+  ? new TauriSource(tauriWindowLabel())
+  : new WsSource(wsUrl(location), { name: savedShareName() });
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
-    <Reader source={source} />
+    <Reader source={source} base={inTauri() ? '' : shareBase(location.pathname)} />
   </StrictMode>,
 );
 

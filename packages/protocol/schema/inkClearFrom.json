@@ -1,0 +1,37 @@
+{
+  "$ref": "#/definitions/inkClearFrom",
+  "definitions": {
+    "inkClearFrom": {
+      "type": "object",
+      "properties": {
+        "type": {
+          "type": "string",
+          "const": "inkClear"
+        },
+        "peer": {
+          "type": "string"
+        },
+        "docPath": {
+          "type": "string"
+        },
+        "blockHash": {
+          "type": "string"
+        },
+        "id": {
+          "type": "string"
+        },
+        "inReplyTo": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "type",
+        "peer",
+        "docPath",
+        "blockHash"
+      ],
+      "additionalProperties": false
+    }
+  },
+  "$schema": "http://json-schema.org/draft-07/schema#"
+}

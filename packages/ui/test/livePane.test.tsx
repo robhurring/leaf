@@ -317,3 +317,62 @@ describe('a pane that never starts', () => {
     }
   });
 });
+
+describe('a frame that answers at once', () => {
+  // React attaches passive effects a task after it puts a pane on the page (always so
+  // for a pane that loads lazily). Linux WebKit runs a srcdoc frame's script, and
+  // delivers what it posts, inside that gap; the pane must already be listening.
+  it('is heard even before React has run its effects', async () => {
+    const { LivePane } = await import('../src/viewers/live/LivePane.js');
+    const { createRoot } = await import('react-dom/client');
+    const g = globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean };
+    const wasAct = g.IS_REACT_ACT_ENVIRONMENT;
+    g.IS_REACT_ACT_ENVIRONMENT = false;
+    const host = document.body.appendChild(document.createElement('div'));
+    const root = createRoot(host);
+    try {
+      // The frame answers in the microtask after it is put on the page: after React's
+      // commit, before any later task.
+      const answered = new Promise<void>((resolve) => {
+        const watch = new MutationObserver(() => {
+          const f = host.querySelector('iframe');
+          if (!f) return;
+          watch.disconnect();
+          window.dispatchEvent(
+            new MessageEvent('message', {
+              data: { leaf: 'live', type: 'ready' },
+              source: f.contentWindow as Window,
+            }),
+          );
+          resolve();
+        });
+        watch.observe(host, { childList: true, subtree: true });
+      });
+      root.render(
+        <LivePane
+          file={{
+            type: 'file',
+            path: 'doc.md#canvas',
+            kind: 'text',
+            lang: 'canvas',
+            mime: 'text/plain',
+            encoding: 'utf8',
+            url: '',
+            size: 1,
+            mtime: 1,
+          }}
+          content={SINE}
+          docPath="doc.md"
+          config={{}}
+        />,
+      );
+      await answered;
+      await new Promise((r) => setTimeout(r, 20));
+      expect(host.querySelector<HTMLElement>('.leaf-live')!.dataset.state).not.toBe('loading');
+    } finally {
+      root.unmount();
+      host.remove();
+      g.IS_REACT_ACT_ENVIRONMENT = wasAct;
+    }
+  });
+});

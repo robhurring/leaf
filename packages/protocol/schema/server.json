@@ -49,6 +49,9 @@
                 "maxEntries": {
                   "type": "integer",
                   "exclusiveMinimum": 0
+                },
+                "relayUrl": {
+                  "type": "string"
                 }
               },
               "additionalProperties": false
@@ -160,6 +163,57 @@
                   "type": "boolean"
                 }
               },
+              "additionalProperties": false
+            },
+            "share": {
+              "type": "object",
+              "properties": {
+                "id": {
+                  "type": "string"
+                },
+                "host": {
+                  "type": "object",
+                  "properties": {
+                    "id": {
+                      "type": "string"
+                    },
+                    "name": {
+                      "type": "string"
+                    },
+                    "color": {
+                      "type": "string"
+                    },
+                    "path": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "id",
+                    "name",
+                    "color"
+                  ],
+                  "additionalProperties": false
+                },
+                "mode": {
+                  "type": "string",
+                  "enum": [
+                    "read-only"
+                  ]
+                },
+                "webUrl": {
+                  "type": "string"
+                },
+                "appUrl": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "id",
+                "host",
+                "mode",
+                "webUrl",
+                "appUrl"
+              ],
               "additionalProperties": false
             },
             "id": {
@@ -505,6 +559,328 @@
             "type",
             "path",
             "hunks"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "type": {
+              "type": "string",
+              "const": "presence"
+            },
+            "host": {
+              "$ref": "#/definitions/server/anyOf/0/properties/share/properties/host"
+            },
+            "hostPath": {
+              "type": "string"
+            },
+            "viewers": {
+              "type": "array",
+              "items": {
+                "$ref": "#/definitions/server/anyOf/0/properties/share/properties/host"
+              }
+            },
+            "you": {
+              "type": "string"
+            },
+            "slide": {
+              "type": "object",
+              "properties": {
+                "path": {
+                  "type": "string"
+                },
+                "index": {
+                  "type": "integer",
+                  "minimum": 0
+                }
+              },
+              "required": [
+                "path",
+                "index"
+              ],
+              "additionalProperties": false
+            },
+            "stage": {
+              "type": "object",
+              "properties": {
+                "docPath": {
+                  "type": "string"
+                },
+                "blockHash": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "docPath",
+                "blockHash"
+              ],
+              "additionalProperties": false
+            },
+            "id": {
+              "$ref": "#/definitions/server/anyOf/0/properties/id"
+            },
+            "inReplyTo": {
+              "$ref": "#/definitions/server/anyOf/0/properties/inReplyTo"
+            }
+          },
+          "required": [
+            "type",
+            "host",
+            "viewers",
+            "you"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "type": {
+              "type": "string",
+              "const": "pointer"
+            },
+            "peer": {
+              "type": "string"
+            },
+            "pointer": {
+              "type": "object",
+              "properties": {
+                "docPath": {
+                  "type": "string"
+                },
+                "blockHash": {
+                  "type": "string"
+                },
+                "x": {
+                  "type": "number"
+                },
+                "y": {
+                  "type": "number"
+                }
+              },
+              "required": [
+                "docPath",
+                "blockHash",
+                "x",
+                "y"
+              ],
+              "additionalProperties": false
+            },
+            "id": {
+              "$ref": "#/definitions/server/anyOf/0/properties/id"
+            },
+            "inReplyTo": {
+              "$ref": "#/definitions/server/anyOf/0/properties/inReplyTo"
+            }
+          },
+          "required": [
+            "type",
+            "peer"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "type": {
+              "type": "string",
+              "const": "ink"
+            },
+            "peer": {
+              "type": "string"
+            },
+            "stroke": {
+              "type": "object",
+              "properties": {
+                "id": {
+                  "type": "string"
+                },
+                "docPath": {
+                  "type": "string"
+                },
+                "blockHash": {
+                  "type": "string"
+                },
+                "points": {
+                  "type": "array",
+                  "items": {
+                    "type": "array",
+                    "minItems": 2,
+                    "maxItems": 2,
+                    "items": [
+                      {
+                        "type": "number"
+                      },
+                      {
+                        "type": "number"
+                      }
+                    ]
+                  }
+                },
+                "color": {
+                  "type": "string",
+                  "enum": [
+                    "red",
+                    "green",
+                    "blue"
+                  ]
+                },
+                "width": {
+                  "type": "number"
+                },
+                "sticky": {
+                  "type": "boolean"
+                },
+                "createdAt": {
+                  "type": "number"
+                }
+              },
+              "required": [
+                "id",
+                "docPath",
+                "blockHash",
+                "points",
+                "color",
+                "width",
+                "sticky",
+                "createdAt"
+              ],
+              "additionalProperties": false
+            },
+            "id": {
+              "$ref": "#/definitions/server/anyOf/0/properties/id"
+            },
+            "inReplyTo": {
+              "$ref": "#/definitions/server/anyOf/0/properties/inReplyTo"
+            }
+          },
+          "required": [
+            "type",
+            "peer",
+            "stroke"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "type": {
+              "type": "string",
+              "const": "inking"
+            },
+            "peer": {
+              "type": "string"
+            },
+            "stroke": {
+              "$ref": "#/definitions/server/anyOf/9/properties/stroke"
+            },
+            "id": {
+              "$ref": "#/definitions/server/anyOf/0/properties/id"
+            },
+            "inReplyTo": {
+              "$ref": "#/definitions/server/anyOf/0/properties/inReplyTo"
+            }
+          },
+          "required": [
+            "type",
+            "peer",
+            "stroke"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "type": {
+              "type": "string",
+              "const": "inkUndo"
+            },
+            "peer": {
+              "type": "string"
+            },
+            "docPath": {
+              "type": "string"
+            },
+            "blockHash": {
+              "type": "string"
+            },
+            "strokeId": {
+              "type": "string"
+            },
+            "id": {
+              "$ref": "#/definitions/server/anyOf/0/properties/id"
+            },
+            "inReplyTo": {
+              "$ref": "#/definitions/server/anyOf/0/properties/inReplyTo"
+            }
+          },
+          "required": [
+            "type",
+            "peer",
+            "docPath",
+            "blockHash"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "type": {
+              "type": "string",
+              "const": "inkClear"
+            },
+            "peer": {
+              "type": "string"
+            },
+            "docPath": {
+              "type": "string"
+            },
+            "blockHash": {
+              "type": "string"
+            },
+            "id": {
+              "$ref": "#/definitions/server/anyOf/0/properties/id"
+            },
+            "inReplyTo": {
+              "$ref": "#/definitions/server/anyOf/0/properties/inReplyTo"
+            }
+          },
+          "required": [
+            "type",
+            "peer",
+            "docPath",
+            "blockHash"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "type": {
+              "type": "string",
+              "const": "shareStatus"
+            },
+            "state": {
+              "type": "string",
+              "enum": [
+                "live",
+                "reconnecting",
+                "ended"
+              ]
+            },
+            "reason": {
+              "type": "string"
+            },
+            "id": {
+              "$ref": "#/definitions/server/anyOf/0/properties/id"
+            },
+            "inReplyTo": {
+              "$ref": "#/definitions/server/anyOf/0/properties/inReplyTo"
+            }
+          },
+          "required": [
+            "type",
+            "state"
           ],
           "additionalProperties": false
         },

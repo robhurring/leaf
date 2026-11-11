@@ -13,3 +13,6 @@ target/
 crates/leaf-app/gen/
 .DS_Store
 tsconfig.tsbuildinfo
+
+# Agent worktrees the Claude Code harness creates
+.claude/worktrees/

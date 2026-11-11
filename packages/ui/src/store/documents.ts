@@ -6,17 +6,26 @@ import { applyRemotePreferences, syncPreferences } from './preferences.js';
 import { useAssets } from './assets.js';
 import type {
   BlameHunk,
+  ClientMessage,
   Capabilities,
   Config,
   Entry,
   ErrorMessage,
   FileMessage,
+  PresenceMessage,
   RootInfo,
+  ShareInfo,
+  ShareState,
   TextHit,
   ServerMessage,
 } from '@leaf/protocol';
 import type { DocumentSource, SourceStatus } from '../source/DocumentSource.js';
 import type { Heading } from '../render/headings.js';
+import { NAME_KEY } from '../share/path.js';
+import { liveRole } from '../share/live.js';
+import { refusalOf } from '../share/refusal.js';
+import { usePointers } from '../share/pointers.js';
+import { useAnnotations } from './annotations.js';
 
 export type DocumentsState = {
   status: SourceStatus;
@@ -39,6 +48,13 @@ export type DocumentsState = {
   frontmatter?: Record<string, unknown>;
   /** Git blame per path, once asked for: who last changed each line. */
   blame: Record<string, { hunks: BlameHunk[]; repoUrl?: string }>;
+  /** A relay's share this page views, with who is here and how the share is doing. */
+  share: ShareInfo | null;
+  presence: PresenceMessage | null;
+  shareStatus: ShareState | null;
+  /** Why it ended: the relay's reason (`host`, `host-gone`, `forbidden-path`), `unknown`
+   *  for a share the relay doesn't have, or `full` / `outdated` when it refused the join. */
+  shareReason: string | null;
 
   /** Asks for `path`'s blame; it's asked again whenever the file changes. */
   requestBlame(path: string): void;
@@ -57,6 +73,8 @@ export type DocumentsState = {
   search(q: string): void;
   /** Text search across the folder; under two characters clears the results. */
   searchText(q: string): void;
+  /** A one-way send to the source: no id, no reply to wait for. */
+  tell(msg: ClientMessage): void;
   reset(): void;
 };
 
@@ -87,6 +105,10 @@ const initial = () => ({
   headings: [] as Heading[],
   frontmatter: undefined,
   blame: {} as Record<string, { hunks: BlameHunk[]; repoUrl?: string }>,
+  share: null,
+  presence: null,
+  shareStatus: null,
+  shareReason: null,
 });
 
 const isUnder = (path: string, dir: string) =>
@@ -95,6 +117,14 @@ const parentOf = (path: string) => (path.includes('/') ? path.slice(0, path.last
 
 export const useDocuments = create<DocumentsState>((set, get) => {
   const send = (msg: Parameters<DocumentSource['send']>[0]) => source?.send(msg);
+
+  // A viewer tells the relay it is on `path`. The relay sends the host's kept strokes for
+  // it again, and that is the whole truth: drop what this page had, which may hold strokes
+  // the host undid or cleared while the viewer was elsewhere and so never heard about.
+  const arrive = (path: string) => {
+    useAnnotations.getState().clearRemoteFor(path);
+    send({ type: 'at', path });
+  };
 
   const list = (dir: string) => send({ type: 'list', path: dir || undefined, id: nextId() });
 
@@ -109,7 +139,14 @@ export const useDocuments = create<DocumentsState>((set, get) => {
   const onMessage = (msg: ServerMessage) => {
     switch (msg.type) {
       case 'welcome':
-        set({ root: msg.root, config: msg.config, capabilities: msg.capabilities });
+        set({
+          root: msg.root,
+          config: msg.config,
+          capabilities: msg.capabilities,
+          share: msg.share ?? null,
+          // A (re)join welcome means the share is live, whatever the last socket heard.
+          ...(msg.share ? { shareStatus: 'live' as const, shareReason: null } : {}),
+        });
         // A server that stores preferences wins over localStorage; from then on, changes flow back.
         if (msg.preferences) {
           applyRemotePreferences(msg.preferences);
@@ -124,6 +161,8 @@ export const useDocuments = create<DocumentsState>((set, get) => {
         if (get().path !== null) {
           send({ type: 'subscribe', path: get().path! });
           read(get().path!);
+          // A reconnect gives the relay a fresh viewer id; tell it where this one is.
+          if (liveRole(get().share) === 'viewer') arrive(get().path!);
         }
         return;
       case 'tree':
@@ -184,7 +223,41 @@ export const useDocuments = create<DocumentsState>((set, get) => {
         // Only the newest query's answer counts; older replies can arrive late.
         if (msg.q === textQuery) set({ textHits: msg.hits });
         return;
+      case 'presence':
+        set({ presence: msg });
+        useAnnotations.getState().dropDraftsExcept(['host', ...msg.viewers.map((v) => v.id)]);
+        // The relay names a viewer who came without one; keep that name for next time.
+        try {
+          const me = msg.viewers.find((v) => v.id === msg.you);
+          if (me && !localStorage.getItem(NAME_KEY)) localStorage.setItem(NAME_KEY, me.name);
+        } catch {
+          // No storage: the relay names us again next time.
+        }
+        return;
+      // The other peers' pointers and ink on the canvases of a share.
+      case 'pointer':
+        usePointers.getState().move(msg.peer, msg.pointer);
+        return;
+      case 'inking':
+        useAnnotations.getState().draft(msg.peer, msg.stroke);
+        return;
+      case 'ink':
+        useAnnotations.getState().addRemote({ ...msg.stroke, peer: msg.peer });
+        return;
+      case 'inkUndo':
+        useAnnotations.getState().undoRemote(msg.docPath, msg.blockHash, msg.peer, msg.strokeId);
+        return;
+      case 'inkClear':
+        useAnnotations.getState().clearRemote(msg.docPath, msg.blockHash, msg.peer);
+        return;
+      case 'shareStatus':
+        set({ shareStatus: msg.state, shareReason: msg.reason ?? null });
+        return;
       case 'error': {
+        // The relay turned this page away (full, or another protocol): the share is over
+        // for it, and the reason picks the notice.
+        const refusal = refusalOf(msg);
+        if (refusal) set({ shareStatus: 'ended', shareReason: refusal });
         if (msg.path) {
           pendingReads.delete(msg.path);
           set((s) => {
@@ -244,7 +317,11 @@ export const useDocuments = create<DocumentsState>((set, get) => {
       const prev = get().path;
       if (prev !== null && prev !== path) send({ type: 'unsubscribe', path: prev });
       set({ path, ...(prev !== path ? { headings: [], frontmatter: undefined } : {}) });
-      if (prev !== path) send({ type: 'subscribe', path });
+      if (prev !== path) {
+        send({ type: 'subscribe', path });
+        // A viewer of a share tells the relay where it is, so the others can see.
+        if (liveRole(get().share) === 'viewer') arrive(path);
+      }
       read(path);
     },
 
@@ -305,12 +382,17 @@ export const useDocuments = create<DocumentsState>((set, get) => {
       send({ type: 'searchText', q, id: nextId() });
     },
 
+    tell(msg) {
+      send(msg);
+    },
+
     reset() {
       pendingReads.clear();
       expandingAll = false;
       stopPreferenceSync?.();
       stopPreferenceSync = null;
       source = null;
+      usePointers.getState().clear();
       set(initial());
     },
   };

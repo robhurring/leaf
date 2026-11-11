@@ -45,7 +45,17 @@ Put `<!--table:filter-->` on the line before a table to give it a filter; it's a
 | `queue` | @rob   | **healthy** |
 | `web`   | @jules | down        |
 
-A fenced ` ```csv ` block becomes a table you can sort and filter:
+`<!--table:sort-->` makes the headers sort the rows, and `<!--table:filter sort-->` gives both. Cells keep their links:
+
+<!--table:filter sort-->
+
+| Level | Item                                                           | Zone          |
+| ----: | :------------------------------------------------------------- | :------------ |
+|    21 | [Spellcrafter Wand](https://www.wowhead.com/forever/item=6677) | Redridge      |
+|     9 | [Oakthrush Staff](https://www.wowhead.com/forever/item=15397)  | Darkshore     |
+|    13 | Greater Magic Wand                                             | Auction House |
+
+A fenced ` ```csv ` block becomes a table you can sort and filter; a cell that is a URL or a `[text](url)` link renders as a link:
 
 ```csv
 name,kind,size

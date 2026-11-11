@@ -7,7 +7,8 @@
   },
   "config": {
     "plantumlUrl": "http://localhost:8180",
-    "maxEntries": 5000
+    "maxEntries": 5000,
+    "relayUrl": "https://relay.test"
   },
   "capabilities": {
     "watch": true,
@@ -18,6 +19,17 @@
   "participant": {
     "id": "local",
     "name": "You"
+  },
+  "share": {
+    "id": "brisk-otter-lantern",
+    "host": {
+      "id": "h",
+      "name": "Rob",
+      "color": "#3b82f6"
+    },
+    "mode": "read-only",
+    "webUrl": "https://relay.test/s/brisk-otter-lantern",
+    "appUrl": "leaf://relay/relay.test/s/brisk-otter-lantern"
   },
   "preferences": {},
   "inReplyTo": "h"

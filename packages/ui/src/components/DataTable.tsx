@@ -1,21 +1,28 @@
 // A sortable, filterable table. Used by the csv viewer now and by interactive
-// markdown tables later.
+// markdown tables later. Cells may hold markdown links or bare URLs; they render as links.
 import { useMemo, useState } from 'react';
 import { Search } from '../icons/index.js';
+import { cellParts, cellText, compareCells } from '../render/cells.js';
 
 export type DataTableProps = { header: string[]; rows: string[][]; caption?: string };
 type Sort = { col: number; dir: 'asc' | 'desc' } | null;
 
-const num = (s: string) => {
-  const n = Number(s.replace(/[,\s]/g, ''));
-  return s.trim() !== '' && Number.isFinite(n) ? n : null;
-};
-
-export function compareCells(a: string, b: string): number {
-  const na = num(a);
-  const nb = num(b);
-  if (na !== null && nb !== null) return na - nb;
-  return a.localeCompare(b, undefined, { numeric: true, sensitivity: 'base' });
+function Cell({ value }: { value: string }) {
+  const parts = cellParts(value);
+  if (parts.length === 1 && !parts[0].href) return <>{value}</>;
+  return (
+    <>
+      {parts.map((p, i) =>
+        p.href ? (
+          <a key={i} href={p.href} target="_blank" rel="noreferrer">
+            {p.text}
+          </a>
+        ) : (
+          <span key={i}>{p.text}</span>
+        ),
+      )}
+    </>
+  );
 }
 
 export function DataTable({ header, rows, caption }: DataTableProps) {
@@ -24,7 +31,9 @@ export function DataTable({ header, rows, caption }: DataTableProps) {
 
   const visible = useMemo(() => {
     const needle = q.trim().toLowerCase();
-    let out = needle ? rows.filter((r) => r.some((c) => c.toLowerCase().includes(needle))) : rows;
+    let out = needle
+      ? rows.filter((r) => r.some((c) => cellText(c).toLowerCase().includes(needle)))
+      : rows;
     if (sort) {
       const { col, dir } = sort;
       out = [...out].sort(
@@ -84,7 +93,9 @@ export function DataTable({ header, rows, caption }: DataTableProps) {
           {visible.map((r, ri) => (
             <tr key={ri}>
               {header.map((_, ci) => (
-                <td key={ci}>{r[ci] ?? ''}</td>
+                <td key={ci}>
+                  <Cell value={r[ci] ?? ''} />
+                </td>
               ))}
             </tr>
           ))}

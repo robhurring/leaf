@@ -7,24 +7,27 @@ usage:
   leaf serve [path]           a server that stays up, logs on the terminal (ctrl-c stops): for remote
                               machines (--host 0.0.0.0) and development
   leaf share [path]           share with others (not yet available)
+  leaf relay start            run a relay for sharing (Procfile: web: leaf relay start); listens on
+                              $PORT (default 4321), all interfaces; LEAF_RELAY_GRACE, LEAF_RELAY_SECRET
   leaf 'leaf://open/<path>'   open a link: an absolute path (or ~/…), then any of ?root=<folder> (show the
                               file inside that folder), &browser, #heading. bin/install registers the
                               installed app, so `open 'leaf://…'` and links in other apps land here; a
                               window already showing the file or its folder comes forward instead.
-  leaf --help | --version
+  leaf -h | --help, -V | --version
 
 flags (each overrides the matching variable in the environment or .env):
   -l, --log-level <level>     LOG_LEVEL           error|warn|info|debug (default warn; info shows the traffic,
                                                   debug every payload). Given on the command line, leaf stays
                                                   in the foreground with the logs on the terminal.
   --log-format <fmt>          LOG_FORMAT          text|json (default text)
-  --port <n>                  PORT                bind port (default 4321, falls back to a free one; 0 = random)
-  --host <addr>               HOST                bind address (default 127.0.0.1)
-  --open / --no-open          LEAF_OPEN           open a browser tab (open --browser: on; serve: off unless set)
+  -p, --port <n>              PORT                bind port (default 4321, falls back to a free one; 0 = random)
+  -H, --host <addr>           HOST                bind address (default 127.0.0.1)
+  -o, --open / --no-open      LEAF_OPEN           open a browser tab (open --browser: on; serve: off unless set)
   --idle-timeout <dur>        LEAF_IDLE_TIMEOUT   exit after this long with no client connected
                                                   (open: 10s; serve: never; 0 = never)
   --plantuml-url <url>        PLANTUML_URL        PlantUML server; unset shows plantuml source
-  --ignore <patterns>         LEAF_IGNORE         comma-separated gitignore patterns always skipped
+  -r, --relay-url <url>       LEAF_RELAY_URL      the relay that Share uses (unset: no Share button)
+  -i, --ignore <patterns>     LEAF_IGNORE         comma-separated gitignore patterns always skipped
   --gitignore / --no-gitignore  LEAF_GITIGNORE    honor .gitignore files (default on)
   --config-dir <dir>          LEAF_CONFIG_DIR     preferences, instance list, logs (default ~/.config/leaf)
 

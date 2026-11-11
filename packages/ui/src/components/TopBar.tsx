@@ -1,11 +1,15 @@
 import {
+  Check,
   Chevron,
   LeafMark,
   Numbering,
   Outline as OutlineIcon,
   Search,
+  Share,
   Sidebar,
 } from '../icons/index.js';
+import type { Peer } from '@leaf/protocol';
+import { AvatarStack } from '../share/Avatar.js';
 import type { SourceStatus } from '../source/DocumentSource.js';
 import type { Appearance, Theme } from '../store/ui.js';
 import { ConnectionDot } from './ConnectionDot.js';
@@ -42,11 +46,42 @@ export type TopBarProps = {
   onAppearanceMenu?(): void;
   /** Extra handlers for the leaf mark: in a one-tab window it drags the tab. */
   brand?: React.HTMLAttributes<HTMLButtonElement>;
+  /** The active tab's share, for the Share button; absent when this leaf can't share. */
+  share?: ShareState;
+  onShare?(): void;
   canGoBack?: boolean;
   canGoForward?: boolean;
   onBack?(): void;
   onForward?(): void;
 };
+
+/** What the Share button shows: the tab's share, and a check just after a link is copied. */
+export type ShareState = {
+  status: 'idle' | 'live' | 'reconnecting' | 'ended';
+  viewers: Peer[];
+  copied?: boolean;
+};
+
+/** The Share button: sharing the active tab, who is watching, and a check after a copy.
+ * The app answers the click itself (a share, or its own menu). */
+export function ShareButton({ share, onClick }: { share: ShareState; onClick(): void }) {
+  const sharing = share.status === 'live' || share.status === 'reconnecting';
+  const label = sharing ? 'Sharing' : 'Share this tab';
+  return (
+    <button
+      type="button"
+      className="leaf-ib leaf-share-button"
+      aria-label={label}
+      title={share.status === 'reconnecting' ? 'Reconnecting to the relay…' : label}
+      data-status={share.status === 'reconnecting' ? 'reconnecting' : undefined}
+      data-copied={share.copied ? 'true' : undefined}
+      onClick={onClick}
+    >
+      {share.copied ? <Check /> : <Share />}
+      {sharing && <AvatarStack peers={share.viewers} />}
+    </button>
+  );
+}
 
 export function TopBar(p: TopBarProps) {
   // In the app window the bar moves the window. Tauri drags only from the element pressed,
@@ -108,6 +143,7 @@ export function TopBar(p: TopBarProps) {
             </IconButton>
           </>
         )}
+        {p.share && p.onShare && <ShareButton share={p.share} onClick={p.onShare} />}
         <ThemeMenu
           native={p.native}
           theme={p.theme}

@@ -1,6 +1,7 @@
 // Anything the browser cannot display: an icon, the file's facts, a download link.
 import type { Viewer, ViewerProps } from '../types.js';
 import { formatBytes, formatDate } from './format.js';
+import { useRawUrl } from '../fileUrl.js';
 
 /** Text the source sent no content for: over the size it sends inline. */
 function tooLarge(file: ViewerProps['file']): boolean {
@@ -21,6 +22,7 @@ export function LoadFailed({ name }: { name: string }) {
 
 export function BinaryCard({ file }: ViewerProps) {
   const name = file.path.slice(file.path.lastIndexOf('/') + 1);
+  const href = useRawUrl(file);
   return (
     <div className="leaf-binary" role="group" aria-label={name}>
       <svg
@@ -46,7 +48,7 @@ export function BinaryCard({ file }: ViewerProps) {
         <dt>Modified</dt>
         <dd>{formatDate(file.mtime)}</dd>
       </dl>
-      <a className="leaf-button" href={file.url} download={name}>
+      <a className="leaf-button" href={href} download={name}>
         Download
       </a>
     </div>

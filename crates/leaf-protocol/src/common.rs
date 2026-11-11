@@ -53,6 +53,9 @@ pub struct Config {
     pub topic_url: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub max_entries: Option<u64>,
+    /// The sharing relay this app talks to (its base URL).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub relay_url: Option<String>,
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq)]
@@ -259,4 +262,46 @@ mod tests {
             serde_json::json!({ "openIn": "tab", "reopenTabs": false })
         );
     }
+}
+
+/// One freehand mark drawn over a block of a document.
+#[derive(Serialize, Deserialize, Clone, Debug, PartialEq)]
+#[serde(rename_all = "camelCase")]
+pub struct Stroke {
+    pub id: String,
+    pub doc_path: String,
+    pub block_hash: String,
+    pub points: Vec<[f64; 2]>,
+    /// "red", "green" or "blue".
+    pub color: String,
+    pub width: f64,
+    /// Kept until cleared, rather than fading away.
+    pub sticky: bool,
+    pub created_at: f64,
+}
+
+/// A slide of a deck: the document and the slide's position in it.
+#[derive(Serialize, Deserialize, Clone, Debug, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct Slide {
+    pub path: String,
+    pub index: u32,
+}
+
+/// A block (a diagram, say) opened full size, named by its document and content hash.
+#[derive(Serialize, Deserialize, Clone, Debug, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct StageRef {
+    pub doc_path: String,
+    pub block_hash: String,
+}
+
+/// Where a pointer is on a block, in the block's own coordinates.
+#[derive(Serialize, Deserialize, Clone, Debug, PartialEq)]
+#[serde(rename_all = "camelCase")]
+pub struct PointerAt {
+    pub doc_path: String,
+    pub block_hash: String,
+    pub x: f64,
+    pub y: f64,
 }

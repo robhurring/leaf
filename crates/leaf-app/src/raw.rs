@@ -57,10 +57,28 @@ fn text(status: u16, body: &str) -> Reply {
     }
 }
 
-/// The bytes of `abs` (the file at `path`), or the part `range` asks for.
-pub async fn respond(abs: &Path, path: &str, range: Option<&str>) -> Reply {
+/// A file opened for a reply: the status and headers to send, and `file` positioned at
+/// the first byte to send with `remaining` bytes to go. No file for a 404, 416 or 500.
+pub struct Opened {
+    pub status: u16,
+    pub headers: Vec<(&'static str, String)>,
+    pub file: Option<tokio::fs::File>,
+    pub remaining: u64,
+}
+
+fn failed(status: u16) -> Opened {
+    Opened {
+        status,
+        headers: vec![("Content-Type", "text/plain".into())],
+        file: None,
+        remaining: 0,
+    }
+}
+
+/// Opens `abs` (the file at `path`) for the whole of it or the part `range` asks for.
+pub async fn open(abs: &Path, path: &str, range: Option<&str>) -> Opened {
     let Ok(mut file) = tokio::fs::File::open(abs).await else {
-        return text(404, "not found");
+        return failed(404);
     };
     let len = file.metadata().await.map(|m| m.len()).unwrap_or(0);
     let mime = leaf_core::classify::classify(Path::new(path)).mime;
@@ -70,8 +88,8 @@ pub async fn respond(abs: &Path, path: &str, range: Option<&str>) -> Reply {
         ("Cache-Control", "no-cache".into()),
         ("Accept-Ranges", "bytes".into()),
     ];
-    if crate::http::scriptable(&mime) {
-        headers.push(("Content-Security-Policy", "sandbox".into()));
+    if !crate::http::inert(&mime) {
+        headers.push(("Content-Security-Policy", crate::http::RAW_SANDBOX.into()));
     }
     let (status, start, end) = match range.map(|r| parse_range(r, len)) {
         Some(Some((s, e))) => {
@@ -80,19 +98,47 @@ pub async fn respond(abs: &Path, path: &str, range: Option<&str>) -> Reply {
         }
         Some(None) => {
             headers.push(("Content-Range", format!("bytes */{len}")));
-            return Reply {
+            return Opened {
                 status: 416,
                 headers,
-                body: vec![],
+                file: None,
+                remaining: 0,
             };
         }
         None => (200, 0, len.saturating_sub(1)),
     };
-    let want = if len == 0 { 0 } else { end - start + 1 };
-    let mut body = Vec::with_capacity(want as usize);
-    if file.seek(std::io::SeekFrom::Start(start)).await.is_err()
-        || file.take(want).read_to_end(&mut body).await.is_err()
-    {
+    if file.seek(std::io::SeekFrom::Start(start)).await.is_err() {
+        return failed(500);
+    }
+    Opened {
+        status,
+        headers,
+        file: Some(file),
+        remaining: if len == 0 { 0 } else { end - start + 1 },
+    }
+}
+
+/// The bytes of `abs` (the file at `path`), or the part `range` asks for.
+pub async fn respond(abs: &Path, path: &str, range: Option<&str>) -> Reply {
+    let Opened {
+        status,
+        mut headers,
+        file,
+        remaining,
+    } = open(abs, path, range).await;
+    let Some(file) = file else {
+        return match status {
+            404 => text(404, "not found"),
+            416 => Reply {
+                status,
+                headers,
+                body: vec![],
+            },
+            _ => text(500, "could not read the file"),
+        };
+    };
+    let mut body = Vec::with_capacity(remaining as usize);
+    if file.take(remaining).read_to_end(&mut body).await.is_err() {
         return text(500, "could not read the file");
     }
     headers.push(("Content-Length", body.len().to_string()));
@@ -148,6 +194,50 @@ mod tests {
             respond(&dir.path().join("gone"), "gone", None).await.status,
             404
         );
+    }
+
+    #[tokio::test]
+    async fn only_inert_types_go_unsandboxed() {
+        let dir = tempfile::tempdir().unwrap();
+        let csp = |name: &'static str| {
+            let abs = dir.path().join(name);
+            std::fs::write(&abs, b"x").unwrap();
+            async move {
+                let reply = respond(&abs, name, None).await;
+                reply
+                    .headers
+                    .iter()
+                    .find(|(k, _)| *k == "Content-Security-Policy")
+                    .map(|(_, v)| v.clone())
+            }
+        };
+        for name in ["a.png", "clip.mp4", "paper.pdf", "notes.txt"] {
+            assert_eq!(csp(name).await, None, "{name}");
+        }
+        for name in ["page.html", "pic.svg", "feed.rss", "data.xml", "blob.bin"] {
+            assert_eq!(
+                csp(name).await.as_deref(),
+                Some("sandbox; default-src 'none'"),
+                "{name}"
+            );
+        }
+    }
+
+    #[tokio::test]
+    async fn open_positions_the_file_for_a_range() {
+        let dir = tempfile::tempdir().unwrap();
+        let abs = dir.path().join("clip.mp4");
+        std::fs::write(&abs, b"0123456789").unwrap();
+        let o = open(&abs, "clip.mp4", Some("bytes=2-4")).await;
+        assert_eq!((o.status, o.remaining), (206, 3));
+        let mut got = Vec::new();
+        o.file
+            .expect("an open file")
+            .take(o.remaining)
+            .read_to_end(&mut got)
+            .await
+            .unwrap();
+        assert_eq!(got, b"234");
     }
 
     #[test]

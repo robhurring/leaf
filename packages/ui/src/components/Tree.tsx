@@ -5,6 +5,8 @@ import { Chevron, CollapseAll, ExpandAll, File as FileIcon, Search } from '../ic
 import { iconFor } from './fileIcon.js';
 import { inTab, openInNewTab, treeMenu } from '../source/TauriSource.js';
 import { useDocuments } from '../store/documents.js';
+import { AvatarStack } from '../share/Avatar.js';
+import { peersOn, peersUnder } from '../share/presence.js';
 import { IconButton } from './IconButton.js';
 import type { Presence } from '../usePresence.js';
 
@@ -28,6 +30,7 @@ export function Tree({ onOpen: openHere, state = 'open' }: Props) {
   const expanded = useDocuments((s) => s.expanded);
   const current = useDocuments((s) => s.path);
   const matches = useDocuments((s) => s.matches);
+  const presence = useDocuments((s) => s.presence);
   const capped = useDocuments((s) => s.expandAllCapped);
   const { expand, collapse, expandAll, collapseAll, search } = useDocuments.getState();
   const [q, setQ] = useState('');
@@ -80,6 +83,17 @@ export function Tree({ onOpen: openHere, state = 'open' }: Props) {
           )}
           <Icon size={15} className="leaf-row-icon" />
           <span className="leaf-row-name">{e.name}</span>
+          <span className="leaf-row-peers">
+            <AvatarStack
+              peers={
+                e.kind === 'dir'
+                  ? isOpen
+                    ? []
+                    : peersUnder(presence, e.path)
+                  : peersOn(presence, e.path)
+              }
+            />
+          </span>
         </button>
         {e.kind === 'dir' && isOpen && tree[e.path] && (
           <ul role="group">{tree[e.path]!.map((c) => row(c, depth + 1))}</ul>

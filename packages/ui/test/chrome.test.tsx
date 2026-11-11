@@ -1,13 +1,14 @@
 import { describe, it, expect, vi } from 'vitest';
 import { act, fireEvent, render, screen, within } from '@testing-library/react';
 import { Chrome } from '../src/chrome/Chrome.js';
-import type { Bridge, Hover, TabInfo, TabState } from '../src/chrome/bridge.js';
+import type { Bridge, Hover, TabInfo, TabShare, TabState } from '../src/chrome/bridge.js';
 
 const tab = (
   id: string,
   path: string,
   active = false,
   kind: 'folder' | 'file' = 'folder',
+  shared = false,
 ): TabInfo => ({
   id,
   label: path,
@@ -15,7 +16,10 @@ const tab = (
   kind,
   name: path.split('/').pop()!,
   active,
+  shared,
 });
+
+const IDLE: TabShare = { id: '', webUrl: '', appUrl: '', status: 'idle', viewers: [] };
 
 function fakeBridge(tabs: TabInfo[], shown: TabState | null = null) {
   const subs = {
@@ -35,9 +39,13 @@ function fakeBridge(tabs: TabInfo[], shown: TabState | null = null) {
     dragMove: vi.fn(),
     dragEnd: vi.fn(),
     appearanceMenu: vi.fn(),
+    activeShare: vi.fn(async (): Promise<TabShare | null> => IDLE),
+    shareButton: vi.fn(),
     onTabs: (fn) => (subs.tabs.push(fn), () => {}),
     onHover: (fn) => (subs.hover.push(fn), () => {}),
     onTabState: (fn) => (subs.state.push(fn), () => {}),
+    onShare: () => () => {},
+    onCopied: () => () => {},
   };
   return { bridge, subs };
 }
@@ -159,5 +167,16 @@ describe('the window chrome', () => {
     const { bridge } = await mount([tab('t1', '~/a', true), tab('t2', '~/b')]);
     fireEvent.click(screen.getByRole('button', { name: /leaf/ }));
     expect(bridge.command).toHaveBeenCalledWith('scrollTop');
+  });
+
+  it('a_shared_tab_wears_the_mark', async () => {
+    await mount([tab('t1', '~/a', true), tab('t2', '~/b', false, 'folder', true)]);
+    expect(within(screen.getByRole('tablist')).getAllByLabelText('Shared')).toHaveLength(1);
+    expect(screen.getAllByLabelText('Shared')).toHaveLength(1);
+  });
+
+  it('the title row has no shared mark of its own: the Share button carries the state', async () => {
+    await mount([tab('t1', '~/a', true, 'folder', true)]);
+    expect(within(screen.getByRole('banner')).queryByLabelText('Shared')).toBeNull();
   });
 });

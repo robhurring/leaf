@@ -1,9 +1,19 @@
 import { z } from 'zod';
-import { PROTOCOL_VERSION, Preferences, envelope } from './common.js';
+import {
+  PROTOCOL_VERSION,
+  PointerAt,
+  Preferences,
+  Slide,
+  StageRef,
+  Stroke,
+  envelope,
+} from './common.js';
 
 export const HelloMessage = z.object({
   type: z.literal('hello'),
   protocol: z.literal(PROTOCOL_VERSION),
+  /** Who is asking, when the client knows (a viewer of a shared session). */
+  name: z.string().optional(),
   ...envelope,
 });
 export const ListMessage = z.object({
@@ -51,6 +61,43 @@ export const PreferencesMessage = z.object({
   ...envelope,
 });
 
+/** Where a peer is reading; absent: nowhere. */
+export const AtMessage = z.object({ type: z.literal('at'), path: z.string().optional() });
+
+/** The slide the host is on; absent: none. */
+export const SlideMessage = z.object({ type: z.literal('slide'), slide: Slide.optional() });
+
+/** The block the host has open full size; absent: none. */
+export const StageMessage = z.object({ type: z.literal('stage'), stage: StageRef.optional() });
+
+/** Where a peer's pointer is on the open block; absent: it left. */
+export const PointerMessage = z.object({
+  type: z.literal('pointer'),
+  pointer: PointerAt.optional(),
+});
+
+/** A stroke this peer has finished. */
+export const InkMessage = z.object({ type: z.literal('ink'), stroke: Stroke });
+
+/** A stroke this peer is still drawing: `points` are those added since its last `inking`
+ * frame (its `id` ties the frames together); the finished stroke follows as `ink`. */
+export const InkingMessage = z.object({ type: z.literal('inking'), stroke: Stroke });
+
+/** Take back one of this peer's strokes on a block: the one named, or its latest. */
+export const InkUndoMessage = z.object({
+  type: z.literal('inkUndo'),
+  docPath: z.string(),
+  blockHash: z.string(),
+  strokeId: z.string().optional(),
+});
+
+/** Wipe this peer's strokes on a block; from the host, everyone's. */
+export const InkClearMessage = z.object({
+  type: z.literal('inkClear'),
+  docPath: z.string(),
+  blockHash: z.string(),
+});
+
 export const ClientMessage = z.discriminatedUnion('type', [
   HelloMessage,
   ListMessage,
@@ -61,6 +108,14 @@ export const ClientMessage = z.discriminatedUnion('type', [
   SearchTextMessage,
   PreferencesMessage,
   BlameMessage,
+  AtMessage,
+  SlideMessage,
+  StageMessage,
+  PointerMessage,
+  InkMessage,
+  InkingMessage,
+  InkUndoMessage,
+  InkClearMessage,
 ]);
 
 export type HelloMessage = z.infer<typeof HelloMessage>;
@@ -72,6 +127,14 @@ export type SearchMessage = z.infer<typeof SearchMessage>;
 export type SearchTextMessage = z.infer<typeof SearchTextMessage>;
 export type PreferencesMessage = z.infer<typeof PreferencesMessage>;
 export type BlameMessage = z.infer<typeof BlameMessage>;
+export type AtMessage = z.infer<typeof AtMessage>;
+export type SlideMessage = z.infer<typeof SlideMessage>;
+export type StageMessage = z.infer<typeof StageMessage>;
+export type PointerMessage = z.infer<typeof PointerMessage>;
+export type InkMessage = z.infer<typeof InkMessage>;
+export type InkingMessage = z.infer<typeof InkingMessage>;
+export type InkUndoMessage = z.infer<typeof InkUndoMessage>;
+export type InkClearMessage = z.infer<typeof InkClearMessage>;
 export type ClientMessage = z.infer<typeof ClientMessage>;
 export type ClientMessageType = ClientMessage['type'];
 

@@ -1,0 +1,777 @@
+// The host side of sharing: a real relay in-process, a disk engine over a temp folder,
+// and a `HostLink` sharing it; viewers are plain WebSockets and HTTP.
+use std::collections::HashMap;
+use std::sync::Arc;
+use std::time::Duration;
+
+use futures_util::{SinkExt, StreamExt};
+use leaf_app::relay::{self, RelayOptions, RelayStarted};
+use leaf_app::sharing::{self, HostOptions, LinkStatus, ShareHandle};
+use leaf_core::engine::Engine;
+use leaf_protocol::relay::ShareMode;
+use leaf_protocol::{ClientMessage, PROTOCOL_VERSION, PointerAt, ServerMessage, Slide, Stroke};
+use serde_json::{Value, json};
+use tokio::io::{AsyncReadExt, AsyncWriteExt};
+use tokio_tungstenite::tungstenite::Message;
+
+type Ws =
+    tokio_tungstenite::WebSocketStream<tokio_tungstenite::MaybeTlsStream<tokio::net::TcpStream>>;
+
+const SECRET: &[u8] = b"test secret";
+const WAIT: Duration = Duration::from_secs(5);
+
+fn options(port: u16) -> RelayOptions {
+    RelayOptions {
+        grace: Duration::from_millis(500),
+        ..RelayOptions::new("127.0.0.1".into(), port, SECRET.to_vec())
+    }
+}
+
+/// A shared folder: README.md, pics/a.png (10 bytes), and secret.md hidden by .gitignore.
+struct Folder {
+    engine: Arc<Engine>,
+    cfg: tempfile::TempDir,
+    root: tempfile::TempDir,
+    _watcher: Option<leaf_core::watch::Watcher>,
+}
+
+impl Folder {
+    fn root(&self) -> std::path::PathBuf {
+        self.root.path().canonicalize().unwrap()
+    }
+}
+
+fn folder() -> Folder {
+    opened_on("")
+}
+
+/// The same folder, with the tab opened on `target` inside it ("" for the folder itself).
+fn opened_on(target: &str) -> Folder {
+    let root = tempfile::tempdir().unwrap();
+    let r = root.path().canonicalize().unwrap();
+    std::fs::write(r.join("README.md"), "# shared\n").unwrap();
+    std::fs::write(r.join("a.mmd"), "graph TD; A-->B\n").unwrap();
+    std::fs::create_dir_all(r.join("pics")).unwrap();
+    std::fs::write(r.join("pics/a.png"), b"0123456789").unwrap();
+    std::fs::write(r.join(".gitignore"), "secret.md\n").unwrap();
+    std::fs::write(r.join("secret.md"), "# secret\n").unwrap();
+    let cfg = tempfile::tempdir().unwrap();
+    let env: HashMap<String, String> = [(
+        "LEAF_CONFIG_DIR".to_string(),
+        cfg.path().to_string_lossy().into_owned(),
+    )]
+    .into();
+    let argv = vec![
+        "open".to_string(),
+        r.join(target).to_string_lossy().into_owned(),
+    ];
+    let config = leaf_core::config::load(&argv, &env, &r).unwrap().0;
+    let built = leaf_app::serve::build_engine(&config, Some(leaf_app::raw::RAW_BASE)).unwrap();
+    Folder {
+        engine: built.engine,
+        cfg,
+        root,
+        _watcher: built.watcher,
+    }
+}
+
+fn host_options(url: &str, engine: &Arc<Engine>) -> HostOptions {
+    HostOptions {
+        relay_url: url.to_string(),
+        name: "Rob".into(),
+        root: engine.source().root(),
+        mode: ShareMode::ReadOnly,
+        engine: engine.clone(),
+        resume: None,
+    }
+}
+
+async fn share(r: &RelayStarted, engine: &Arc<Engine>) -> ShareHandle {
+    tokio::time::timeout(WAIT, sharing::start(host_options(&r.url, engine)))
+        .await
+        .expect("start in time")
+        .expect("shared")
+}
+
+async fn connect(port: u16, path: &str) -> Ws {
+    let (ws, _) = tokio_tungstenite::connect_async(format!("ws://127.0.0.1:{port}{path}"))
+        .await
+        .expect("websocket connects");
+    ws
+}
+
+/// The next text frame as JSON, or None when the socket closes.
+async fn next_json(ws: &mut Ws) -> Option<Value> {
+    loop {
+        match tokio::time::timeout(WAIT, ws.next()).await {
+            Ok(Some(Ok(Message::Text(t)))) => return serde_json::from_str(&t).ok(),
+            Ok(Some(Ok(Message::Close(_)))) | Ok(None) | Ok(Some(Err(_))) => return None,
+            Ok(Some(Ok(_))) => continue,
+            Err(_) => panic!("timed out waiting for a message"),
+        }
+    }
+}
+
+/// The next frame of type `ty`, skipping presence and the like.
+async fn next_of(ws: &mut Ws, ty: &str) -> Value {
+    loop {
+        let v = next_json(ws)
+            .await
+            .unwrap_or_else(|| panic!("closed before {ty}"));
+        if v["type"] == ty {
+            return v;
+        }
+    }
+}
+
+async fn send(ws: &mut Ws, v: Value) {
+    ws.send(Message::Text(v.to_string().into())).await.unwrap();
+}
+
+/// A viewer of `id` that has said hello and got its welcome.
+async fn viewer(port: u16, id: &str) -> (Ws, Value) {
+    let mut ws = connect(port, &format!("/s/{id}/ws")).await;
+    let hello = ClientMessage::Hello {
+        protocol: PROTOCOL_VERSION,
+        name: Some("Ann".into()),
+        id: Some("h".into()),
+    };
+    send(&mut ws, serde_json::to_value(&hello).unwrap()).await;
+    let welcome = next_of(&mut ws, "welcome").await;
+    (ws, welcome)
+}
+
+async fn read(ws: &mut Ws, path: &str, id: &str) -> Value {
+    send(ws, json!({"type": "read", "path": path, "id": id})).await;
+    loop {
+        let v = next_json(ws).await.expect("a reply");
+        if v["inReplyTo"] == id {
+            return v;
+        }
+    }
+}
+
+/// Waits for the socket to close, skipping anything before.
+async fn closes(ws: &mut Ws) {
+    loop {
+        match tokio::time::timeout(WAIT, ws.next()).await {
+            Ok(Some(Ok(Message::Close(_)))) | Ok(None) | Ok(Some(Err(_))) => return,
+            Ok(Some(Ok(_))) => continue,
+            Err(_) => panic!("socket did not close"),
+        }
+    }
+}
+
+/// GET over plain HTTP/1.1; the body de-chunked when it came chunked.
+async fn http_get(port: u16, path: &str, extra: &str) -> (u16, Vec<u8>) {
+    let mut s = tokio::net::TcpStream::connect(("127.0.0.1", port))
+        .await
+        .unwrap();
+    s.write_all(
+        format!(
+            "GET {path} HTTP/1.1\r\nHost: 127.0.0.1:{port}\r\n{extra}Connection: close\r\n\r\n"
+        )
+        .as_bytes(),
+    )
+    .await
+    .unwrap();
+    let mut buf = Vec::new();
+    tokio::time::timeout(WAIT, s.read_to_end(&mut buf))
+        .await
+        .expect("response in time")
+        .unwrap();
+    let split = buf.windows(4).position(|w| w == b"\r\n\r\n").unwrap();
+    let head = String::from_utf8_lossy(&buf[..split]).to_ascii_lowercase();
+    let status = head.split_whitespace().nth(1).unwrap().parse().unwrap();
+    let mut body = buf[split + 4..].to_vec();
+    if head.contains("transfer-encoding: chunked") {
+        let mut out = Vec::new();
+        let mut rest = body.as_slice();
+        loop {
+            let eol = rest.windows(2).position(|w| w == b"\r\n").unwrap();
+            let n = usize::from_str_radix(std::str::from_utf8(&rest[..eol]).unwrap().trim(), 16)
+                .unwrap();
+            if n == 0 {
+                break;
+            }
+            out.extend_from_slice(&rest[eol + 2..eol + 2 + n]);
+            rest = &rest[eol + 2 + n + 2..];
+        }
+        body = out;
+    }
+    (status, body)
+}
+
+async fn status_becomes(handle: &ShareHandle, want: LinkStatus, within: Duration) {
+    let mut rx = handle.status.clone();
+    tokio::time::timeout(within, rx.wait_for(|s| *s == want))
+        .await
+        .unwrap_or_else(|_| panic!("status never became {want:?}"))
+        .expect("status channel open");
+}
+
+#[tokio::test]
+async fn a_shared_folder_is_readable_by_a_viewer() {
+    let f = folder();
+    let r = relay::start(options(0)).await.unwrap();
+    let h = share(&r, &f.engine).await;
+    assert_eq!(*h.status.borrow(), LinkStatus::Connected);
+    assert!(
+        h.web_url.ends_with(&format!("/s/{}", h.id)),
+        "{}",
+        h.web_url
+    );
+
+    let (mut v, welcome) = viewer(r.port, &h.id).await;
+    assert_eq!(welcome["share"]["host"]["name"], "Rob");
+    assert!(welcome.get("preferences").is_none(), "{welcome}");
+    assert_eq!(welcome["root"]["name"], f.engine.source().root().name);
+
+    let file = read(&mut v, "README.md", "r1").await;
+    assert_eq!(file["type"], "file", "{file}");
+    assert_eq!(file["content"], "# shared\n");
+
+    let mut viewers = h.viewers.clone();
+    tokio::time::timeout(
+        WAIT,
+        viewers.wait_for(|p| p.iter().any(|p| p.name == "Ann")),
+    )
+    .await
+    .expect("the viewer shows")
+    .unwrap();
+    h.end();
+    r.stop().await;
+}
+
+#[tokio::test]
+async fn viewer_preferences_are_dropped() {
+    let f = folder();
+    let r = relay::start(options(0)).await.unwrap();
+    let h = share(&r, &f.engine).await;
+    let (mut v, _) = viewer(r.port, &h.id).await;
+
+    send(
+        &mut v,
+        json!({"type": "preferences", "preferences": {"textPct": 300}, "id": "p"}),
+    )
+    .await;
+    // Nothing answers the preferences, not even an error.
+    let quiet = tokio::time::timeout(Duration::from_millis(300), async {
+        loop {
+            let v = next_json(&mut v).await;
+            match v {
+                Some(m) if m["type"] == "presence" || m["type"] == "shareStatus" => continue,
+                other => return other,
+            }
+        }
+    })
+    .await;
+    assert!(quiet.is_err(), "a reply came: {quiet:?}");
+    assert!(
+        !f.cfg.path().join("preferences.json").exists(),
+        "the host's preferences were written"
+    );
+
+    // Anything else that isn't a read is refused out loud.
+    send(
+        &mut v,
+        json!({"type": "write", "path": "README.md", "id": "w"}),
+    )
+    .await;
+    let refused = loop {
+        let m = next_json(&mut v).await.expect("a reply");
+        if m["inReplyTo"] == "w" {
+            break m;
+        }
+    };
+    assert_eq!(refused["type"], "error");
+    assert_eq!(refused["code"], "bad_request");
+    assert_eq!(refused["message"], "not allowed in a shared tab");
+    // ...and the viewer stays.
+    assert_eq!(read(&mut v, "README.md", "r").await["type"], "file");
+    h.end();
+    r.stop().await;
+}
+
+#[tokio::test]
+async fn a_path_outside_the_share_ends_the_viewer() {
+    let f = folder();
+    let r = relay::start(options(0)).await.unwrap();
+    let h = share(&r, &f.engine).await;
+    let before = f.engine.client_count();
+
+    let (mut v, _) = viewer(r.port, &h.id).await;
+    let err = read(&mut v, "../x.md", "x").await;
+    assert_eq!(err["type"], "error", "{err}");
+    let ended = next_of(&mut v, "shareStatus").await;
+    assert_eq!(ended["state"], "ended");
+    assert_eq!(ended["reason"], "forbidden-path");
+    closes(&mut v).await;
+    // Its engine session is gone too.
+    tokio::time::timeout(WAIT, async {
+        while f.engine.client_count() != before {
+            tokio::time::sleep(Duration::from_millis(20)).await;
+        }
+    })
+    .await
+    .expect("viewer session disconnected");
+    h.end();
+    r.stop().await;
+}
+
+#[tokio::test]
+async fn an_ignored_path_is_not_found_and_the_viewer_stays() {
+    let f = folder();
+    let r = relay::start(options(0)).await.unwrap();
+    let h = share(&r, &f.engine).await;
+
+    // SECRET.md: the same ignored file on a case-insensitive volume (macOS's default).
+    let insensitive = f.root().join("SECRET.md").exists();
+    let paths: &[&str] = if insensitive {
+        &["secret.md", "SECRET.md"]
+    } else {
+        &["secret.md"]
+    };
+    let (mut v, _) = viewer(r.port, &h.id).await;
+    for (i, &path) in paths.iter().enumerate() {
+        send(
+            &mut v,
+            json!({"type": "read", "path": path, "id": format!("r{i}")}),
+        )
+        .await;
+        send(
+            &mut v,
+            json!({"type": "subscribe", "path": path, "id": format!("s{i}")}),
+        )
+        .await;
+    }
+    // A read after them all: everything before its reply is what the ignored asks got.
+    send(
+        &mut v,
+        json!({"type": "read", "path": "README.md", "id": "after"}),
+    )
+    .await;
+    let mut errors = 0;
+    loop {
+        let m = next_json(&mut v).await.expect("the viewer stays connected");
+        assert_ne!(
+            m["type"], "shareStatus",
+            "an ignored path must not end the viewer: {m}"
+        );
+        assert!(
+            !m.to_string().contains("# secret"),
+            "the ignored file's content must never arrive: {m}"
+        );
+        if m["inReplyTo"] == "after" {
+            assert_eq!(m["type"], "file", "{m}");
+            break;
+        }
+        if m["type"] == "error" {
+            assert_eq!(m["code"], "not_found", "{m}");
+            errors += 1;
+        }
+    }
+    assert_eq!(
+        errors,
+        paths.len() * 2,
+        "each read and subscribe is refused"
+    );
+    h.end();
+    r.stop().await;
+}
+
+#[tokio::test]
+async fn a_tab_on_one_file_shares_that_file_and_nothing_beside_it() {
+    let f = opened_on("README.md");
+    let r = relay::start(options(0)).await.unwrap();
+    let h = share(&r, &f.engine).await;
+    let (mut v, _) = viewer(r.port, &h.id).await;
+
+    assert_eq!(read(&mut v, "README.md", "own").await["type"], "file");
+    send(&mut v, json!({"type": "list", "id": "root"})).await;
+    let tree = next_of(&mut v, "tree").await;
+    let names: Vec<&str> = tree["entries"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|e| e["path"].as_str().unwrap())
+        .collect();
+    assert_eq!(names, ["README.md"]);
+
+    let asks = [
+        json!({"type": "read", "path": "a.mmd", "id": "q0"}),
+        json!({"type": "read", "path": "./a.mmd", "id": "q1"}),
+        json!({"type": "list", "path": "pics", "id": "q2"}),
+        json!({"type": "subscribe", "path": "a.mmd", "id": "q3"}),
+    ];
+    for ask in asks {
+        let id = ask["id"].clone();
+        send(&mut v, ask).await;
+        let m = next_json(&mut v).await.expect("a reply");
+        assert_eq!((&m["type"], &m["inReplyTo"]), (&json!("error"), &id), "{m}");
+    }
+    let raw = |name: &str| format!("/s/{}/raw/{name}", h.id);
+    assert_eq!(http_get(r.port, &raw("README.md"), "").await.0, 200);
+    assert_eq!(http_get(r.port, &raw("a.mmd"), "").await.0, 404);
+    assert_eq!(http_get(r.port, &raw("pics/a.png"), "").await.0, 404);
+    h.end();
+    r.stop().await;
+}
+
+#[tokio::test]
+async fn an_overlong_path_is_refused_before_anything_walks_it() {
+    let f = folder();
+    let r = relay::start(options(0)).await.unwrap();
+    let h = share(&r, &f.engine).await;
+    let (mut v, _) = viewer(r.port, &h.id).await;
+    let deep = "a/".repeat(200);
+    let long = "a".repeat(2000);
+    for (i, path) in [deep.as_str(), long.as_str()].into_iter().enumerate() {
+        send(
+            &mut v,
+            json!({"type": "read", "path": path, "id": format!("p{i}")}),
+        )
+        .await;
+        let m = next_json(&mut v).await.expect("a reply");
+        assert_eq!(
+            (&m["type"], &m["code"]),
+            (&json!("error"), &json!("bad_request")),
+            "{m}"
+        );
+    }
+    assert_eq!(read(&mut v, "README.md", "after").await["type"], "file");
+    assert_eq!(
+        http_get(r.port, &format!("/s/{}/raw/{deep}x.png", h.id), "")
+            .await
+            .0,
+        404
+    );
+    h.end();
+    r.stop().await;
+}
+
+#[tokio::test]
+async fn a_raw_fetch_streams_from_disk() {
+    let f = folder();
+    let r = relay::start(options(0)).await.unwrap();
+    let h = share(&r, &f.engine).await;
+    let raw = format!("/s/{}/raw/pics/a.png", h.id);
+
+    let (status, body) = http_get(r.port, &raw, "").await;
+    assert_eq!((status, body.as_slice()), (200, &b"0123456789"[..]));
+    let (status, body) = http_get(r.port, &raw, "Range: bytes=8-\r\n").await;
+    assert_eq!((status, body.as_slice()), (206, &b"89"[..]));
+    for name in ["secret.md", "SECRET.md", "Secret.MD"] {
+        let (status, _) = http_get(r.port, &format!("/s/{}/raw/{name}", h.id), "").await;
+        assert_eq!(status, 404, "ignored files aren't served: {name}");
+    }
+    let (status, _) = http_get(r.port, &format!("/s/{}/raw/nope.png", h.id), "").await;
+    assert_eq!(status, 404);
+    h.end();
+    r.stop().await;
+}
+
+#[tokio::test]
+async fn two_shares_on_one_engine_are_independent() {
+    let f = folder();
+    let r = relay::start(options(0)).await.unwrap();
+    let a = share(&r, &f.engine).await;
+    let b = share(&r, &f.engine).await;
+    assert_ne!(a.id, b.id);
+
+    let (mut va, _) = viewer(r.port, &a.id).await;
+    let (mut vb, _) = viewer(r.port, &b.id).await;
+    assert_eq!(read(&mut va, "README.md", "a1").await["type"], "file");
+
+    a.end();
+    let ended = next_of(&mut va, "shareStatus").await;
+    assert_eq!(ended["state"], "ended");
+    closes(&mut va).await;
+    status_becomes(&a, LinkStatus::Ended, WAIT).await;
+
+    assert_eq!(read(&mut vb, "README.md", "b1").await["type"], "file");
+    b.end();
+    r.stop().await;
+}
+
+#[tokio::test]
+async fn the_host_reconnects_and_keeps_its_id() {
+    let f = folder();
+    let r = relay::start(options(0)).await.unwrap();
+    let port = r.port;
+    let url = r.url.clone();
+    let h = share(&r, &f.engine).await;
+    let before = f.engine.client_count();
+    // A viewer that won't come back: the restarted relay forgets it.
+    let (_gone, _) = viewer(r.port, &h.id).await;
+    let mut viewers = h.viewers.clone();
+    tokio::time::timeout(WAIT, viewers.wait_for(|p| p.len() == 1))
+        .await
+        .expect("the viewer shows")
+        .unwrap();
+    assert_eq!(f.engine.client_count(), before + 1);
+
+    r.stop().await;
+    status_becomes(&h, LinkStatus::Reconnecting, WAIT).await;
+    let r = relay::start(options(port)).await.unwrap();
+    assert_eq!(r.url, url);
+    status_becomes(&h, LinkStatus::Connected, Duration::from_secs(3)).await;
+    tokio::time::timeout(WAIT, viewers.wait_for(|p| p.is_empty()))
+        .await
+        .expect("the forgotten viewer is dropped")
+        .unwrap();
+    assert_eq!(
+        f.engine.client_count(),
+        before,
+        "its engine session is gone"
+    );
+
+    assert!(h.presence_capable(), "still capable after the resume");
+    let (mut v, welcome) = viewer(r.port, &h.id).await;
+    assert_eq!(welcome["share"]["id"], h.id);
+    assert_eq!(read(&mut v, "README.md", "r").await["type"], "file");
+    h.end();
+    r.stop().await;
+}
+
+#[tokio::test]
+async fn the_host_hears_where_viewers_are_and_viewers_hear_the_hosts_slide() {
+    let f = folder();
+    let r = relay::start(options(0)).await.unwrap();
+    let h = share(&r, &f.engine).await;
+    assert!(h.presence_capable());
+    let mut inbox = h.take_inbox().expect("inbox once");
+    assert!(h.take_inbox().is_none());
+    let (mut v, _) = viewer(r.port, &h.id).await;
+    send(&mut v, json!({"type": "at", "path": "README.md"})).await;
+    let you = tokio::time::timeout(WAIT, async {
+        loop {
+            if let Some(ServerMessage::Presence { viewers, you, .. }) = inbox.recv().await
+                && viewers
+                    .iter()
+                    .any(|p| p.path.as_deref() == Some("README.md"))
+            {
+                break you;
+            }
+        }
+    })
+    .await
+    .expect("the host hears the viewer's path");
+    assert_eq!(you, "host");
+    h.set_slide(Some(Slide {
+        path: "deck.md".into(),
+        index: 2,
+    }));
+    let m = tokio::time::timeout(WAIT, async {
+        loop {
+            let m = next_of(&mut v, "presence").await;
+            if m["slide"]["index"] == 2 {
+                break m;
+            }
+        }
+    })
+    .await
+    .expect("the viewer hears the slide");
+    assert_eq!(m["slide"]["path"], "deck.md");
+    h.end();
+    // The share is over: the tab's last word is a presence with nobody in it.
+    let last = tokio::time::timeout(WAIT, async {
+        let mut last = None;
+        while let Some(m) = inbox.recv().await {
+            last = Some(m);
+        }
+        last
+    })
+    .await
+    .expect("the inbox closes when the share ends");
+    match last {
+        Some(ServerMessage::Presence { viewers, you, .. }) => {
+            assert!(viewers.is_empty(), "{viewers:?}");
+            assert_eq!(you, "host");
+        }
+        other => panic!("the last message is an empty presence, not {other:?}"),
+    }
+    r.stop().await;
+}
+
+fn stroke_sticky(id: &str, doc: &str, block: &str) -> Stroke {
+    Stroke {
+        id: id.into(),
+        doc_path: doc.into(),
+        block_hash: block.into(),
+        points: vec![[0.0, 0.0], [1.0, 1.0]],
+        color: "red".into(),
+        width: 4.0,
+        sticky: true,
+        created_at: 1.0,
+    }
+}
+
+#[tokio::test]
+async fn pointers_and_ink_cross_the_relay_both_ways() {
+    let f = folder();
+    let r = relay::start(options(0)).await.unwrap();
+    let h = share(&r, &f.engine).await;
+    assert!(h.presence_capable());
+    let mut inbox = h.take_inbox().expect("inbox once");
+    let (mut v, _) = viewer(r.port, &h.id).await;
+    // Pointers and ink reach whoever is on the same document: both are on a.mmd.
+    h.set_path(Some("a.mmd".into()));
+    send(&mut v, json!({"type": "at", "path": "a.mmd"})).await;
+    tokio::time::timeout(WAIT, async {
+        loop {
+            if let Some(ServerMessage::Presence { viewers, .. }) = inbox.recv().await
+                && viewers.iter().any(|p| p.path.as_deref() == Some("a.mmd"))
+            {
+                break;
+            }
+        }
+    })
+    .await
+    .expect("the host hears the viewer arrive");
+    h.pointer(Some(PointerAt {
+        doc_path: "a.mmd".into(),
+        block_hash: "h".into(),
+        x: 1.0,
+        y: 2.0,
+    }));
+    let m = next_of(&mut v, "pointer").await;
+    assert_eq!(m["peer"], "host");
+    assert_eq!(m["pointer"]["x"], 1.0);
+    h.ink(stroke_sticky("host:1", "a.mmd", "h"));
+    let m = next_of(&mut v, "ink").await;
+    assert_eq!(m["stroke"]["id"], "host:1");
+    send(
+        &mut v,
+        json!({"type":"pointer","pointer":{"docPath":"a.mmd","blockHash":"h","x":3.0,"y":4.0}}),
+    )
+    .await;
+    let (peer, p) = tokio::time::timeout(WAIT, async {
+        loop {
+            if let Some(ServerMessage::Pointer {
+                peer,
+                pointer: Some(p),
+                ..
+            }) = inbox.recv().await
+            {
+                break (peer, p);
+            }
+        }
+    })
+    .await
+    .expect("the host hears the viewer's pointer");
+    assert_eq!(p.x, 3.0);
+    assert_ne!(peer, "host");
+    h.end();
+    r.stop().await;
+}
+
+/// Makes `root` a git repository with everything in it committed.
+fn commit_all(root: &std::path::Path) {
+    let git = |args: &[&str]| {
+        let st = std::process::Command::new("git")
+            .args(args)
+            .current_dir(root)
+            .output()
+            .expect("git runs");
+        assert!(
+            st.status.success(),
+            "git {args:?}: {}",
+            String::from_utf8_lossy(&st.stderr)
+        );
+    };
+    let who = ["-c", "user.name=Test", "-c", "user.email=t@example.com"];
+    git(&["init", "-q"]);
+    git(&[&who[..], &["add", "."]].concat());
+    git(&[&who[..], &["commit", "-q", "-m", "docs: first"]].concat());
+}
+
+#[tokio::test]
+async fn git_history_stays_with_the_host_unless_the_host_includes_it() {
+    let f = folder();
+    commit_all(&f.root());
+    let r = relay::start(options(0)).await.unwrap();
+    let h = share(&r, &f.engine).await;
+    let (mut v, _) = viewer(r.port, &h.id).await;
+
+    // Off by default: the file comes without its last commit, and blame is refused.
+    let file = read(&mut v, "README.md", "r1").await;
+    assert_eq!(file["type"], "file", "{file}");
+    assert!(file.get("git").is_none(), "{file}");
+    send(
+        &mut v,
+        json!({"type": "blame", "path": "README.md", "id": "b1"}),
+    )
+    .await;
+    let blame = loop {
+        let m = next_json(&mut v).await.expect("a reply");
+        if m["inReplyTo"] == "b1" {
+            break m;
+        }
+    };
+    assert_eq!(blame["type"], "error", "{blame}");
+
+    // The host includes it: the same reads now carry the commit and the hunks.
+    h.set_git(true);
+    let file = read(&mut v, "README.md", "r2").await;
+    assert!(file["git"]["commit"].is_string(), "{file}");
+    send(
+        &mut v,
+        json!({"type": "blame", "path": "README.md", "id": "b2"}),
+    )
+    .await;
+    let blame = loop {
+        let m = next_json(&mut v).await.expect("a reply");
+        if m["inReplyTo"] == "b2" {
+            break m;
+        }
+    };
+    assert_eq!(blame["type"], "blameHunks", "{blame}");
+    assert!(!blame["hunks"].as_array().unwrap().is_empty(), "{blame}");
+    h.end();
+    r.stop().await;
+}
+
+#[test]
+fn allowed_lists_what_read_only_permits() {
+    for ty in [
+        "hello",
+        "list",
+        "read",
+        "subscribe",
+        "unsubscribe",
+        "search",
+        "searchText",
+        "blame",
+    ] {
+        assert!(
+            sharing::allowed(&json!({"type": ty}), ShareMode::ReadOnly),
+            "{ty}"
+        );
+    }
+    for ty in ["preferences", "write", "nonsense"] {
+        assert!(
+            !sharing::allowed(&json!({"type": ty}), ShareMode::ReadOnly),
+            "{ty}"
+        );
+    }
+    assert!(!sharing::allowed(&json!({}), ShareMode::ReadOnly));
+}
+
+#[test]
+fn the_host_is_named_from_the_environment() {
+    let env = |pairs: &[(&str, &str)]| -> HashMap<String, String> {
+        pairs
+            .iter()
+            .map(|(k, v)| (k.to_string(), v.to_string()))
+            .collect()
+    };
+    assert_eq!(
+        sharing::host_name(&env(&[("LEAF_NAME", "Rob"), ("USER", "rob")])),
+        "Rob"
+    );
+    assert_eq!(sharing::host_name(&env(&[("USER", "rob")])), "rob");
+    assert_eq!(sharing::host_name(&env(&[("LOGNAME", "rh")])), "rh");
+    assert_eq!(sharing::host_name(&env(&[("LEAF_NAME", "  ")])), "Host");
+    assert_eq!(sharing::host_name(&env(&[])), "Host");
+}

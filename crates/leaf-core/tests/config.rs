@@ -163,3 +163,79 @@ fn errors_name_the_variable_or_the_path() {
     let err = load(&args(&["open", ".", "--bogus"]), &env(&[]), d.path()).unwrap_err();
     assert!(err.to_string().contains("--bogus"), "{err}");
 }
+
+#[test]
+fn relay_url_comes_from_env_flag_or_nothing() {
+    let d = tmp();
+    let (c, _) = load(&args(&["open", "."]), &env(&[]), d.path()).unwrap();
+    assert_eq!(c.relay_url, None);
+    let (c, _) = load(
+        &args(&["open", "."]),
+        &env(&[("LEAF_RELAY_URL", "https://r.test/")]),
+        d.path(),
+    )
+    .unwrap();
+    assert_eq!(c.relay_url.as_deref(), Some("https://r.test"));
+    let (c, _) = load(
+        &args(&["open", ".", "--relay-url", "https://flag.test"]),
+        &env(&[("LEAF_RELAY_URL", "https://r.test/")]),
+        d.path(),
+    )
+    .unwrap();
+    assert_eq!(c.relay_url.as_deref(), Some("https://flag.test"));
+}
+
+#[test]
+fn relay_start_is_a_command() {
+    let d = tmp();
+    let (c, _) = load(&args(&["relay", "start"]), &env(&[]), d.path()).unwrap();
+    assert_eq!(c.command, Command::Relay);
+    assert_eq!(c.host, "0.0.0.0");
+    let (c, _) = load(
+        &args(&["relay", "start"]),
+        &env(&[("HOST", "127.0.0.1")]),
+        d.path(),
+    )
+    .unwrap();
+    assert_eq!(c.host, "127.0.0.1");
+    for bad in [&["relay"][..], &["relay", "stop"][..]] {
+        let e = load(&args(bad), &env(&[]), d.path()).unwrap_err();
+        assert!(e.0.contains("relay takes one subcommand"), "{e}");
+    }
+    // `leaf relay --help` is a request for the help page, not a missing subcommand.
+    for help in [&["relay", "--help"][..], &["relay", "-h"][..]] {
+        let (c, _) = load(&args(help), &env(&[]), d.path()).unwrap();
+        assert_eq!(c.command, Command::Help, "{help:?}");
+    }
+}
+
+#[test]
+fn common_flags_have_short_forms() {
+    let d = tmp();
+    let (c, _) = load(
+        &args(&[
+            "serve",
+            ".",
+            "-p",
+            "7001",
+            "-H",
+            "0.0.0.0",
+            "-o",
+            "-i",
+            "*.log",
+            "-r",
+            "https://short.test",
+            "-l",
+            "debug",
+        ]),
+        &env(&[]),
+        d.path(),
+    )
+    .unwrap();
+    assert_eq!(c.port, 7001);
+    assert_eq!(c.host, "0.0.0.0");
+    assert!(c.open);
+    assert_eq!(c.ignore, vec!["*.log"]);
+    assert_eq!(c.relay_url.as_deref(), Some("https://short.test"));
+    assert_eq!(c.log_level, LogLevel::Debug);
+}

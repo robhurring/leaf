@@ -14,12 +14,13 @@ use tauri::{AppHandle, Emitter, EventTarget, Manager, Webview, Wry};
 
 use leaf_app::launch::{link_in_argv, parse_deep_link};
 use leaf_app::raw;
+use leaf_app::recent_shares::RecentShares;
 use leaf_app::tabs::Tabs;
 use leaf_app::welcome;
 use leaf_app::window::Windows;
 use leaf_app::window_state::{Geometry, Rect, WindowStates};
 
-use crate::tabbed;
+use crate::{tabbed, tabbed_share};
 
 pub(crate) struct AppState {
     /// One core session per tab, keyed by the tab's id.
@@ -41,6 +42,17 @@ pub(crate) struct AppState {
     pub(crate) hovered: Mutex<Option<(String, usize)>>,
     /// The window focused last, where new tabs go.
     pub(crate) front: Mutex<Option<String>>,
+    /// The live share of each shared tab, keyed by the tab's label.
+    pub(crate) shares: Mutex<HashMap<String, leaf_app::sharing::ShareHandle>>,
+    /// Shares whose tab closed, resumable for the relay's grace period.
+    pub(crate) recent: Mutex<RecentShares>,
+    /// The name viewers see for this host.
+    pub(crate) name: String,
+    /// The system clipboard, held once a Share link is copied (on X11 the copy lives
+    /// only as long as this does).
+    pub(crate) clipboard: Mutex<Option<arboard::Clipboard>>,
+    /// Each tab's open slide and canvas, by tab label, for a share that starts later.
+    pub(crate) presentation: Mutex<HashMap<String, crate::tabbed_share::Presentation>>,
 }
 
 /// How long after the last move or resize the window places are written.
@@ -124,7 +136,7 @@ fn record_place(window: &tauri::Window) {
     });
 }
 
-fn emit(app: &AppHandle, label: &str, msg: ServerMessage) {
+pub(crate) fn emit(app: &AppHandle, label: &str, msg: ServerMessage) {
     let target = EventTarget::AnyLabel {
         label: label.to_string(),
     };
@@ -140,6 +152,10 @@ async fn leaf_send(
     app: AppHandle,
     state: tauri::State<'_, AppState>,
 ) -> Result<(), String> {
+    if tabbed_share::host_bound(&msg) {
+        tabbed_share::from_host_tab(&app, &window, msg);
+        return Ok(());
+    }
     for reply in state.windows.send(&window, msg).await {
         emit(&app, &window, reply);
     }
@@ -323,7 +339,7 @@ pub(crate) fn build_menu(app: &AppHandle) -> tauri::Result<Menu<Wry>> {
 
 /// Menu items name commands; the focused window runs them.
 fn on_menu(app: &AppHandle, id: &str) {
-    if tabbed::on_menu(app, id) {
+    if tabbed::on_menu(app, id) || tabbed_share::on_menu(app, id) {
         return;
     }
     if id == "open-folder" {
@@ -551,7 +567,9 @@ pub fn run(config: Config, link: Option<String>, welcome: bool) -> i32 {
             tabbed::leaf_open_in_new_tab,
             tabbed::leaf_tree_menu,
             tabbed::leaf_window_tabs,
-            tabbed::leaf_appearance_menu
+            tabbed::leaf_appearance_menu,
+            tabbed_share::leaf_active_share,
+            tabbed_share::leaf_share_button
         ])
         .menu(build_menu)
         .on_menu_event(|app, event| on_menu(app, event.id().as_ref()))
@@ -602,6 +620,11 @@ pub fn run(config: Config, link: Option<String>, welcome: bool) -> i32 {
                 tab_state: Mutex::new(HashMap::new()),
                 hovered: Mutex::new(None),
                 front: Mutex::new(None),
+                shares: Mutex::new(HashMap::new()),
+                recent: Mutex::new(RecentShares::new(std::time::Duration::from_secs(60))),
+                name: leaf_app::sharing::host_name(&std::env::vars().collect()),
+                clipboard: Mutex::new(None),
+                presentation: Mutex::new(HashMap::new()),
             });
             // The tabs open at the last quit come back first (when asked for), then
             // what this launch names opens among them.

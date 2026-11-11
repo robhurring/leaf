@@ -9,6 +9,8 @@ import { Markdown } from '../../components/Markdown.js';
 import { renderDeck, type Deck } from './marp.js';
 import { OVERVIEW_CSS, mountDeck, showSlide } from './slides.js';
 import { deckChannel, openSpeaker } from './sync.js';
+import { useDocuments } from '../../store/documents.js';
+import { liveRole } from '../../share/live.js';
 
 type Props = ViewerProps & { mode: 'full' | 'mini' };
 
@@ -71,6 +73,25 @@ export default function DeckView(props: Props) {
     };
   }, [mode, docPath]);
   useEffect(() => channel.current?.post(at), [at]);
+
+  // In a share, the host's slide goes to the viewers, and a viewer on the host's deck
+  // follows it. Presenting stays local. Depending on the values, not the message, a
+  // repeat of the same slide doesn't pull back a viewer who has moved on.
+  const role = useDocuments((s) => liveRole(s.share));
+  const tell = useDocuments((s) => s.tell);
+  const slide = useDocuments((s) => s.presence?.slide);
+  const follow = mode === 'full' && role === 'viewer' && slide?.path === docPath;
+  useEffect(() => {
+    if (follow && slide) setIndex(slide.index);
+  }, [follow, slide?.index]); // eslint-disable-line react-hooks/exhaustive-deps
+  const hosting = mode === 'full' && role === 'host';
+  useEffect(() => {
+    if (hosting) tell({ type: 'slide', slide: { path: docPath, index: at } });
+  }, [hosting, docPath, at, tell]);
+  useEffect(() => {
+    if (!hosting) return;
+    return () => tell({ type: 'slide' });
+  }, [hosting, tell]);
   useLayoutEffect(() => {
     if (!overview || !deck || !grid.current) return;
     const { root, stop } = mountDeck(grid.current, deck, docPath, resolve, OVERVIEW_CSS);

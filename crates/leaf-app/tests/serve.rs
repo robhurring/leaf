@@ -65,7 +65,10 @@ async fn http_routes_embedded_ui_and_raw_confinement() {
 
     let (status, h, _) = get(t.port, "/raw/logo.svg", "127.0.0.1").await;
     assert_eq!(status, 200);
-    assert_eq!(header(&h, "content-security-policy"), Some("sandbox"));
+    assert_eq!(
+        header(&h, "content-security-policy"),
+        Some("sandbox; default-src 'none'")
+    );
     assert_eq!(header(&h, "content-type"), Some("image/svg+xml"));
 
     let (status, h, body) = get(t.port, "/raw/pic.png", "127.0.0.1").await;
@@ -139,6 +142,7 @@ async fn websocket_round_trip_and_live_change() {
     let send = |m: ClientMessage| Message::Text(serde_json::to_string(&m).unwrap().into());
     ws.send(send(ClientMessage::Hello {
         protocol: 1,
+        name: None,
         id: Some("h".into()),
     }))
     .await

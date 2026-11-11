@@ -1,0 +1,26 @@
+{
+  "type": "presence",
+  "host": {
+    "id": "h",
+    "name": "Rob",
+    "color": "#3b82f6"
+  },
+  "hostPath": "docs/plan.md",
+  "viewers": [
+    {
+      "id": "v1",
+      "name": "Brisk Otter",
+      "color": "#10b981",
+      "path": "docs/plan.md"
+    }
+  ],
+  "you": "v1",
+  "slide": {
+    "path": "deck.md",
+    "index": 3
+  },
+  "stage": {
+    "docPath": "docs/plan.md",
+    "blockHash": "h1"
+  }
+}

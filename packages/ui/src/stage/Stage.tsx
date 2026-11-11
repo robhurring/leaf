@@ -9,12 +9,16 @@ import {
   useState,
   type PointerEvent as ReactPointerEvent,
 } from 'react';
+import type { ClientMessage } from '@leaf/protocol';
 import { X } from '../icons/index.js';
 import { createPortal } from 'react-dom';
 import { useStage, type StageContent, type StageTool } from '../store/stage.js';
 import { strokesFor, useAnnotations } from '../store/annotations.js';
 import { composeSvg, downloadText, inkBounds, placedPicture, svgTextToPng } from './image.js';
 import { Draw, useDrawing } from './Draw.js';
+import { PeerDots } from './PeerDots.js';
+import { useDocuments } from '../store/documents.js';
+import { liveRole } from '../share/live.js';
 import { Toolbox } from './Toolbox.js';
 import { contentSize, sizeSvgs } from './measure.js';
 import { gestureFactor, wheelIntent } from './wheel.js';
@@ -31,6 +35,9 @@ type CanvasProps = {
   /** Inside a document: a plain scroll scrolls the page; a pinch still zooms. */
   embedded?: boolean;
 };
+
+/** At most one pointer position per this long goes to the relay. */
+const POINTER_EVERY_MS = 50;
 
 const typing = (el: EventTarget | null) => {
   const t = el as HTMLElement | null;
@@ -52,7 +59,58 @@ export function StageCanvas({
   const viewRef = useRef<HTMLDivElement>(null);
   const layerRef = useRef<HTMLDivElement>(null);
   const drag = useRef<{ x: number; y: number } | null>(null);
-  const drawing = useDrawing(open.docPath, open.blockHash);
+  const drawing = useDrawing(open.docPath, open.blockHash, !embedded);
+
+  // In a share (but not on a draw board), the pointer, undo and clear go to the others;
+  // the host also says which canvas it has open.
+  const role = useDocuments((s) => (embedded ? null : liveRole(s.share)));
+  const tell = (msg: ClientMessage) => useDocuments.getState().tell(msg);
+  const lastPointer = useRef(0);
+  const pointerGone = () => {
+    if (!lastPointer.current) return;
+    lastPointer.current = 0;
+    tell({ type: 'pointer' });
+  };
+  const sendPointer = (e: ReactPointerEvent) => {
+    if (!role) return;
+    const now = Date.now();
+    if (now - lastPointer.current < POINTER_EVERY_MS) return;
+    lastPointer.current = now;
+    const [x, y] = contentPoint(e);
+    tell({ type: 'pointer', pointer: { docPath: open.docPath, blockHash: open.blockHash, x, y } });
+  };
+  useEffect(() => {
+    if (!role) return;
+    // Only a zoomable diagram or image is a canvas; a deck, chart or live pane is not.
+    const canvas = role === 'host' && !!open.viewer.stage?.zoom;
+    if (canvas)
+      tell({ type: 'stage', stage: { docPath: open.docPath, blockHash: open.blockHash } });
+    return () => {
+      if (canvas) tell({ type: 'stage' });
+      pointerGone();
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [role, open.docPath, open.blockHash, embedded]);
+  const undo = () => {
+    const gone = useAnnotations.getState().undo(open.docPath, open.blockHash);
+    if (role && gone)
+      tell({
+        type: 'inkUndo',
+        docPath: open.docPath,
+        blockHash: open.blockHash,
+        strokeId: gone.id,
+      });
+  };
+  const clear = () => {
+    // The host's Clear wipes the canvas for everyone, and the relay doesn't send it back
+    // to the host: take the others' ink off this page here.
+    if (role === 'host')
+      useAnnotations.getState().clearRemote(open.docPath, open.blockHash, 'host');
+    else useAnnotations.getState().clear(open.docPath, open.blockHash);
+    if (role) tell({ type: 'inkClear', docPath: open.docPath, blockHash: open.blockHash });
+  };
+  const undoRef = useRef(undo);
+  undoRef.current = undo;
 
   useEffect(() => viewport.subscribe(setT), [viewport]);
   // A sheet is for drawing: while you're on it, the pencil and ink that stays. The
@@ -96,7 +154,7 @@ export function StageCanvas({
       if (canDraw && (e.metaKey || e.ctrlKey) && !e.shiftKey && e.key.toLowerCase() === 'z') {
         if (!close && (typing(e.target) || useStage.getState().open)) return;
         e.preventDefault();
-        return useAnnotations.getState().undo(open.docPath, open.blockHash);
+        return undoRef.current();
       }
       if (e.metaKey || e.ctrlKey || e.altKey) return;
       // Inline, the keys are the reader's while typing or while the pop-up is up.
@@ -299,6 +357,7 @@ export function StageCanvas({
     if (tool === 'hand') drag.current = { x: e.clientX, y: e.clientY };
   };
   const onPointerMove = (e: ReactPointerEvent) => {
+    sendPointer(e);
     if (tool === 'pencil') return drawing.move(contentPoint(e));
     if (!drag.current) return;
     viewport.panBy(e.clientX - drag.current.x, e.clientY - drag.current.y);
@@ -331,8 +390,8 @@ export function StageCanvas({
       onZoom={centerZoom}
       onFit={fit}
       onReset={actualSize}
-      onClear={() => useAnnotations.getState().clear(open.docPath, open.blockHash)}
-      onUndo={() => useAnnotations.getState().undo(open.docPath, open.blockHash)}
+      onClear={clear}
+      onUndo={undo}
       onCopy={copy}
       onDownload={download}
     />
@@ -349,7 +408,7 @@ export function StageCanvas({
         onPointerUp={onPointerUp}
         onPointerCancel={onPointerUp}
         onPointerEnter={embedded ? borrow : undefined}
-        onPointerLeave={embedded ? giveBack : undefined}
+        onPointerLeave={embedded ? giveBack : pointerGone}
         onDoubleClick={actualSize}
       >
         <div
@@ -361,6 +420,9 @@ export function StageCanvas({
           <Rich {...props} appearance={inline ? props.appearance : 'light'} />
           {canDraw && (
             <Draw docPath={open.docPath} blockHash={open.blockHash} current={drawing.current} />
+          )}
+          {!embedded && (
+            <PeerDots docPath={open.docPath} blockHash={open.blockHash} scale={t.scale} />
           )}
         </div>
       </div>

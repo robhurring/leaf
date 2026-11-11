@@ -253,7 +253,9 @@ test('live panes run, pause, and show their errors', async ({ page }) => {
     await expect(torus.getByRole('alert')).toContainText(/WebGL/i);
   const sine = page.locator('.leaf-live[data-kind="canvas"]').first();
   await expect(async () => sine.scrollIntoViewIfNeeded({ timeout: 1000 })).toPass();
-  await expect(sine).toHaveAttribute('data-state', 'running');
+  // The pane's code loads lazily with the first live block and its frame boots after that,
+  // so it gets the same 20 s as the three.js pane; Linux WebKit is the slow end of that.
+  await expect(sine).toHaveAttribute('data-state', 'running', { timeout: 20000 });
   // It moves: the picture changes from one moment to the next.
   const picture = () =>
     page

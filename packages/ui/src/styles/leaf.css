@@ -1207,6 +1207,12 @@ html[data-resizing] .leaf-resizer::after {
   transition: opacity 0.12s;
   z-index: 2;
 }
+.leaf-block-host {
+  display: flex;
+  align-items: center;
+  padding: 0 4px;
+}
+.leaf-block:has(.leaf-block-host) .leaf-block-tools,
 .leaf-block:hover .leaf-block-tools,
 .leaf-block:focus-within .leaf-block-tools {
   opacity: 1;
@@ -2068,6 +2074,26 @@ a.leaf-pill:hover {
     opacity: 0;
   }
 }
+/* The other peers' pointers on a canvas in a share. */
+.leaf-peer-dots {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  overflow: visible;
+  pointer-events: none;
+}
+/* Radius, stroke width and font size are attributes, counter-scaled to the zoom. */
+.leaf-peer-dot {
+  stroke: var(--leaf-bg);
+}
+.leaf-peer-tag {
+  font-family: var(--leaf-font-ui);
+  font-weight: 600;
+  paint-order: stroke;
+  stroke: var(--leaf-bg);
+  stroke-linejoin: round;
+}
 .leaf-toolbox {
   position: absolute;
   left: 50%;
@@ -2834,6 +2860,31 @@ html[data-resizing] .leaf-blame-resizer::after {
   overflow: hidden;
   border-radius: var(--leaf-radius-sm);
 }
+.leaf-run-gate {
+  box-sizing: border-box;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  width: 100%;
+  min-height: 72px;
+  padding: 12px;
+  border: 1px dashed var(--leaf-line);
+  border-radius: var(--leaf-radius-sm);
+  font: 13px/1.4 var(--leaf-font-ui);
+  color: var(--leaf-text-2);
+  text-align: center;
+}
+.leaf-run-gate-actions {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  justify-content: center;
+}
+.leaf-live .leaf-run-gate {
+  height: 100%;
+}
 .leaf-live iframe {
   display: block;
   width: 100%;
@@ -3382,6 +3433,11 @@ html[data-resizing] .leaf-blame-resizer::after {
   flex: none;
   opacity: 0.75;
 }
+.leaf-shared-mark {
+  flex: none;
+  display: inline-flex;
+  color: var(--leaf-text-2);
+}
 .leaf-tab-label {
   flex: 1;
   min-width: 0;
@@ -3451,4 +3507,64 @@ html[data-tab] {
   font-size: 11px;
   color: var(--leaf-accent);
   background: var(--leaf-accent-soft);
+}
+
+/* ---------- avatars: who is reading what in a share ---------- */
+.leaf-avatar {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  justify-content: center;
+  border-radius: 50%;
+  color: #fff;
+  font: 600 9px/16px var(--leaf-font-ui);
+  box-shadow: 0 0 0 1.5px var(--leaf-surface);
+}
+.leaf-avatar-stack {
+  display: inline-flex;
+  align-items: center;
+}
+.leaf-avatar-stack > * + * {
+  margin-left: -4px;
+}
+.leaf-avatar-more {
+  padding-left: 6px;
+  color: var(--leaf-text-2);
+  font: 600 9px/16px var(--leaf-font-ui);
+}
+.leaf-row-peers {
+  display: inline-flex;
+  margin-left: auto;
+  padding-left: 6px;
+}
+
+/* ---------- the title row's Share button ---------- */
+.leaf-share-button {
+  position: relative;
+}
+.leaf-share-button[aria-label='Sharing'] {
+  color: var(--leaf-accent);
+}
+.leaf-share-button[data-status='reconnecting'] {
+  opacity: 0.6;
+}
+
+/* ---------- a share's viewer ---------- */
+.leaf-share-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+}
+.leaf-share-banner {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 16px;
+  border-bottom: 1px solid var(--leaf-line);
+  font: 12px var(--leaf-font-ui);
+  color: var(--leaf-text-2);
+}
+.leaf-share-banner a {
+  margin-left: auto;
+  color: var(--leaf-accent);
 }

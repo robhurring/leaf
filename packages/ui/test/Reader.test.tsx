@@ -68,13 +68,15 @@ describe('Reader', () => {
   });
 
   it('clicking a tree file opens it and updates the url', async () => {
-    render(<Reader source={dir().source} />);
+    const s = dir();
+    render(<Reader source={s.source} />);
     await screen.findByRole('heading', { level: 1 });
     const files = screen.getByRole('navigation', { name: 'Files' });
     fireEvent.click(within(files).getByText('docs'));
     fireEvent.click(await within(files).findByText('guide.md'));
     expect(await screen.findByRole('heading', { name: 'Guide', level: 1 })).toBeTruthy();
     expect(location.pathname).toBe('/docs/guide.md');
+    expect(s.sent.some((m) => m.type === 'at')).toBe(false);
   });
 
   it('an in-document relative link navigates', async () => {
@@ -430,12 +432,12 @@ describe('Reader', () => {
     await screen.findByRole('heading', { level: 1 });
     expect(screen.queryByRole('dialog', { name: 'Settings' })).toBeNull();
     fireEvent.keyDown(window, { key: ',', metaKey: true });
-    expect(screen.getByRole('dialog', { name: 'Settings' })).toBeTruthy();
+    expect(await screen.findByRole('dialog', { name: 'Settings' })).toBeTruthy();
     fireEvent.click(screen.getByRole('button', { name: 'Close' }));
     expect(screen.queryByRole('dialog', { name: 'Settings' })).toBeNull();
     fireEvent.click(screen.getByRole('button', { name: 'Appearance and settings' }));
     fireEvent.click(screen.getByRole('menuitem', { name: 'Settings…' }));
-    expect(screen.getByRole('dialog', { name: 'Settings' })).toBeTruthy();
+    expect(await screen.findByRole('dialog', { name: 'Settings' })).toBeTruthy();
   });
 
   it('a link the app refused says so, with a way to Settings', async () => {
@@ -445,7 +447,7 @@ describe('Reader', () => {
     const note = screen.getByRole('status', { name: 'Notice' });
     expect(note.textContent).toMatch(/zed: links/);
     fireEvent.click(within(note).getByRole('button', { name: 'Settings' }));
-    expect(screen.getByRole('dialog', { name: 'Settings' })).toBeTruthy();
+    expect(await screen.findByRole('dialog', { name: 'Settings' })).toBeTruthy();
     expect(screen.queryByRole('status', { name: 'Notice' })).toBeNull();
   });
 });

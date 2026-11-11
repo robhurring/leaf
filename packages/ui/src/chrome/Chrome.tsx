@@ -1,10 +1,10 @@
 // The window's chrome in the app: the title row (the active tab's back and forward,
 // Go to, and the window-wide controls) over the tab row, which shows with two or more
 // tabs, or while a tab dragged from another window is over this one.
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { TopBar } from '../components/TopBar.js';
 import { applyTheme } from '../store/ui.js';
-import type { Bridge, Hover, TabInfo, TabState } from './bridge.js';
+import type { Bridge, Hover, TabInfo, TabShare, TabState } from './bridge.js';
 import { TabRow } from './TabRow.js';
 import { tabDragHandlers } from './useTabDrag.js';
 
@@ -28,6 +28,11 @@ export function Chrome({ bridge, fits }: { bridge: Bridge; fits?: (s: string) =>
   const [tabs, setTabs] = useState<TabInfo[]>([]);
   const [state, setState] = useState<TabState>(BLANK);
   const [hover, setHover] = useState<Hover>(null);
+  // The active tab's share, for the Share button; null while this leaf can't share.
+  const [share, setShare] = useState<TabShare | null>(null);
+  const [copied, setCopied] = useState(false);
+  const activeId = useRef<string | null>(null);
+  activeId.current = tabs.find((t) => t.active)?.id ?? null;
 
   useEffect(() => {
     let live = true;
@@ -38,6 +43,35 @@ export function Chrome({ bridge, fits }: { bridge: Bridge; fits?: (s: string) =>
     const offs = [bridge.onTabs(load), bridge.onHover(setHover), bridge.onTabState(setState)];
     return () => {
       live = false;
+      offs.forEach((off) => off());
+    };
+  }, [bridge]);
+
+  useEffect(() => {
+    let live = true;
+    let flash: ReturnType<typeof setTimeout> | undefined;
+    // The active tab's share, read when the tabs change (the active one may have), and
+    // kept up as the app reports it.
+    const load = () =>
+      void bridge
+        .activeShare()
+        .then((s) => live && setShare(s))
+        .catch(() => {});
+    load();
+    const offs = [
+      bridge.onTabs(load),
+      bridge.onShare((e) => {
+        if (e.tab === activeId.current) setShare(e.share);
+      }),
+      bridge.onCopied(() => {
+        setCopied(true);
+        clearTimeout(flash);
+        flash = setTimeout(() => live && setCopied(false), 1500);
+      }),
+    ];
+    return () => {
+      live = false;
+      clearTimeout(flash);
       offs.forEach((off) => off());
     };
   }, [bridge]);
@@ -71,6 +105,8 @@ export function Chrome({ bridge, fits }: { bridge: Bridge; fits?: (s: string) =>
         onAppearanceMenu={() => bridge.appearanceMenu()}
         onSearch={send('openPalette')}
         onTitle={send('scrollTop')}
+        share={share ? { status: share.status, viewers: share.viewers, copied } : undefined}
+        onShare={() => bridge.shareButton()}
         brand={only ? tabDragHandlers(bridge, only, 'mark') : undefined}
       />
       {(tabs.length > 1 || here !== null) && (

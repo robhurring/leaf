@@ -1,0 +1,78 @@
+{
+  "$ref": "#/definitions/inking",
+  "definitions": {
+    "inking": {
+      "type": "object",
+      "properties": {
+        "type": {
+          "type": "string",
+          "const": "inking"
+        },
+        "stroke": {
+          "type": "object",
+          "properties": {
+            "id": {
+              "type": "string"
+            },
+            "docPath": {
+              "type": "string"
+            },
+            "blockHash": {
+              "type": "string"
+            },
+            "points": {
+              "type": "array",
+              "items": {
+                "type": "array",
+                "minItems": 2,
+                "maxItems": 2,
+                "items": [
+                  {
+                    "type": "number"
+                  },
+                  {
+                    "type": "number"
+                  }
+                ]
+              }
+            },
+            "color": {
+              "type": "string",
+              "enum": [
+                "red",
+                "green",
+                "blue"
+              ]
+            },
+            "width": {
+              "type": "number"
+            },
+            "sticky": {
+              "type": "boolean"
+            },
+            "createdAt": {
+              "type": "number"
+            }
+          },
+          "required": [
+            "id",
+            "docPath",
+            "blockHash",
+            "points",
+            "color",
+            "width",
+            "sticky",
+            "createdAt"
+          ],
+          "additionalProperties": false
+        }
+      },
+      "required": [
+        "type",
+        "stroke"
+      ],
+      "additionalProperties": false
+    }
+  },
+  "$schema": "http://json-schema.org/draft-07/schema#"
+}

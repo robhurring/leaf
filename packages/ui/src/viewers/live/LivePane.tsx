@@ -1,12 +1,23 @@
 // A live animation pane: a three or canvas block running in a sandboxed frame. It runs
 // only while it is on screen, the window is showing, it isn't paused, and the same
 // block isn't open in the Stage; errors show under it.
-import { useEffect, useMemo, useRef, useState } from 'react';
+import {
+  lazy,
+  Suspense,
+  useCallback,
+  useEffect,
+  useLayoutEffect,
+  useMemo,
+  useRef,
+  useState,
+} from 'react';
 import type { ViewerProps } from '../types.js';
 import { DiagramError } from '../diagramError.js';
 import { contentHash } from '../hash.js';
 import { useAppearance } from '../appearance.js';
 import { useStage } from '../../store/stage.js';
+import { useDocuments } from '../../store/documents.js';
+import { hasRun, shareAllowed } from '../../share/ran.js';
 import { Pause, Play, Restart, StepFrame } from '../../icons/index.js';
 import {
   buildSrcdoc,
@@ -22,6 +33,9 @@ import { useHold } from './useHold.js';
 
 /** How long a loaded frame has to say it's ready before the pane calls it a failure. */
 const START_TIMEOUT_MS = 12_000;
+
+// Only loaded for a shared document, where the pane waits for a click.
+const RunGate = lazy(() => import('../../share/RunGate.js'));
 
 const HARNESS = harness.toString();
 
@@ -42,6 +56,17 @@ export function LivePane(props: ViewerProps & { fill?: boolean }) {
   const kind = kindOf(file.path);
   const hash = contentHash(code);
   const theme = useAppearance(props.appearance);
+  const shareId = useDocuments((s) => s.share?.id ?? null);
+  const shared = shareId !== null;
+  // In a share the frame doesn't exist until the viewer runs this block's code (or allows
+  // the share), so nothing can be late yet. The gate says when it has run (which
+  // re-renders the pane).
+  // Approval is for this exact code: the key holds all of it, not the short hash, which a
+  // host could make match code the viewer already ran.
+  const gateKey = `${docPath}:${kind}:${code}`;
+  const [, setRunTick] = useState(0);
+  const onRun = useCallback(() => setRunTick((n) => n + 1), []);
+  const waiting = shared && !hasRun(gateKey) && !shareAllowed(shareId);
 
   const frame = useRef<HTMLIFrameElement>(null);
   const [userPaused, setUserPaused] = useState(prefersReducedMotion);
@@ -126,7 +151,7 @@ export function LivePane(props: ViewerProps & { fill?: boolean }) {
   // A pane that isn't running 12 seconds after it starts (a browser that can't start
   // WebGL can hang before its frame even loads) shows as an error, not loading forever.
   useEffect(() => {
-    if (ready || failure) return;
+    if (ready || failure || waiting) return;
     const t = setTimeout(
       () =>
         hear({
@@ -142,13 +167,16 @@ export function LivePane(props: ViewerProps & { fill?: boolean }) {
     return () => clearTimeout(t);
     // Counted from the pane's start, not from three.js arriving.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [ready, failure, hash, generation]);
+  }, [ready, failure, hash, generation, waiting]);
 
   useEffect(() => {
     if (loaded) send({ leaf: 'live', type: 'theme', theme });
   }, [loaded, theme]);
 
-  useEffect(() => {
+  // Listening starts in the commit that puts the frame on the page, not an effect a task
+  // later: a srcdoc frame can run and post `ready` in between (Linux WebKit does, for a
+  // pane that loads lazily), and that message would be lost.
+  useLayoutEffect(() => {
     const onMessage = (e: MessageEvent) => {
       if (!frame.current || e.source !== frame.current.contentWindow) return;
       if (!isFromFrame(e.data)) return;
@@ -184,6 +212,20 @@ export function LivePane(props: ViewerProps & { fill?: boolean }) {
   const state = failure ? 'error' : !ready ? 'loading' : running ? 'running' : 'paused';
   const height = fill ? undefined : paneHeight(props.meta);
 
+  const iframe = srcdoc !== null && !now.left && (
+    <iframe
+      key={generation}
+      ref={frame}
+      title={`${kind} animation`}
+      sandbox="allow-scripts"
+      srcDoc={srcdoc}
+      style={height ? { height } : undefined}
+      onLoad={() =>
+        // A second load means the block navigated its frame somewhere else.
+        hear(loaded ? { failure: { message: LEFT }, left: true } : { loaded: true })
+      }
+    />
+  );
   return (
     <div
       ref={host}
@@ -193,19 +235,14 @@ export function LivePane(props: ViewerProps & { fill?: boolean }) {
       data-fill={fill ? '' : undefined}
     >
       <div className="leaf-live-view" style={height ? { height } : undefined}>
-        {srcdoc !== null && !now.left && (
-          <iframe
-            key={generation}
-            ref={frame}
-            title={`${kind} animation`}
-            sandbox="allow-scripts"
-            srcDoc={srcdoc}
-            style={height ? { height } : undefined}
-            onLoad={() =>
-              // A second load means the block navigated its frame somewhere else.
-              hear(loaded ? { failure: { message: LEFT }, left: true } : { loaded: true })
-            }
-          />
+        {shared && iframe ? (
+          <Suspense fallback={null}>
+            <RunGate label={`${kind} animation`} gateKey={gateKey} height={height} onRun={onRun}>
+              {iframe}
+            </RunGate>
+          </Suspense>
+        ) : (
+          iframe
         )}
         <div className="leaf-live-controls" role="group" aria-label="Animation">
           <button
