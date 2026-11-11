@@ -33,7 +33,6 @@ import { useStage } from '../store/stage.js';
 import { ProgressBar } from './ProgressBar.js';
 import { BlameMargin } from './BlameMargin.js';
 import { BlameResizer, BlameShownContext } from './BlameColumn.js';
-import { Settings } from './Settings.js';
 import { NoticeBar } from './NoticeBar.js';
 import { createPortal } from 'react-dom';
 import { isMarp } from '../viewers/deck/detect.js';
@@ -41,6 +40,8 @@ import { useDeckMode } from '../store/deckMode.js';
 import { Check, Code, Copy, File, Slides, X } from '../icons/index.js';
 import { SourceView } from './SourceView.js';
 
+// Opened rarely, so it loads when first asked for, not with the page.
+const Settings = lazy(() => import('./Settings.js').then((m) => ({ default: m.Settings })));
 const ShareBanner = lazy(() => import('../share/ShareBanner.js'));
 const SpeakerView = lazy(() => import('../viewers/deck/SpeakerView.js'));
 /** A deck's speaker window, opened with ?speaker. Read once, before the router rewrites the address. */
@@ -710,7 +711,11 @@ export function Reader(props: ReaderProps) {
           </div>
           <Stage />
           <NoticeBar />
-          {settingsOpen && <Settings onClose={() => setSettingsOpen(false)} />}
+          {settingsOpen && (
+            <Suspense fallback={null}>
+              <Settings onClose={() => setSettingsOpen(false)} />
+            </Suspense>
+          )}
         </div>
       </AssetContext.Provider>
     </AppearanceContext.Provider>
