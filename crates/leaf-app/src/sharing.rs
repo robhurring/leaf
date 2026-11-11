@@ -11,12 +11,13 @@ use std::time::Duration;
 
 use futures_util::{SinkExt, StreamExt};
 use leaf_core::engine::{Engine, SessionId};
+use leaf_core::source::{Source, SourceError};
 use leaf_protocol::relay::{
     CHUNK_BYTES, HostToRelay, Peer, RELAY_PROTOCOL, RelayToHost, ShareMode,
 };
 use leaf_protocol::{
-    ClientMessage, ErrorCode, PROTOCOL_VERSION, PointerAt, RootInfo, ServerMessage, Slide,
-    StageRef, Stroke,
+    ClientMessage, EntryKind, ErrorCode, PROTOCOL_VERSION, PointerAt, RootInfo, ServerMessage,
+    Slide, StageRef, Stroke,
 };
 use serde_json::{Value, json};
 use tokio::io::AsyncReadExt;
@@ -32,7 +33,16 @@ type Ws =
 /// How long to wait for the relay's `shared` after connecting.
 const SHARED_WITHIN: Duration = Duration::from_secs(10);
 /// The relay pings every 25 s; this long without hearing anything, the link is dead.
-const SILENT_FOR: Duration = Duration::from_secs(60);
+/// Shorter than the relay's default grace (60 s), so a host that notices late still
+/// resumes its share instead of finding it ended.
+const SILENT_FOR: Duration = Duration::from_secs(40);
+/// A viewer's path is at most this long and this deep; the ignore rules walk every
+/// segment, so a longer one is refused before it gets there.
+const MAX_PATH_BYTES: usize = 1024;
+const MAX_PATH_DEPTH: usize = 64;
+/// Tree searches run for viewers at once; the rest wait their turn.
+const SEARCHES: usize = 2;
+static SEARCH_SLOTS: tokio::sync::Semaphore = tokio::sync::Semaphore::const_new(SEARCHES);
 /// Reconnect delays: 1, 2, 4, 8, 8, … seconds.
 const BACKOFF: [u64; 4] = [1, 2, 4, 8];
 /// Frames and messages waiting for the socket; raw fetches wait when it's full.
@@ -928,6 +938,28 @@ fn escapes(path: &str) -> bool {
         || drive
 }
 
+/// Longer or deeper than any path the reader asks for.
+fn oversized(path: &str) -> bool {
+    path.len() > MAX_PATH_BYTES || path.split(['/', '\\']).count() > MAX_PATH_DEPTH
+}
+
+/// A path as the source names it: no empty or `.` segments.
+fn clean(path: &str) -> String {
+    let parts: Vec<&str> = path
+        .split('/')
+        .filter(|c| !c.is_empty() && *c != ".")
+        .collect();
+    parts.join("/")
+}
+
+/// True when a share doesn't reach `path` (already cleaned). A tab on one file shares
+/// that file and nothing else: the engine reads beside it for the host (its images, the
+/// links it follows), but its folder is not what the host chose to share.
+fn outside_share(source: &dyn Source, path: &str) -> bool {
+    let root = source.root();
+    root.kind == EntryKind::File && !path.is_empty() && path != root.name
+}
+
 fn path_of(msg: &ClientMessage) -> Option<&str> {
     match msg {
         ClientMessage::List { path, .. } => path.as_deref(),
@@ -1020,13 +1052,15 @@ async fn answer(
             );
             return (vec![reply], true);
         }
-        let clean: Vec<&str> = path
-            .split('/')
-            .filter(|c| !c.is_empty() && *c != ".")
-            .collect();
-        // Ignored reads like missing: no expel, since the page would only reconnect and
-        // ask again, and the reader itself asks for ignored data files.
-        if engine.source().hides(&clean.join("/")) {
+        if oversized(path) {
+            let reply = refuse(ErrorCode::BadRequest, "path too long", None);
+            return (vec![reply], false);
+        }
+        let clean = clean(path);
+        // Ignored, or beside a single shared file, reads like missing: no expel, since
+        // the page would only reconnect and ask again, and the reader itself asks for
+        // ignored data files and follows a document's links.
+        if outside_share(engine.source().as_ref(), &clean) || engine.source().hides(&clean) {
             let reply = refuse(
                 ErrorCode::NotFound,
                 &format!("no such file: {path}"),
@@ -1035,6 +1069,13 @@ async fn answer(
             return (vec![reply], false);
         }
     }
+    // A search walks the whole tree; many viewers typing at once take turns at it.
+    let _slot = match parsed {
+        ClientMessage::Search { .. } | ClientMessage::SearchText { .. } => {
+            SEARCH_SLOTS.acquire().await.ok()
+        }
+        _ => None,
+    };
     let mut forbidden = false;
     let replies = engine
         .handle(sid, parsed)
@@ -1088,7 +1129,16 @@ async fn serve_fetch(
             headers,
         }))
     };
-    let opened = match engine.source().locate(&path).await {
+    let located = if oversized(&path) || outside_share(engine.source().as_ref(), &clean(&path)) {
+        Err(SourceError::new(
+            ErrorCode::NotFound,
+            "not in this share",
+            None,
+        ))
+    } else {
+        engine.source().locate(&path).await
+    };
+    let opened = match located {
         Ok(abs) => crate::raw::open(&abs, &path, range.as_deref()).await,
         Err(e) => {
             tracing::debug!(req, %path, error = %e, "raw fetch refused");

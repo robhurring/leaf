@@ -33,7 +33,13 @@ impl Ignorer {
         if let Some(hit) = cache.get(dir) {
             return hit.clone();
         }
-        let file = self.root.join(dir).join(".gitignore");
+        let at = self.root.join(dir);
+        // Only real directories are remembered: a path can name any number that don't
+        // exist, and each would stay in the cache for good.
+        if !at.is_dir() {
+            return None;
+        }
+        let file = at.join(".gitignore");
         let rules = if file.is_file() {
             let (gi, _err) = Gitignore::new(&file);
             Some(gi)

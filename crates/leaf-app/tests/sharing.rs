@@ -42,6 +42,11 @@ impl Folder {
 }
 
 fn folder() -> Folder {
+    opened_on("")
+}
+
+/// The same folder, with the tab opened on `target` inside it ("" for the folder itself).
+fn opened_on(target: &str) -> Folder {
     let root = tempfile::tempdir().unwrap();
     let r = root.path().canonicalize().unwrap();
     std::fs::write(r.join("README.md"), "# shared\n").unwrap();
@@ -56,7 +61,10 @@ fn folder() -> Folder {
         cfg.path().to_string_lossy().into_owned(),
     )]
     .into();
-    let argv = vec!["open".to_string(), r.to_string_lossy().into_owned()];
+    let argv = vec![
+        "open".to_string(),
+        r.join(target).to_string_lossy().into_owned(),
+    ];
     let config = leaf_core::config::load(&argv, &env, &r).unwrap().0;
     let built = leaf_app::serve::build_engine(&config, Some(leaf_app::raw::RAW_BASE)).unwrap();
     Folder {
@@ -367,6 +375,76 @@ async fn an_ignored_path_is_not_found_and_the_viewer_stays() {
         errors,
         paths.len() * 2,
         "each read and subscribe is refused"
+    );
+    h.end();
+    r.stop().await;
+}
+
+#[tokio::test]
+async fn a_tab_on_one_file_shares_that_file_and_nothing_beside_it() {
+    let f = opened_on("README.md");
+    let r = relay::start(options(0)).await.unwrap();
+    let h = share(&r, &f.engine).await;
+    let (mut v, _) = viewer(r.port, &h.id).await;
+
+    assert_eq!(read(&mut v, "README.md", "own").await["type"], "file");
+    send(&mut v, json!({"type": "list", "id": "root"})).await;
+    let tree = next_of(&mut v, "tree").await;
+    let names: Vec<&str> = tree["entries"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|e| e["path"].as_str().unwrap())
+        .collect();
+    assert_eq!(names, ["README.md"]);
+
+    let asks = [
+        json!({"type": "read", "path": "a.mmd", "id": "q0"}),
+        json!({"type": "read", "path": "./a.mmd", "id": "q1"}),
+        json!({"type": "list", "path": "pics", "id": "q2"}),
+        json!({"type": "subscribe", "path": "a.mmd", "id": "q3"}),
+    ];
+    for ask in asks {
+        let id = ask["id"].clone();
+        send(&mut v, ask).await;
+        let m = next_json(&mut v).await.expect("a reply");
+        assert_eq!((&m["type"], &m["inReplyTo"]), (&json!("error"), &id), "{m}");
+    }
+    let raw = |name: &str| format!("/s/{}/raw/{name}", h.id);
+    assert_eq!(http_get(r.port, &raw("README.md"), "").await.0, 200);
+    assert_eq!(http_get(r.port, &raw("a.mmd"), "").await.0, 404);
+    assert_eq!(http_get(r.port, &raw("pics/a.png"), "").await.0, 404);
+    h.end();
+    r.stop().await;
+}
+
+#[tokio::test]
+async fn an_overlong_path_is_refused_before_anything_walks_it() {
+    let f = folder();
+    let r = relay::start(options(0)).await.unwrap();
+    let h = share(&r, &f.engine).await;
+    let (mut v, _) = viewer(r.port, &h.id).await;
+    let deep = "a/".repeat(200);
+    let long = "a".repeat(2000);
+    for (i, path) in [deep.as_str(), long.as_str()].into_iter().enumerate() {
+        send(
+            &mut v,
+            json!({"type": "read", "path": path, "id": format!("p{i}")}),
+        )
+        .await;
+        let m = next_json(&mut v).await.expect("a reply");
+        assert_eq!(
+            (&m["type"], &m["code"]),
+            (&json!("error"), &json!("bad_request")),
+            "{m}"
+        );
+    }
+    assert_eq!(read(&mut v, "README.md", "after").await["type"], "file");
+    assert_eq!(
+        http_get(r.port, &format!("/s/{}/raw/{deep}x.png", h.id), "")
+            .await
+            .0,
+        404
     );
     h.end();
     r.stop().await;
