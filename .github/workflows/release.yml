@@ -36,6 +36,7 @@ jobs:
         with:
           targets: aarch64-apple-darwin, x86_64-apple-darwin
       - uses: Swatinem/rust-cache@v2
+      - uses: taiki-e/install-action@just
       - run: npm ci
       # Signing is optional: with a Developer ID certificate in the secrets the app is
       # signed and notarized; without one it is signed ad hoc.
@@ -61,7 +62,7 @@ jobs:
           APPLE_ID: ${{ secrets.APPLE_ID }}
           APPLE_PASSWORD: ${{ secrets.APPLE_PASSWORD }}
           APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
-        run: bin/package
+        run: just package
       - name: Dry run packages
         if: github.event_name != 'push'
         uses: actions/upload-artifact@v4

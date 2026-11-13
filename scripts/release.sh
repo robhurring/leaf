@@ -3,13 +3,13 @@ set -euo pipefail
 cd "$(dirname "$0")/.."
 
 usage() {
-  echo "usage: bin/release [X.Y.Z] [--dry-run] [--skip-checks]"
+  echo "usage: just release [X.Y.Z] [--dry-run] [--skip-checks]"
   echo "  release the next minor version (0.1.0 -> 0.2.0), or X.Y.Z: newer than now, no prerelease."
   echo "  Bumps the version everywhere (Cargo.toml, package.json files, lockfiles), runs the unit"
   echo "  checks, commits \"leaf X.Y.Z\" on main, tags vX.Y.Z, and pushes both. The tag starts"
   echo "  .github/workflows/release.yml: the macOS app, the GitHub release, then the Homebrew cask."
   echo "  --dry-run      say what the new version would be, change nothing"
-  echo "  --skip-checks  don't run lint and bin/test --unit first"
+  echo "  --skip-checks  don't run lint and just test-unit first"
 }
 
 next=""
@@ -25,7 +25,7 @@ for a in "$@"; do
   esac
 done
 
-fail() { echo "bin/release: $*" >&2; exit 1; }
+fail() { echo "just release: $*" >&2; exit 1; }
 current="$(sed -n 's/^version = "\(.*\)"/\1/p' Cargo.toml | head -1)"
 IFS=. read -r major minor _ <<<"$current"
 next="${next:-$major.$((minor + 1)).0}"
@@ -55,7 +55,7 @@ cargo update --workspace --quiet
 
 if $checks; then
   npm run lint
-  bin/test --unit
+  just test-unit
 fi
 
 git commit -qam "leaf $next"

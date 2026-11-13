@@ -20,7 +20,7 @@ pub enum Cli {
 }
 
 /// The first `leaf` on `path` (a `$PATH` value). Without one, the places installs put
-/// it: the install link, Homebrew, and `bin/install`.
+/// it: the install link, Homebrew, and `just install`.
 pub fn find_cli(
     path: Option<&str>,
     home: &Path,

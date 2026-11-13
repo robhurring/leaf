@@ -15,7 +15,7 @@ tracing = "0.1"
 
 # Build space: debug info for ~400 dependencies (Tauri, WebKit bindings) made target/
 # 9 GB. Nobody steps through this code in a debugger, so no debug info anywhere, and
-# bin/test runs the Rust tests in release so tests and builds share one compiled tree.
+# `just test` runs the Rust tests in release so tests and builds share one compiled tree.
 [profile.dev]
 debug = false
 

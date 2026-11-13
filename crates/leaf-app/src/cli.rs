@@ -10,7 +10,7 @@ usage:
   leaf relay start            run a relay for sharing (Procfile: web: leaf relay start); listens on
                               $PORT (default 4321), all interfaces; LEAF_RELAY_GRACE, LEAF_RELAY_SECRET
   leaf 'leaf://open/<path>'   open a link: an absolute path (or ~/…), then any of ?root=<folder> (show the
-                              file inside that folder), &browser, #heading. bin/install registers the
+                              file inside that folder), &browser, #heading. `just install` registers the
                               installed app, so `open 'leaf://…'` and links in other apps land here; a
                               window already showing the file or its folder comes forward instead.
   leaf -h | --help, -V | --version

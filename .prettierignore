@@ -8,3 +8,5 @@ target
 crates/leaf-app/gen
 # Icon Composer writes these; keep them as it does.
 *.icon/
+# What `just demo-live` writes; not tracked.
+docs/examples/live

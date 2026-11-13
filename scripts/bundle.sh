@@ -3,7 +3,7 @@ set -euo pipefail
 cd "$(dirname "$0")/.."
 
 usage() {
-  echo "usage: bin/bundle [--remove | --no-register]    (macOS) build ~/Applications/leaf reader.app around target/release/leaf"
+  echo "usage: just bundle [--remove | --no-register]    (macOS) build ~/Applications/leaf reader.app around target/release/leaf"
   echo "  and register it for leaf:// links; --remove unregisters and deletes it. LEAF_APP overrides the path."
   echo "  --no-register builds the app without claiming leaf:// links (for a test or release build)."
   echo "  LEAF_ICON picks the icon: leaf-mark (default), vein-arrow, or page."
@@ -13,7 +13,7 @@ case "${1:-}" in
   ""|--remove|--no-register) ;;
   *) usage >&2; exit 1 ;;
 esac
-[[ "$(uname)" == "Darwin" ]] || { echo "bin/bundle: macOS only; elsewhere leaf links go through \`leaf leaf://…\`" >&2; exit 0; }
+[[ "$(uname)" == "Darwin" ]] || { echo "just bundle: macOS only; elsewhere leaf links go through \`leaf leaf://…\`" >&2; exit 0; }
 
 app="${LEAF_APP:-$HOME/Applications/leaf reader.app}"
 lsregister=/System/Library/Frameworks/CoreServices.framework/Frameworks/LaunchServices.framework/Support/lsregister
@@ -26,12 +26,12 @@ if [[ "${1:-}" == "--remove" ]]; then
   exit 0
 fi
 
-[[ -x target/release/leaf ]] || { echo "bin/bundle: build first (bin/build)" >&2; exit 1; }
+[[ -x target/release/leaf ]] || { echo "just bundle: build first (just build)" >&2; exit 1; }
 version="$(target/release/leaf --version)"
 icon="${LEAF_ICON:-leaf-mark}"
 # Absolute: actool hands paths to a helper that does not share our working directory.
 icons="$(pwd)/crates/leaf-app/icons/app"
-[[ -d "$icons/$icon.icon" ]] || { echo "bin/bundle: no icon named $icon (leaf-mark, vein-arrow, page)" >&2; exit 1; }
+[[ -d "$icons/$icon.icon" ]] || { echo "just bundle: no icon named $icon (leaf-mark, vein-arrow, page)" >&2; exit 1; }
 mkdir -p "$app/Contents/MacOS" "$app/Contents/Resources"
 # A copy, not a link: macOS knows a running app by where its binary lives.
 cp target/release/leaf "$app/Contents/MacOS/leaf"
@@ -71,12 +71,12 @@ if xcrun --find actool >/dev/null 2>&1 &&
   [[ -f "$res/Assets.car" ]]; then
   :
 else
-  echo "bin/bundle: no Xcode actool; using the light icon only" >&2
+  echo "just bundle: no Xcode actool; using the light icon only" >&2
   cp "$icons/icns/$icon-light.icns" "$res/$icon.icns"
 fi
 # Finder and the Dock cache icons by the bundle's change date.
 touch "$app"
-codesign --force --sign - "$app" >/dev/null 2>&1 || echo "bin/bundle: could not sign $app" >&2
+codesign --force --sign - "$app" >/dev/null 2>&1 || echo "just bundle: could not sign $app" >&2
 if [[ "${1:-}" == "--no-register" ]]; then
   echo "bundled $app (not registered for leaf:// links)"
 else

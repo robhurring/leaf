@@ -7,7 +7,7 @@ fn main() {
     let dir = Path::new(&manifest).join("../../packages/ui/dist/app");
     if !dir.join("index.html").is_file() {
         panic!(
-            "leaf-app: build the ui first (bin/build); missing {}",
+            "leaf-app: build the ui first (just build); missing {}",
             dir.display()
         );
     }

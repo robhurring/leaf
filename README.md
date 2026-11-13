@@ -84,16 +84,16 @@ Builds that aren't notarized yet are stopped the first time you open them: open 
 
 ### Build from source (macOS and Linux)
 
-With Rust and Node 22 or newer:
+With Rust, Node 22 or newer, and [just](https://just.systems) (`brew install just`):
 
 ```sh
 git clone https://github.com/robhurring/leaf && cd leaf
-bin/setup                  # dependencies, .env, and the browsers the tests use
-bin/install                # builds, then links `leaf` into ~/.local/bin
-bin/build                  # after a pull: rebuilds `leaf` and (macOS) the app
+just setup                 # dependencies, .env, and the browsers the tests use
+just install               # builds, then links `leaf` into ~/.local/bin
+just build                 # after a pull: rebuilds `leaf` and (macOS) the app
 ```
 
-On macOS `bin/build` (and so `bin/install`) also builds `leaf reader.app` in `~/Applications`, so Finder and `leaf://` links open what you just built (`LEAF_BUNDLE=0 bin/build` leaves it alone); `bin/install --uninstall` removes both. Its icon follows light and dark mode; `LEAF_ICON=vein-arrow` or `LEAF_ICON=page` before `bin/install` (or `bin/build`) picks one of the other two designs.
+On macOS `just build` (and so `just install`) also builds `leaf reader.app` in `~/Applications`, so Finder and `leaf://` links open what you just built (`LEAF_BUNDLE=0 just build` leaves it alone); `just uninstall` removes both. Its icon follows light and dark mode; `LEAF_ICON=vein-arrow` or `LEAF_ICON=page` before `just install` (or `just build`) picks one of the other two designs.
 
 ## Use
 
@@ -129,7 +129,7 @@ leaf serve docs/ -l debug  # same, with every message on the wire
 leaf relay start           # a relay for sharing (see Sharing)
 ```
 
-`serve` is for a folder on another machine (`--host 0.0.0.0` on a dev box or a server with no desktop, read from your laptop) and for development: `bin/dev` and the browser tests run it.
+`serve` is for a folder on another machine (`--host 0.0.0.0` on a dev box or a server with no desktop, read from your laptop) and for development: `just dev` and the browser tests run it.
 
 ## Sharing
 
@@ -269,13 +269,14 @@ Flags, environment variables, or a `.env` next to where you run it, in that orde
 ## Hacking on it
 
 ```sh
-bin/setup      # install, .env, Playwright's browsers, checks for cargo
-bin/dev -o     # server plus Vite on docs/examples/, opens the browser
-bin/test       # Rust and UI unit tests, build, browser smoke tests on three engines
-bin/install    # build, then symlink target/release/leaf into ~/.local/bin
-bin/package    # (macOS) the release app as a .dmg and a .zip in dist/release/
-bin/release    # the next minor version (or bin/release 1.2.3): bump, check, tag, push; CI builds the release
-bin/clean      # delete build output (target/ grows by gigabytes); --all adds node_modules
+just setup      # install, .env, Playwright's browsers, checks for cargo
+just dev -o     # server plus Vite on docs/examples/, opens the browser
+just test       # Rust and UI unit tests, build, browser smoke tests on three engines
+just install    # build, then symlink target/release/leaf into ~/.local/bin
+just package    # (macOS) the release app as a .dmg and a .zip in dist/release/
+just release    # the next minor version (or just release 1.2.3): bump, check, tag, push; CI builds the release
+just clean      # delete build output (target/ grows by gigabytes); just clean-all adds node_modules
+just            # list every recipe
 ```
 
 Releases: bump `version` in `Cargo.toml`, merge to main, and push a matching tag (`git tag v0.2.0 && git push origin v0.2.0`). The release workflow builds a universal app, packages it, and publishes a GitHub release. With an Apple Developer ID in the repository secrets (`APPLE_CERTIFICATE`, `APPLE_CERTIFICATE_PASSWORD`, `APPLE_SIGNING_IDENTITY`, `APPLE_ID`, `APPLE_PASSWORD`, `APPLE_TEAM_ID`) it is signed and notarized; without one it is signed ad hoc.
