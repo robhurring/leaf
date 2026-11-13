@@ -3,7 +3,7 @@ set -euo pipefail
 cd "$(dirname "$0")/.."
 
 usage() {
-  echo "usage: bin/package    (macOS) build leaf reader.app for release, as a .dmg and a .zip in dist/release/"
+  echo "usage: just package    (macOS) build leaf reader.app for release, as a .dmg and a .zip in dist/release/"
   echo "  LEAF_TARGETS: Rust targets to build and join into one binary"
   echo "    (default: aarch64-apple-darwin x86_64-apple-darwin; empty builds for this Mac only)"
   echo "  Signing, when set (otherwise the app is signed ad hoc):"
@@ -11,7 +11,7 @@ usage() {
   echo "    APPLE_ID, APPLE_PASSWORD (app-specific), APPLE_TEAM_ID   also notarize and staple"
 }
 [[ "${1:-}" == "--help" || "${1:-}" == "-h" ]] && { usage; exit 0; }
-[[ "$(uname)" == "Darwin" ]] || { echo "bin/package: macOS only" >&2; exit 1; }
+[[ "$(uname)" == "Darwin" ]] || { echo "just package: macOS only" >&2; exit 1; }
 
 targets="${LEAF_TARGETS-aarch64-apple-darwin x86_64-apple-darwin}"
 out=dist/release
@@ -22,7 +22,7 @@ mkdir -p "$out"
 npm run build --if-present -w @leaf/protocol
 npm run build --if-present -w @leaf/ui
 # The binary embeds the UI. With more than one target, the builds are joined into one
-# universal binary at target/release/leaf, where bin/bundle looks for it.
+# universal binary at target/release/leaf, where scripts/bundle.sh looks for it.
 if [[ -z "$targets" ]]; then
   cargo build --release -p leaf-app
 else
@@ -38,7 +38,7 @@ version="$(target/release/leaf --version)"
 arch="$(lipo -archs target/release/leaf | tr ' ' '\n' | sort | paste -sd+ -)"
 [[ "$arch" == "arm64+x86_64" ]] && arch=universal
 
-LEAF_APP="$app" bin/bundle --no-register
+LEAF_APP="$app" scripts/bundle.sh --no-register
 
 if [[ -n "${LEAF_SIGN_IDENTITY:-}" ]]; then
   # Developer ID, hardened runtime, and a timestamp: what notarization asks for.
@@ -52,7 +52,7 @@ if [[ -n "${LEAF_SIGN_IDENTITY:-}" ]]; then
     rm "$out/notarize.zip"
   fi
 else
-  echo "bin/package: no LEAF_SIGN_IDENTITY; the app is signed ad hoc (first open: right-click > Open)" >&2
+  echo "just package: no LEAF_SIGN_IDENTITY; the app is signed ad hoc (first open: right-click > Open)" >&2
 fi
 
 name="leaf-$version-macos-$arch"
@@ -64,7 +64,7 @@ ln -s /Applications "$stage/Applications"
 # hdiutil on CI runners sometimes fails with "Resource busy"; a retry clears it.
 for attempt in 1 2 3 4; do
   hdiutil create -volname "leaf reader" -srcfolder "$stage" -ov -format UDZO "$out/$name.dmg" && break
-  [[ $attempt == 4 ]] && { echo "bin/package: hdiutil could not make the disk image" >&2; exit 1; }
+  [[ $attempt == 4 ]] && { echo "just package: hdiutil could not make the disk image" >&2; exit 1; }
   sleep $((attempt * 5))
 done
 rm -rf "$stage"

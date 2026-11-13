@@ -21,6 +21,7 @@ jobs:
         with:
           components: rustfmt, clippy
       - uses: Swatinem/rust-cache@v2
+      - uses: taiki-e/install-action@just
       - name: Linux packages for the Tauri window
         if: runner.os == 'Linux'
         run: |
@@ -32,5 +33,5 @@ jobs:
         run: |
           npm run build -w @leaf/protocol
           npm run build -w @leaf/ui
-      - run: bin/lint
-      - run: bin/test
+      - run: just lint
+      - run: just test

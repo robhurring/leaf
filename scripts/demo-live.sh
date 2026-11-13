@@ -2,7 +2,7 @@
 set -euo pipefail
 cd "$(dirname "$0")/.."
 
-usage() { echo "usage: bin/demo-live    write made-up live traffic into docs/examples/live/ until ctrl-c (open docs/examples/realtime.md to watch)"; }
+usage() { echo "usage: just demo-live    write made-up live traffic into docs/examples/live/ until ctrl-c (open docs/examples/realtime.md to watch)"; }
 [[ "${1:-}" == "--help" || "${1:-}" == "-h" ]] && { usage; exit 0; }
 
 mkdir -p docs/examples/live
@@ -46,6 +46,6 @@ setInterval(() => {
   traffic = traffic.slice(-400);
   writeFileSync(`${dir}/traffic.jsonl`, traffic.join("\n") + "\n");
   const errorRate = ((errors / requests) * 100).toFixed(1);
-  writeFileSync(`${dir}/board.md`, `# Live board\n\nUpdated ${at}, twice a second, by \`bin/demo-live\`.\n\n| Requests/s | Errors | Error rate | p95 |\n| ---: | ---: | ---: | ---: |\n| ${requests} | ${errors} | ${errorRate}% | ${p95} ms |\n\n> [!${errors / requests > 0.06 ? "WARNING" : "TIP"}]\n> ${errors / requests > 0.06 ? "Errors are running high." : "All quiet."}\n`);
+  writeFileSync(`${dir}/board.md`, `# Live board\n\nUpdated ${at}, twice a second, by \`just demo-live\`.\n\n| Requests/s | Errors | Error rate | p95 |\n| ---: | ---: | ---: | ---: |\n| ${requests} | ${errors} | ${errorRate}% | ${p95} ms |\n\n> [!${errors / requests > 0.06 ? "WARNING" : "TIP"}]\n> ${errors / requests > 0.06 ? "Errors are running high." : "All quiet."}\n`);
 }, 500);
 '

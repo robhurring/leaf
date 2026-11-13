@@ -102,6 +102,78 @@ test('outline, numbering, anchors, palette', async ({ page }) => {
   await expect(page).toHaveURL(/#grandchild$/);
 });
 
+test('table headers sort, and their edges drag to set a column width', async ({ page }) => {
+  await page.goto('/markdown.md');
+  const table = page.locator('article table').filter({ hasText: 'Spellcrafter Wand' });
+  const level = table.getByRole('columnheader', { name: 'Level' });
+  const levels = () => table.locator('tbody tr td:first-child').allTextContents();
+  await expect(table).toBeVisible();
+  await expect.poll(levels).toEqual(['21', '9', '13']);
+  await level.click();
+  await expect.poll(levels).toEqual(['9', '13', '21']);
+  await level.click();
+  await expect.poll(levels).toEqual(['21', '13', '9']);
+  await level.click();
+  await expect.poll(levels).toEqual(['21', '9', '13']);
+
+  const zone = table.getByRole('columnheader', { name: 'Zone' });
+  const width = async (th: typeof level) => (await th.boundingBox())!.width;
+  const [levelWas, zoneWas, tableWas] = [
+    await width(level),
+    await width(zone),
+    (await table.boundingBox())!.width,
+  ];
+  const edge = async () => {
+    const box = (await level.locator('.leaf-col-grip').boundingBox())!;
+    return { x: box.x + box.width / 2, y: box.y + box.height / 2 };
+  };
+  const from = await edge();
+  await page.mouse.move(from.x, from.y);
+  await page.mouse.down();
+  await page.mouse.move(from.x + 60, from.y, { steps: 4 });
+  await page.mouse.move(from.x + 120, from.y, { steps: 4 });
+  await page.mouse.up();
+  // The dragged column grew by the drag, its neighbours kept their widths, the table grew with it
+  // (scrolling inside its own box, not the page), and the drag was not taken for a click to sort.
+  expect(await width(level)).toBeCloseTo(levelWas + 120, 0);
+  expect(await width(zone)).toBeCloseTo(zoneWas, 0);
+  expect((await table.boundingBox())!.width).toBeCloseTo(tableWas + 120, 0);
+  await expect.poll(levels).toEqual(['21', '9', '13']);
+  expect(await page.evaluate(() => document.documentElement.scrollWidth > window.innerWidth)).toBe(
+    false,
+  );
+
+  // Dragged in past its narrowest and let go over the header: still not a click to sort.
+  const at = await edge();
+  await page.mouse.move(at.x, at.y);
+  await page.mouse.down();
+  await page.mouse.move(at.x - 400, at.y, { steps: 4 });
+  await page.mouse.up();
+  expect(await width(level)).toBeCloseTo(60, 0);
+  await expect.poll(levels).toEqual(['21', '9', '13']);
+
+  // A click on the edge puts the column back; with every column back the table is its own again.
+  const to = await edge();
+  await page.mouse.click(to.x, to.y);
+  expect(await width(level)).toBeCloseTo(levelWas, 0);
+  await expect(table).not.toHaveAttribute('data-sized');
+
+  // A double-click fits a column to its longest line: a squeezed one opens until nothing wraps.
+  const item = table.getByRole('columnheader', { name: 'Item' });
+  const rowHeight = async () => (await table.locator('tbody tr').first().boundingBox())!.height;
+  const [itemWas, rowWas] = [await width(item), await rowHeight()];
+  const grip = (await item.locator('.leaf-col-grip').boundingBox())!;
+  const mid = { x: grip.x + grip.width / 2, y: grip.y + grip.height / 2 };
+  await page.mouse.move(mid.x, mid.y);
+  await page.mouse.down();
+  await page.mouse.move(mid.x - 110, mid.y, { steps: 4 });
+  await page.mouse.up();
+  expect(await rowHeight()).toBeGreaterThan(rowWas);
+  await page.mouse.dblclick(mid.x - 110, mid.y);
+  expect(await width(item)).toBeCloseTo(itemWas, 0);
+  expect(await rowHeight()).toBeCloseTo(rowWas, 0);
+});
+
 test('gutter click and shift-click select lines and set the hash', async ({ page }) => {
   await page.goto('/files/script.py');
   const gutter = page.locator('.cm-lineNumbers .cm-gutterElement');

@@ -17,7 +17,7 @@ export default defineConfig({
   ],
   webServer: {
     // A clean config dir each run: the sticky-settings test assumes defaults.
-    // The leaf binary under test; bin/test passes the release build.
+    // The leaf binary under test; `just test` passes the release build.
     command: `rm -rf ../../.superpowers/e2e-config && ${process.env.LEAF_BIN ?? '../../target/release/leaf'} serve ../../docs/examples --port ${port} --host 127.0.0.1`,
     url: `http://127.0.0.1:${port}/healthz`,
     reuseExistingServer: false,

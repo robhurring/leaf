@@ -3,7 +3,7 @@
 leaf redraws whatever changes on disk: the document, and the files its charts and maps read. To see it, start the demo in a terminal:
 
 ```sh
-bin/demo-live
+just demo-live
 ```
 
 It writes made-up web traffic into `docs/examples/live/` twice a second until you stop it. With it running, everything below moves on its own. Nothing on this page polls or animates itself; each chart and map redraws because its file changed, just as it would for a real log, a metrics export, or an agent writing as it works.

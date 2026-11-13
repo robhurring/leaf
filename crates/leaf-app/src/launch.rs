@@ -421,7 +421,7 @@ pub fn link_in_argv(argv: &[String]) -> Option<usize> {
     argv.iter().position(|a| a.starts_with("leaf:"))
 }
 
-/// Where `bin/install` puts the app on macOS (`LEAF_APP` overrides).
+/// Where `just install` puts the app on macOS (`LEAF_APP` overrides).
 pub fn installed_app() -> Option<PathBuf> {
     if let Ok(p) = std::env::var("LEAF_APP") {
         return Some(PathBuf::from(p));

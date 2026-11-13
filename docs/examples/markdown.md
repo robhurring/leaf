@@ -34,6 +34,8 @@ Mentions and topics light up: ask @rob about #rendering. Inside a GitHub checkou
 | a      |    b     |     c |
 | `code` | **bold** |  _em_ |
 
+Click a column header to sort by it: once for ascending, again for descending, a third time for the order the table was written in. Drag the right edge of a header to make its column wider or narrower, click the edge to put it back, or double-click it to fit the column to what's in it.
+
 Put `<!--table:filter-->` on the line before a table to give it a filter; it's an HTML comment, so GitHub shows the plain table:
 
 <!--table:filter-->
@@ -45,9 +47,9 @@ Put `<!--table:filter-->` on the line before a table to give it a filter; it's a
 | `queue` | @rob   | **healthy** |
 | `web`   | @jules | down        |
 
-`<!--table:sort-->` makes the headers sort the rows, and `<!--table:filter sort-->` gives both. Cells keep their links:
+Cells keep their links when the rows are sorted or filtered:
 
-<!--table:filter sort-->
+<!--table:filter-->
 
 | Level | Item                                                           | Zone          |
 | ----: | :------------------------------------------------------------- | :------------ |
