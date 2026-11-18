@@ -73,7 +73,9 @@ _ui:
 
 # Also refreshes an installed leaf link and (macOS) builds ~/Applications/leaf reader.app
 # (see `just bundle`). LEAF_BUNDLE=0 skips the app: a build to check, that leaves the
-# installed one alone.
+# installed one alone. target/ is held under LEAF_TARGET_CAP gigabytes (default 6, 0 = no
+# cap): over it, the debug tree and then the release tree are deleted before cargo runs
+# (see scripts/cap-target.sh).
 # Build the protocol, the UI, and target/release/leaf
 build:
     #!/usr/bin/env bash
@@ -84,6 +86,8 @@ build:
     npm run build --if-present -w @leaf/ui
     # Opening leaf stays fast: the page's startup scripts and styles have a size budget.
     node packages/ui/scripts/check-entry-size.mjs
+    # This machine's disk is small: over the cap, old trees go before cargo adds to them.
+    scripts/cap-target.sh
     # The Rust binary embeds the built UI, so it comes last. The whole workspace, as `just test`
     # builds it, so both share one set of compiled crates in target/release.
     cargo build --release --workspace

@@ -279,6 +279,8 @@ just clean      # delete build output (target/ grows by gigabytes); just clean-a
 just            # list every recipe
 ```
 
+`just build` keeps `target/` under 6 GB: over that, it deletes the debug tree and then the release tree before cargo runs, and the build compiles what is missing again. `LEAF_TARGET_CAP=10 just build` sets another size in gigabytes; `0` is no cap.
+
 Releases: bump `version` in `Cargo.toml`, merge to main, and push a matching tag (`git tag v0.2.0 && git push origin v0.2.0`). The release workflow builds a universal app, packages it, and publishes a GitHub release. With an Apple Developer ID in the repository secrets (`APPLE_CERTIFICATE`, `APPLE_CERTIFICATE_PASSWORD`, `APPLE_SIGNING_IDENTITY`, `APPLE_ID`, `APPLE_PASSWORD`, `APPLE_TEAM_ID`) it is signed and notarized; without one it is signed ad hoc.
 
 `docs/examples/` is the living demo: [its README](docs/examples/README.md) maps every feature to a page, and `leaf open docs/examples` is how to see it.
