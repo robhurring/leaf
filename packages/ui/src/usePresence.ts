@@ -1,20 +1,22 @@
-// Keeps a panel mounted long enough to animate out. With reduced motion (or no
-// matchMedia, as in tests) it unmounts at once.
+// Keeps a panel mounted long enough to slide out, and says when it is sliding in. A panel
+// open from the start is just open: nothing slides as the page loads. With reduced motion
+// (or no matchMedia, as in tests) a panel is open or gone at once.
 import { useEffect, useState } from 'react';
 
-export type Presence = 'open' | 'closing' | null;
+export type Presence = 'opening' | 'open' | 'closing' | null;
 
 const reduced = () =>
   typeof matchMedia !== 'function' || matchMedia('(prefers-reduced-motion: reduce)').matches;
 
 export function usePresence(open: boolean, ms = 220): Presence {
-  const [state, setState] = useState<Presence>(open ? 'open' : null);
+  // The last `open` whose slide has finished; while it differs, the panel is on its way.
+  const [settled, setSettled] = useState(open);
   useEffect(() => {
-    if (open) return setState('open');
-    if (reduced()) return setState(null);
-    setState((s) => (s ? 'closing' : null));
-    const t = setTimeout(() => setState(null), ms);
+    if (settled === open) return;
+    if (reduced()) return setSettled(open);
+    const t = setTimeout(() => setSettled(open), ms);
     return () => clearTimeout(t);
-  }, [open, ms]);
-  return open ? 'open' : state;
+  }, [open, settled, ms]);
+  if (settled === open || reduced()) return open ? 'open' : null;
+  return open ? 'opening' : 'closing';
 }

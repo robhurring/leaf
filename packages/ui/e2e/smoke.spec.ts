@@ -292,15 +292,75 @@ test('themes and text size are sticky', async ({ page }) => {
   await expect(page.getByRole('button', { name: 'Reset text size' })).toHaveText('120%');
 });
 
+test('the sidebars push the document aside, down to the smallest window', async ({ page }) => {
+  // 1100 is the width a torn-off tab opens at, 640 the smallest the app's window gets.
+  for (const width of [1100, 900, 640]) {
+    await page.setViewportSize({ width, height: 800 });
+    await page.goto('/README.md');
+    await expect(page.locator('article h1').first()).toBeVisible();
+    const tree = (await page.locator('.leaf-tree').boundingBox())!;
+    const doc = (await page.locator('.leaf-doc-col').boundingBox())!;
+    const outline = (await page.locator('.leaf-outline').boundingBox())!;
+    expect(doc.x, `files over the document at ${width}`).toBeGreaterThanOrEqual(
+      tree.x + tree.width - 1,
+    );
+    expect(doc.x + doc.width, `outline over the document at ${width}`).toBeLessThanOrEqual(
+      outline.x + 1,
+    );
+    expect(doc.width).toBeGreaterThan(0);
+  }
+});
+
+test('the sidebars slide out and in, and the document moves with the files', async ({ page }) => {
+  await page.setViewportSize({ width: 1100, height: 800 });
+  await page.goto('/README.md');
+  await expect(page.locator('article h1').first()).toBeVisible();
+  const tree = page.locator('.leaf-tree');
+  const outline = page.locator('.leaf-outline');
+  const doc = page.locator('.leaf-doc-col');
+  // Nothing slides as the page loads.
+  await expect(tree).toHaveAttribute('data-state', 'open');
+  await expect(outline).toHaveAttribute('data-state', 'open');
+  const sliding = (el: typeof doc) =>
+    el.evaluate((e) => e.getAnimations().map((a) => (a as CSSAnimation).animationName));
+  const docked = (await doc.boundingBox())!;
+
+  // Out: each sidebar stays for its slide, then is gone and the document has its room.
+  await page.getByRole('button', { name: 'Toggle files' }).click();
+  await expect(tree).toHaveAttribute('data-state', 'closing');
+  expect(await sliding(tree)).toEqual(['leaf-slide-from-left']);
+  expect(await sliding(doc)).toEqual(['leaf-pulled-left']);
+  await expect(tree).toHaveCount(0);
+  await page.getByRole('button', { name: 'Toggle outline' }).click();
+  await expect(outline).toHaveAttribute('data-state', 'closing');
+  expect(await sliding(outline)).toEqual(['leaf-slide-from-right']);
+  expect(await sliding(doc)).toEqual([]);
+  await expect(outline).toHaveCount(0);
+  const alone = (await doc.boundingBox())!;
+  expect(alone.x).toBeLessThan(1);
+  expect(alone.width).toBeGreaterThan(1099);
+
+  // In: the same, the other way, ending where it began.
+  await page.getByRole('button', { name: 'Toggle files' }).click();
+  await expect(tree).toHaveAttribute('data-state', 'opening');
+  expect(await sliding(tree)).toEqual(['leaf-slide-from-left']);
+  expect(await sliding(doc)).toEqual(['leaf-pushed-right']);
+  await expect(tree).toHaveAttribute('data-state', 'open');
+  await page.getByRole('button', { name: 'Toggle outline' }).click();
+  await expect(outline).toHaveAttribute('data-state', 'opening');
+  await expect(outline).toHaveAttribute('data-state', 'open');
+  await expect.poll(async () => (await doc.boundingBox())!).toEqual(docked);
+});
+
 test('the document grows with the window', async ({ page }) => {
-  // Narrow: the sidebars float over the page and the document takes the whole width.
+  // A phone: the sidebars float over the page and the document takes the whole width.
   // A short document: the column must not shrink to its content.
-  await page.setViewportSize({ width: 1000, height: 800 });
+  await page.setViewportSize({ width: 500, height: 800 });
   await page.goto('/files/nested/deep/deeper/leaf.md');
   await expect(page.locator('article h1').first()).toBeVisible();
   const narrow = (await page.locator('.leaf-doc-col').boundingBox())!;
   expect(narrow.x).toBeLessThan(1);
-  expect(narrow.width).toBeGreaterThan(990);
+  expect(narrow.width).toBeGreaterThan(490);
   // Wide, sidebars docked: the text fills the column instead of stopping at a fixed measure.
   await page.setViewportSize({ width: 2200, height: 900 });
   await page.goto('/README.md');
