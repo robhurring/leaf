@@ -133,7 +133,11 @@ describe('themes', () => {
     // The column changes in one step: animating its width re-wraps the document (and
     // clears animations) on every frame of the slide, which reads as flicker.
     expect(block(base, '.leaf-body {')).not.toContain('transition');
-    expect(base).toMatch(/@keyframes leaf-slide-in/);
+    // Instead each sidebar slides its whole width, and the document moves with the files.
+    expect(base).toMatch(/@keyframes leaf-slide-from-left/);
+    expect(base).toMatch(/@keyframes leaf-slide-from-right/);
+    expect(base).toMatch(/\.leaf-tree\[data-state='opening'\] ~ \.leaf-doc-col/);
+    expect(base).toMatch(/\.leaf-tree\[data-state='closing'\] ~ \.leaf-doc-col/);
     expect(block(base, '.leaf-tree {')).toContain('box-shadow');
     expect(base).toMatch(/prefers-reduced-motion: reduce\)[^]*\.leaf-body[^]*transition: none/);
   });

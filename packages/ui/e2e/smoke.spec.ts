@@ -311,6 +311,47 @@ test('the sidebars push the document aside, down to the smallest window', async 
   }
 });
 
+test('the sidebars slide out and in, and the document moves with the files', async ({ page }) => {
+  await page.setViewportSize({ width: 1100, height: 800 });
+  await page.goto('/README.md');
+  await expect(page.locator('article h1').first()).toBeVisible();
+  const tree = page.locator('.leaf-tree');
+  const outline = page.locator('.leaf-outline');
+  const doc = page.locator('.leaf-doc-col');
+  // Nothing slides as the page loads.
+  await expect(tree).toHaveAttribute('data-state', 'open');
+  await expect(outline).toHaveAttribute('data-state', 'open');
+  const sliding = (el: typeof doc) =>
+    el.evaluate((e) => e.getAnimations().map((a) => (a as CSSAnimation).animationName));
+  const docked = (await doc.boundingBox())!;
+
+  // Out: each sidebar stays for its slide, then is gone and the document has its room.
+  await page.getByRole('button', { name: 'Toggle files' }).click();
+  await expect(tree).toHaveAttribute('data-state', 'closing');
+  expect(await sliding(tree)).toEqual(['leaf-slide-from-left']);
+  expect(await sliding(doc)).toEqual(['leaf-pulled-left']);
+  await expect(tree).toHaveCount(0);
+  await page.getByRole('button', { name: 'Toggle outline' }).click();
+  await expect(outline).toHaveAttribute('data-state', 'closing');
+  expect(await sliding(outline)).toEqual(['leaf-slide-from-right']);
+  expect(await sliding(doc)).toEqual([]);
+  await expect(outline).toHaveCount(0);
+  const alone = (await doc.boundingBox())!;
+  expect(alone.x).toBeLessThan(1);
+  expect(alone.width).toBeGreaterThan(1099);
+
+  // In: the same, the other way, ending where it began.
+  await page.getByRole('button', { name: 'Toggle files' }).click();
+  await expect(tree).toHaveAttribute('data-state', 'opening');
+  expect(await sliding(tree)).toEqual(['leaf-slide-from-left']);
+  expect(await sliding(doc)).toEqual(['leaf-pushed-right']);
+  await expect(tree).toHaveAttribute('data-state', 'open');
+  await page.getByRole('button', { name: 'Toggle outline' }).click();
+  await expect(outline).toHaveAttribute('data-state', 'opening');
+  await expect(outline).toHaveAttribute('data-state', 'open');
+  await expect.poll(async () => (await doc.boundingBox())!).toEqual(docked);
+});
+
 test('the document grows with the window', async ({ page }) => {
   // A phone: the sidebars float over the page and the document takes the whole width.
   // A short document: the column must not shrink to its content.

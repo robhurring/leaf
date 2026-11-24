@@ -98,6 +98,10 @@ body {
 .leaf-app {
   --leaf-tree-col: var(--leaf-tree-w, var(--leaf-sidebar-w));
   --leaf-outline-col: var(--leaf-outline-w, var(--leaf-sidebar-w));
+  /* A sidebar keeps its width while its column is closed, so it has something to slide. */
+  --leaf-tree-full: var(--leaf-tree-w, var(--leaf-sidebar-w));
+  --leaf-outline-full: var(--leaf-outline-w, var(--leaf-sidebar-w));
+  --leaf-slide: 0.22s cubic-bezier(0.2, 0.8, 0.2, 1);
   display: flex;
   flex-direction: column;
   height: 100%;
@@ -116,8 +120,11 @@ body {
   flex: 1;
   min-height: 0;
   overflow: hidden;
+  /* What shows beside the document while it slides is more page. */
+  background: var(--leaf-doc-bg);
   /* The columns change in one step: animating their width re-wraps the document on
-     every frame, which flickers. The sidebar's content slides in instead. */
+     every frame, which flickers. The sidebars slide instead, and the document, already
+     at its new width, rides along with the files. */
 }
 /* While a handle is dragged the columns follow the pointer exactly. */
 html[data-resizing] .leaf-body {
@@ -168,49 +175,68 @@ html[data-resizing] {
 .leaf-tree {
   grid-column: 1;
   grid-row: 1;
-  /* Fixed width: when the column shrinks the panel slides under the document. */
-  width: var(--leaf-tree-col);
+  /* Its own width, not the column's: over a closed column it lies on the document. */
+  width: var(--leaf-tree-full);
   position: relative;
   z-index: 2;
   box-shadow: 4px 0 18px -10px rgba(0, 0, 0, 0.22);
-  animation: leaf-slide-in-left 0.22s cubic-bezier(0.2, 0.8, 0.2, 1);
 }
 .leaf-outline {
   grid-column: 3;
   grid-row: 1;
-  width: var(--leaf-outline-col);
+  width: var(--leaf-outline-full);
+  /* Over a closed column it reaches left, onto the document, not off the window. */
+  justify-self: end;
   position: relative;
   z-index: 2;
   /* The outline belongs to the document, so it sits on the page color. */
   background: var(--leaf-doc-bg);
   box-shadow: -4px 0 18px -10px rgba(0, 0, 0, 0.22);
-  animation: leaf-slide-in-right 0.22s cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+/* Sliding: a sidebar travels its whole width, in from its edge of the window or out to it. */
+.leaf-tree[data-state='opening'] {
+  animation: leaf-slide-from-left var(--leaf-slide);
+}
+.leaf-outline[data-state='opening'] {
+  animation: leaf-slide-from-right var(--leaf-slide);
 }
 .leaf-tree[data-state='closing'],
 .leaf-outline[data-state='closing'] {
-  z-index: 0;
-  opacity: 0;
   pointer-events: none;
-  transition:
-    opacity 0.18s ease,
-    transform 0.22s ease;
 }
 .leaf-tree[data-state='closing'] {
-  transform: translateX(-16px);
+  animation: leaf-slide-from-left var(--leaf-slide) reverse forwards;
 }
 .leaf-outline[data-state='closing'] {
-  transform: translateX(16px);
+  animation: leaf-slide-from-right var(--leaf-slide) reverse forwards;
 }
-@keyframes leaf-slide-in-left {
+@keyframes leaf-slide-from-left {
   from {
-    opacity: 0;
-    transform: translateX(-16px);
+    transform: translateX(-100%);
   }
 }
-@keyframes leaf-slide-in-right {
+@keyframes leaf-slide-from-right {
   from {
-    opacity: 0;
-    transform: translateX(16px);
+    transform: translateX(100%);
+  }
+}
+/* The document starts where it was and moves with the edge of the files. */
+@media (min-width: 601px) {
+  .leaf-tree[data-state='opening'] ~ .leaf-doc-col {
+    animation: leaf-pushed-right var(--leaf-slide);
+  }
+  .leaf-tree[data-state='closing'] ~ .leaf-doc-col {
+    animation: leaf-pulled-left var(--leaf-slide);
+  }
+}
+@keyframes leaf-pushed-right {
+  from {
+    transform: translateX(calc(-1 * var(--leaf-tree-full)));
+  }
+}
+@keyframes leaf-pulled-left {
+  from {
+    transform: translateX(var(--leaf-tree-full));
   }
 }
 @media (prefers-reduced-motion: reduce) {
@@ -218,8 +244,9 @@ html[data-resizing] {
     transition: none;
   }
   .leaf-tree,
-  .leaf-outline {
-    animation: none;
+  .leaf-outline,
+  .leaf-doc-col {
+    animation: none !important;
   }
 }
 /* Drag handles straddle each sidebar's inner edge. */
