@@ -292,15 +292,34 @@ test('themes and text size are sticky', async ({ page }) => {
   await expect(page.getByRole('button', { name: 'Reset text size' })).toHaveText('120%');
 });
 
+test('the sidebars push the document aside, down to the smallest window', async ({ page }) => {
+  // 1100 is the width a torn-off tab opens at, 640 the smallest the app's window gets.
+  for (const width of [1100, 900, 640]) {
+    await page.setViewportSize({ width, height: 800 });
+    await page.goto('/README.md');
+    await expect(page.locator('article h1').first()).toBeVisible();
+    const tree = (await page.locator('.leaf-tree').boundingBox())!;
+    const doc = (await page.locator('.leaf-doc-col').boundingBox())!;
+    const outline = (await page.locator('.leaf-outline').boundingBox())!;
+    expect(doc.x, `files over the document at ${width}`).toBeGreaterThanOrEqual(
+      tree.x + tree.width - 1,
+    );
+    expect(doc.x + doc.width, `outline over the document at ${width}`).toBeLessThanOrEqual(
+      outline.x + 1,
+    );
+    expect(doc.width).toBeGreaterThan(0);
+  }
+});
+
 test('the document grows with the window', async ({ page }) => {
-  // Narrow: the sidebars float over the page and the document takes the whole width.
+  // A phone: the sidebars float over the page and the document takes the whole width.
   // A short document: the column must not shrink to its content.
-  await page.setViewportSize({ width: 1000, height: 800 });
+  await page.setViewportSize({ width: 500, height: 800 });
   await page.goto('/files/nested/deep/deeper/leaf.md');
   await expect(page.locator('article h1').first()).toBeVisible();
   const narrow = (await page.locator('.leaf-doc-col').boundingBox())!;
   expect(narrow.x).toBeLessThan(1);
-  expect(narrow.width).toBeGreaterThan(990);
+  expect(narrow.width).toBeGreaterThan(490);
   // Wide, sidebars docked: the text fills the column instead of stopping at a fixed measure.
   await page.setViewportSize({ width: 2200, height: 900 });
   await page.goto('/README.md');

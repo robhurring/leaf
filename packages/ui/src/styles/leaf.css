@@ -263,7 +263,15 @@ html[data-resizing] .leaf-resizer::after {
   padding-bottom: 96px;
   box-sizing: content-box;
 }
+/* A tight window keeps the sidebars docked and gives the text its room back. */
 @media (max-width: 1100px) {
+  .leaf-main-inner {
+    padding: 24px 20px 64px;
+  }
+}
+/* Sidebars push the document aside at every size the app's window takes (640 at the least).
+   Only under that, on a phone, is there no room beside them: there they float over the page. */
+@media (max-width: 600px) {
   .leaf-body {
     grid-template-columns: minmax(0, 1fr);
   }
@@ -286,9 +294,6 @@ html[data-resizing] .leaf-resizer::after {
   }
   .leaf-outline {
     right: 0;
-  }
-  .leaf-main-inner {
-    padding: 24px 20px 64px;
   }
 }
 /* Whole files other than markdown fill the column like an editor. */
